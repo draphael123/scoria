@@ -9,7 +9,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
-import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT } from './config.js';
+import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER } from './config.js';
 import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
@@ -77,6 +77,10 @@ const tutorial = new Tutorial(game, {
     // Down the road and into the town — the opening ends where the game
     // actually starts, with the rack in front of you.
     tutUI.setVisible(false);
+    // Back onto the run's chain. The opening borrowed the room machinery, so
+    // it also has to hand it back, or the first fight out of town would be the
+    // long passage again.
+    game.setChain(ROOM_ORDER, ROOM_ORDER[0]);
     enterZone('town');
   },
 });

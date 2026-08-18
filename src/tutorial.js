@@ -1,5 +1,5 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { SLAGBOUND, PLAYER } from './config.js';
+import { SLAGBOUND, PLAYER, UNDERCROFT_ORDER } from './config.js';
 import { damp } from './util.js';
 
 /* The tutorial.
@@ -19,6 +19,8 @@ import { damp } from './util.js';
    --------------------------------------------------------------------- */
 const EFFIGY_CFG = {
   name: 'Effigy',
+  gold: 0,
+  rig: 'effigy',
   hp: 100000,
   radius: 0.6,
   height: 2.0,
@@ -109,36 +111,45 @@ export class Effigy extends Actor {
 const KEY = (kb, touch) => ({ kb, touch });
 
 export const STEPS = [
+  /* ------------------------------------------------------------------ ROOM 1
+     THE CELL. Nothing in here can hurt you, so everything can be tried. This
+     is the whole vocabulary, taught against a post. */
   {
-    // You wake up. Nothing is asked of you and nothing is explained, because
-    // the first thing an opening has to establish is WHERE, not HOW.
+    // You wake up. Nothing is asked and nothing is explained, because the
+    // first thing an opening establishes is WHERE, not HOW.
     id: 'wake',
-    title: 'You wake in the burn circle',
-    body: 'Ash to the knees and a ring scorched into it, older than the fight ' +
-          'you are about to have.<br><br>The works are down the haul road. So is ' +
-          'everything that came out of them.',
+    room: 'cell',
+    title: 'You wake in a cell',
+    body: 'Stone, straw, and a door that is standing open. The works bought ' +
+          'lives and did not spend them all at once — you are one it never ' +
+          'got round to.<br><br>You are still holding what they were going ' +
+          'to fold you into.',
     keys: KEY('WASD', 'GET UP'),
     check: (t) => Math.hypot(t.game.player.vx, t.game.player.vz) > 0.6,
   },
   {
     id: 'move',
+    room: 'cell',
     title: 'Walk',
-    body: 'The wood is dead in every direction. Move.',
+    body: 'Nobody has been down here in four hundred years. Move.',
     keys: KEY('W A S D', 'drag the left of the screen'),
     enter: (t) => { t.travelled = 0; },
     check: (t) => t.travelled > 7,
   },
   {
     id: 'lock',
+    room: 'cell',
     title: 'Lock on',
-    body: 'Someone hung an effigy in the burn circle. Fix your eyes on it — ' +
-          'locked, your steps become a circle around it rather than a line.',
+    body: 'Somebody left a practice post standing in the middle of the floor. ' +
+          'Fix your eyes on it — locked, your steps become a circle around it ' +
+          'rather than a line.',
     keys: KEY('TAB', 'LOCK'),
     enter: (t) => { t.spawnEffigy(); },
     check: (t) => !!t.game.player.lockTarget,
   },
   {
     id: 'strike',
+    room: 'cell',
     title: 'Strike',
     body: 'Three blows in a chain. The third is slower and commits you far ' +
           'longer than the first two — feel the difference before you need it.',
@@ -149,6 +160,7 @@ export const STEPS = [
   },
   {
     id: 'heavy',
+    room: 'cell',
     title: 'Heavy blow',
     body: 'Slower to start, far harder to stop, and it breaks a guard that a ' +
           'light blow would only rattle.',
@@ -157,7 +169,32 @@ export const STEPS = [
     check: (t) => t.heavies >= 1,
   },
   {
+    id: 'offhand',
+    room: 'cell',
+    title: 'The off hand',
+    body: 'Every weapon does something different with the hand that is not ' +
+          'holding it. Yours is named on the bar at the bottom of the screen. ' +
+          'Use it.',
+    keys: KEY('SHIFT / F', 'OFF HAND'),
+    enter: (t) => { t.offhands = 0; },
+    check: (t) => t.offhands >= 1,
+  },
+  {
+    id: 'ability',
+    room: 'cell',
+    // Only some weapons carry one yet. Asking a Stoker to press 1 when 1 does
+    // nothing is worse than not asking.
+    skip: (t) => !(t.game.player.weapon.abilities || []).length,
+    title: 'And the one you keep in reserve',
+    body: 'The number keys hold what the weapon can do when it is worth ' +
+          'paying for. It comes out of the same well everything else does.',
+    keys: KEY('1', 'ABILITY'),
+    enter: (t) => { t.abilities = 0; },
+    check: (t) => t.abilities >= 1,
+  },
+  {
     id: 'stamina',
+    room: 'cell',
     title: 'Stamina is everything',
     body: 'Attacks, rolls and your guard all draw on the same well. Swing until ' +
           'it runs dry, and learn what being empty costs you.',
@@ -166,8 +203,9 @@ export const STEPS = [
   },
   {
     id: 'roll',
+    room: 'cell',
     title: 'Roll through it',
-    body: 'The effigy will swing. Its reach is painted on the ground, and the ' +
+    body: 'The post will swing. Its reach is painted on the ground, and the ' +
           'bright fill reaching the outline IS the moment it lands. Roll as it ' +
           'fills — you are untouchable in the middle of a roll, not at the end.',
     keys: KEY('SPACE', 'ROLL'),
@@ -177,16 +215,21 @@ export const STEPS = [
   },
   {
     id: 'guard',
-    title: 'Or take it on the shield',
+    room: 'cell',
+    title: 'Or take it on the guard',
     body: 'Cheaper than a roll and always available — but it drains stamina on ' +
           'every blow, and a guard that runs out breaks wide open.',
     keys: KEY('hold SHIFT / F', 'hold GUARD'),
     enter: (t) => { t.blocks = 0; t.effigy.swingEvery = 2.6; },
     exit: (t) => { t.effigy.swingEvery = 0; },
+    // Not every weapon has a shield. The ones that do not answer the swing
+    // with a roll, and they have already proved that.
+    skip: (t) => t.game.player.offhand !== 'guard',
     check: (t) => t.blocks >= 1,
   },
   {
     id: 'stagger',
+    room: 'cell',
     title: 'Break its poise',
     body: 'Heavy blows bite into poise. Break it and the thing reels — that ' +
           'window is where fights are actually won.',
@@ -195,14 +238,57 @@ export const STEPS = [
     check: (t) => t.staggers >= 1,
   },
   {
-    // It ends by walking somewhere, not by a banner. The last thing the
-    // opening teaches is the thing the whole game is made of: the road out.
-    id: 'done',
+    id: 'leaveCell',
+    room: 'cell',
     title: 'That is the whole vocabulary',
-    body: 'Move, lock, strike, spend, roll, guard, break. Nothing else is coming ' +
-          'that these seven will not answer.<br><br>There is a town at the other ' +
-          'end of the road. Walk down to it.',
-    keys: KEY('WASD', 'THE ROAD OUT'),
+    body: 'Move, lock, strike, spend, roll, guard, break. Nothing that is ' +
+          'coming needs anything else.<br><br>The cell door is open. Take the ' +
+          'passage.',
+    keys: KEY('WASD', 'THE PASSAGE'),
+    enter: (t) => { t.openDoor(); },
+    check: (t) => t.game.encounterId !== 'cell',
+  },
+
+  /* ------------------------------------------------------------------ ROOM 2
+     THE PASSAGE. The same verbs against something that moves on its own. Two
+     Husks, and the second arrives late — a room is not a snapshot. */
+  {
+    id: 'husks',
+    room: 'passage',
+    title: 'Something else is down here',
+    body: 'A Husk. Slower than you, weaker than you, and it will still take ' +
+          'you apart if you stand in front of it pressing the same button.' +
+          '<br><br>Watch the ground. Answer the tell.',
+    keys: KEY('kill them', 'kill them'),
+    check: (t) => t.game.encounterId !== 'passage',
+    progress: (t) => {
+      const live = t.game.livingEnemies.length + (t.game.pending || []).length;
+      return live ? `${live} left` : 'the way down is open';
+    },
+  },
+
+  /* ------------------------------------------------------------------ ROOM 3
+     THE SUMP. One idea, at scale. He commits enormously and so must you. */
+  {
+    id: 'boss',
+    room: 'sump',
+    title: 'The Tallowman',
+    body: 'The works rendered its dead down for the grease that ran the ' +
+          'moulds, and he did the rendering for forty years.<br><br>Nothing ' +
+          'he does is fast and nothing he does is small. He cannot be blocked ' +
+          'cheaply and he cannot catch you — every answer is the roll.',
+    keys: KEY('SPACE through it', 'ROLL through it'),
+    check: (t) => !t.game.livingEnemies.length,
+  },
+  {
+    // It ends by walking somewhere, not by a banner.
+    id: 'done',
+    room: 'sump',
+    title: 'Out',
+    body: 'There is a way up at the back of the sump, and daylight of a kind ' +
+          'at the top of it.<br><br>There is a town up there. It is called ' +
+          'Scoria, after the works. Go and see what is left of it.',
+    keys: KEY('WASD', 'UP AND OUT'),
     enter: (t) => { t.openRoad(); },
     check: (t) => {
       const p = t.game.player;
@@ -228,6 +314,9 @@ export class Tutorial {
     this.travelled = 0;
     this.hits = 0;
     this.heavies = 0;
+    this.offhands = 0;
+    this.abilities = 0;
+    this.skipT = 0;
     this.exhausted = false;
     this.dodges = 0;
     this.blocks = 0;
@@ -240,8 +329,18 @@ export class Tutorial {
   }
 
   start() {
+    // The opening is a CHAIN of rooms, not one room: the cell, the passage and
+    // the sump. It goes through the same room-to-room machinery the run does,
+    // because the fastest way to teach the shape of a run is to be one.
+    // Out of whatever place you were standing in first. A zone spawns nobody
+    // and resets the player to its own doorway, so a tutorial started from the
+    // town ran its whole lesson in the town with nothing to hit.
+    this.game.leaveZone();
+    this.game.previewMode = false;
+    this.game.setChain(UNDERCROFT_ORDER, 'cell');
+    this.game.newRun();
     this.game.reset();
-    this.game.enemies.length = 0;      // the clearing is empty until step 2
+    this.game.enemies.length = 0;      // the cell is empty until step 3
     this.game.player.lockTarget = null;
     this.reset();
     this.active = true;
@@ -281,6 +380,20 @@ export class Tutorial {
      somewhere rather than by a banner, so it borrows the same haul road the
      rooms use — the first road you ever walk is the one you will walk out of
      every room after this. */
+  /* The cell door. Opening it releases the chain gate, and walking into it
+     carries you into the passage through advanceRoom() like any other room. */
+  openDoor() {
+    const g = this.game;
+    g.exitOpen = true;
+    g.roomDone = true;
+    if (this.effigy) {
+      const i = g.enemies.indexOf(this.effigy);
+      if (i >= 0) g.enemies.splice(i, 1);
+      this.effigy = null;
+    }
+    g.player.lockTarget = null;
+  }
+
   openRoad() {
     const g = this.game;
     g.exitOpen = true;
@@ -306,8 +419,14 @@ export class Tutorial {
     const prev = this.step;
     if (prev && prev.exit) prev.exit(this);
     this.index = i;
-    const s = this.step;
+    let s = this.step;
+    // Walk past anything this build cannot be asked to do.
+    while (s && s.skip && s.skip(this) && this.index + 1 < STEPS.length) {
+      this.index++;
+      s = this.step;
+    }
     this._holdT = 0;
+    this.skipT = 0;
     if (s && s.enter) s.enter(this);
     this.onStep(s, this);
   }
@@ -322,6 +441,8 @@ export class Tutorial {
         if (ev.result === 'iframe') continue;
         if (ev.atk.id && ev.atk.id.startsWith('L')) this.hits++;
         if (ev.atk.id === 'H1') this.heavies++;
+        // The abilities are the only attacks with an A-prefixed id.
+        if (ev.atk.id && ev.atk.id.startsWith('A')) this.abilities++;
         if (ev.result === 'stagger') this.staggers++;
       } else {
         if (ev.result === 'iframe') this.dodges++;
@@ -333,12 +454,44 @@ export class Tutorial {
   update(dt) {
     if (!this.active || this.complete) return;
     const p = this.game.player;
+    this.skipT += dt;
+
+    /* A step belongs to a room. Walking into the next room advances the card
+       past everything the previous room was still asking for — otherwise a
+       player who leaves the cell early is stuck reading about a practice post
+       that is now two rooms behind them. */
+    const here = this.game.encounterId;
+    while (this.step && this.step.room && this.step.room !== here
+           && this.index + 1 < STEPS.length
+           && STEPS[this.index + 1].room === here) {
+      this._go(this.index + 1);
+    }
 
     this.travelled += Math.hypot(p.x - this._lastX, p.z - this._lastZ);
     this._lastX = p.x;
     this._lastZ = p.z;
 
     if (p.staminaLock > 0) this.exhausted = true;
+
+    /* The off-hand verb is different per weapon and one of them - the sword's
+       guard - is a HELD STATE that need never produce an event, so it cannot
+       be counted off the event stream like everything else. */
+    if (p.offhand === 'guard') {
+      if (p.state === STATE.GUARD) this.offhands = Math.max(this.offhands, 1);
+    } else {
+      const a = p.weapon[p.offhand];
+      if (a && p.lastAction === a.id) this.offhands = Math.max(this.offhands, 1);
+    }
+
+    /* "Run it dry" cannot be read off staminaLock alone, because the lock only
+       fires when the bar lands on EXACTLY zero and canSpend() refuses the
+       attack that would have taken it there. In practice you stop being able
+       to swing while a sliver is still showing, which is the lesson anyway —
+       so being refused counts. */
+    if (p.lastAction === 'no stam' || p.lastAction === 'spent'
+        || p.lastAction === 'too hot' || p.lastAction === 'OVERHEAT') {
+      this.exhausted = true;
+    }
 
     // Keep the student alive: this is a lesson, not an execution.
     if (p.hp < p.maxHp * 0.35) p.hp = Math.min(p.maxHp, p.hp + 14 * dt);

@@ -7,6 +7,7 @@ import { Forest } from './props.js';
 import { Fx } from './fx.js';
 import { Post } from './post.js';
 import { buildKnight, buildSlagbound, buildCinderbone, buildBoltbone, buildKilnwarden,
+         buildTallowman,
          buildSkimmer, buildBlackdamp, buildGaffer,
          buildEffigy, animateRig, PAL } from './rigs.js';
 
@@ -208,18 +209,37 @@ export class View {
     this.forest.setTheme(name);
     if (this._theme === name) return;
     this._theme = name;
-    // Four rooms, four skies. The run reads as a descent: warm clearing, two
-    // progressively colder and emptier rooms, then the kiln, where the heat is
-    // back on and the moon barely matters.
+    /* The other half of what makes a room a place: the fog, the backdrop and
+       how much moon there is. This table and the Forest's LOOKS table are
+       deliberately separate because they belong to different owners - the
+       Forest owns the objects, the View owns the air and the light. A room has
+       to be entered in BOTH.
+
+       The undercroft is the interesting entry: it is the only one indoors, so
+       the moon goes almost out, the fog comes in to arm's length, and the
+       exposure is pushed up to buy that back. Everything you can see in there
+       is something that is on fire. */
     const LOOK = {
+      // Indoors. Brown air, no moon to speak of, torches doing all the work.
+      undercroft: { fog: 0x241a0c, bg: 0x0a0705, moon: 0xffb27a, lit: 1.30, exp: 1.42,
+                    near: 30, far: 66 },
       // The town is the only place with a sky worth looking at: colder, wider
       // and higher-key than anywhere in the wood, because arriving somewhere
       // safe should look like a different time of night.
       town:     { fog: 0x1a2130, bg: 0x0d121b, moon: 0xdbeaff, lit: 3.1, exp: 1.34 },
       clearing: { fog: 0x0b0e13, bg: 0x06080b, moon: 0xbdd2ea, lit: 1.90, exp: 1.15 },
+      // The barrow ground: colder and bluer than the clearing, nothing lit.
       ossuary:  { fog: 0x0c1016, bg: 0x05070a, moon: 0xcfe0f2, lit: 2.35, exp: 1.05 },
-      yard:     { fog: 0x0a0d12, bg: 0x04060a, moon: 0xdae8fa, lit: 2.60, exp: 1.00 },
-      kiln:     { fog: 0x140a06, bg: 0x0a0503, moon: 0x8fa0bc, lit: 1.05, exp: 1.22 },
+      // The felling: the most open and best-lit room in the wood, which is
+      // exactly why it is the one with archers in it.
+      felling:  { fog: 0x131414, bg: 0x06070a, moon: 0xe6ecf6, lit: 3.10, exp: 1.02 },
+      // The bog: green, close and heavy. You can see the air.
+      bog:      { fog: 0x0e1712, bg: 0x050907, moon: 0xa8c8b4, lit: 1.75, exp: 1.12,
+                  near: 26, far: 74 },
+      // The burn: the one warm room in the wood.
+      charcoal: { fog: 0x140a06, bg: 0x0a0503, moon: 0x8fa0bc, lit: 1.05, exp: 1.22 },
+      // The works: hotter and dirtier still, and the moon has given up.
+      works:    { fog: 0x180a05, bg: 0x0b0402, moon: 0x7a8496, lit: 0.85, exp: 1.26 },
     };
     const L = LOOK[name] || LOOK.clearing;
     this.scene.fog.color.setHex(L.fog);
@@ -227,6 +247,13 @@ export class View {
     this.moon.color.setHex(L.moon);
     this.moon.intensity = L.lit;
     this.renderer.toneMappingExposure = L.exp;
+    // Indoors the fog has to come in close, or a room thirty metres across
+    // renders with the same depth cue as a wood a hundred metres deep.
+    this.scene.fog.near = L.near ?? 44;
+    this.scene.fog.far = L.far ?? 96;
+    // Shafts of moonlight through a broken roof belong to the WOOD. Indoors
+    // they were three fifteen-metre cones standing in the middle of a cellar.
+    for (const sh of (this.fx.shafts || [])) sh.visible = (name !== 'undercroft' && name !== 'town');
   }
 
 
@@ -305,6 +332,7 @@ export class View {
         skimmer: buildSkimmer,
         blackdamp: buildBlackdamp,
         gaffer: buildGaffer,
+        tallowman: buildTallowman,
       };
       rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
           : actor.isEffigy ? buildEffigy(actor)

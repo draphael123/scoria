@@ -225,6 +225,9 @@ const LOOKS = {
   // The works. Ash underfoot again - you are back on ground that never healed.
   works:    { floor: 'ash',  pool: 0xff8a4a, poolA: 0.66,
               fog: 0xc07a4a, fogA: 1.5,  drift: 0xffa060, embers: true },
+  // The undercroft: indoors, warm stone, and nothing overhead but a vault.
+  undercroft: { floor: 'ash', pool: 0xffb488, poolA: 0.5,
+                fog: 0x6b5a4a, fogA: 0.55, drift: 0xc0a890, embers: false },
   // Scoria itself.
   town:     { floor: 'ash',  pool: 0x6f7a8c, poolA: 0.2,
               fog: 0x8f9aa8, fogA: 1.25, drift: 0x9fb0c4, embers: false },
@@ -270,6 +273,7 @@ export class Forest {
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(180, 24, 16),
       new THREE.MeshBasicMaterial({ map: tex.sky, side: THREE.BackSide, fog: false }));
+    this.sky = sky;
     this.scene.add(sky);
 
     const moon = new THREE.Mesh(
@@ -709,6 +713,275 @@ export class Forest {
     this.felling = g;
     this.scene.add(g);
   }
+
+
+  /* -----------------------------------------------------------------------
+     THE UNDERCROFT. The opening, and it must not look like the wood.
+
+     A dungeon read from a fixed camera looking down has one problem: walls are
+     the thing that makes it a dungeon, and walls are also the thing that
+     stands between the camera and the fight. So the room is built as a stone
+     BOX with its near two walls kept low - you see the far walls full height
+     and the near ones as a lip, which reads as "indoors" without ever putting
+     masonry over the player.
+
+     Everything is warm-grey dressed stone against the wood's cold bark, lit by
+     wall torches instead of moonlight. Same lighting rig, different material
+     vocabulary, which is what actually separates two places.
+     -------------------------------------------------------------------- */
+  _buildUndercroft(tex) {
+    const rng = makeRng(60606);
+    const g = new THREE.Group();
+    this.scene.add(g);
+    this.undercroft = g;
+
+    /* Its own fill light, warm and low. The moonlight rig belongs to a wood
+       with an open sky and there is no sky in here, so without this the room
+       is lit by eight point lights and nothing else — which is authentic and
+       completely unreadable. */
+    const fill = new THREE.HemisphereLight(0x8a6438, 0x3a2814, 2.4);
+    g.add(fill);
+    const amb = new THREE.AmbientLight(0xffb070, 0.85);
+    g.add(amb);
+
+    /* Warmer and MUCH lighter than anything in the wood. The first pass used
+       the forest's stone values and the whole room came back as a black cross
+       on a brown floor: outdoors those greys are read against moonlight, and
+       in here the only light is eight torches. A dungeon is dark because of
+       what you CANNOT see past, not because the stone in front of you is. */
+    const wall = new THREE.MeshStandardMaterial({
+      map: tex.stone, color: 0xb4a692, roughness: 0.95 });
+    const dark = new THREE.MeshStandardMaterial({
+      map: tex.stone, color: 0xbdac93, roughness: 0.98 });
+    /* The flagstones carry NO map, and that is not laziness.
+
+       tex.stone is a very dark texture — outdoors it is read against
+       moonlight and it works. Multiplied by a mid grey and lit by torches it
+       came out at pure black, and fifty of them tiled the floor of the room
+       with what looked like holes. The vertical stone can carry it because it
+       is close to the torches; the floor cannot. */
+    const flag = new THREE.MeshStandardMaterial({ color: 0x8d8272, roughness: 1 });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x2a2420, roughness: 0.88, metalness: 0.0, envMapIntensity: 0.1 });
+    const bone = new THREE.MeshStandardMaterial({ color: 0x9a9484, roughness: 0.95 });
+
+    /* Where the walls stand, and this number is framing, not architecture.
+       The camera only ever shows about ten metres either side of the fight, so
+       walls set comfortably outside the arena were simply never on screen and
+       the "dungeon" rendered as an unlit field. They sit just past the play
+       area instead, and everything that has to be SEEN — torches, braziers,
+       the drain — is pulled well inside it. */
+    const R = 11.4;   // matches the undercroft encounters' own radius, + a lip
+
+    /* WALL HEIGHTS, and this is the whole problem with an indoor room on a
+       camera that never turns.
+
+       Full-height walls all round put masonry between the lens and the fight.
+       The first attempt did exactly that and the frame came back as two black
+       bands with a duel somewhere behind them. So height is spent where the
+       camera is looking THROUGH the room rather than over it:
+
+         far    full height, and it carries the cells, the torches and the read
+         sides  waist high, which says "room" from above and blocks nothing
+         near   a kerb, so the near edge of the floor has a lip on it
+
+       Every one of them is also registered as an occluder, so anything that
+       does end up between you and the camera ghosts out rather than winning. */
+    const HEIGHT = (a) => {
+      const facing = Math.cos(a - CAMERA_BEARING);
+      if (facing < -0.5) return 9.0;      // the far wall
+      if (facing > 0.5) return 0.9;       // the near kerb
+      return 2.3;                          // the sides
+    };
+
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + Math.PI / 4;
+      const h = HEIGHT(a);
+      // Just long enough to meet at the corners. It was R * 2.5, which sent
+      // three metres of masonry out past every corner and straight across the
+      // frame at the camera-side ones.
+      const w = new THREE.Mesh(new THREE.BoxGeometry(R * 2 + 0.9, h, 0.9), wall.clone());
+      w.position.set(Math.sin(a) * R, h / 2, Math.cos(a) * R);
+      /* rotation.y = a, NOT -a. These boxes are long in X, and rotating X by
+         +a lands it TANGENTIAL to the bearing; -a lands it RADIAL. With -a all
+         four walls pointed at the middle of the room and the frame came back
+         as a giant black cross with the duel underneath it. */
+      w.rotation.y = a;
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+      // Registered against its OWN material clone: the fade writes opacity onto
+      // the material, so three walls sharing one would each undo the others.
+      if (h > 1.5) this._registerOccluder(w, w.material, h);
+
+      // Pilasters, which is what stops a flat slab reading as a grey
+      // rectangle from above. Only where there is height to break up.
+      if (h > 4) {
+        for (let k = -3; k <= 3; k++) {
+          const px = Math.sin(a) * (R - 0.55) + Math.cos(a) * k * 3.4;
+          const pz = Math.cos(a) * (R - 0.55) - Math.sin(a) * k * 3.4;
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.75, h, 0.4), dark);
+          col.position.set(px, h / 2, pz);
+          col.rotation.y = a;
+          col.castShadow = true;
+          g.add(col);
+          // A corbel at the top of each, leaning in. Four hundred years ago
+          // there was a vault on these.
+          const corbel = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 1.1), dark);
+          corbel.position.set(px - Math.sin(a) * 0.5, h - 0.5, pz - Math.cos(a) * 0.5);
+          corbel.rotation.set(0.3, a, 0);
+          g.add(corbel);
+        }
+      }
+    }
+
+    /* CELLS, in the far wall only — the one wall you are always looking at.
+       This is the piece of dressing that says what the place was FOR, so
+       there are enough to read as a row rather than as a detail. */
+    {
+      const a = CAMERA_BEARING + Math.PI;
+      for (let k = -2; k <= 2; k++) {
+        const cx = Math.sin(a) * (R + 1.3) + Math.cos(a) * k * 3.4;
+        const cz = Math.cos(a) * (R + 1.3) - Math.sin(a) * k * 3.4;
+        const recess = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.2, 2.6), dark);
+        recess.position.set(cx, 1.6, cz);
+        recess.rotation.y = a;
+        g.add(recess);
+
+        const bx = Math.sin(a) * (R - 0.35) + Math.cos(a) * k * 3.4;
+        const bz = Math.cos(a) * (R - 0.35) - Math.sin(a) * k * 3.4;
+        if (rng() < 0.55) {
+          for (let b = -2; b <= 2; b++) {
+            const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 5), iron);
+            bar.position.set(bx + Math.cos(a) * b * 0.36, 1.4, bz - Math.sin(a) * b * 0.36);
+            g.add(bar);
+          }
+          const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 0.16), iron);
+          lintel.position.set(bx, 2.8, bz);
+          lintel.rotation.y = a;
+          g.add(lintel);
+        } else {
+          // One door off its hinges and lying flat. A row of intact cells
+          // reads as a wine rack.
+          const door = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.09, 2.5), iron);
+          door.position.set(bx - Math.sin(a) * 1.4, 0.05, bz - Math.cos(a) * 1.4);
+          door.rotation.y = a + (rng() - 0.5) * 0.5;
+          g.add(door);
+        }
+
+        // Somebody, still in there. Half of them.
+        if (rng() < 0.6) {
+          const sk = new THREE.Mesh(new THREE.SphereGeometry(0.19, 7, 6), bone);
+          sk.position.set(cx + (rng() - 0.5) * 0.8, 0.19, cz + 0.9 + (rng() - 0.5) * 0.5);
+          g.add(sk);
+          for (let b = 0; b < 4; b++) {
+            const rib = new THREE.Mesh(
+              new THREE.TorusGeometry(0.22, 0.035, 3, 7, Math.PI), bone);
+            rib.position.set(sk.position.x + 0.2 + b * 0.13, 0.07, sk.position.z + 0.05);
+            rib.rotation.set(0, rng() * 3, Math.PI / 2);
+            g.add(rib);
+          }
+        }
+      }
+    }
+
+    /* TORCHES. The only light in here, and what makes it a dungeon rather
+       than a room: warm, low, and few enough that the corners stay black.
+       None on the near wall — a lamp between you and the camera is a flare. */
+    this.croftTorches = [];
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + 0.35;
+      if (Math.cos(a - CAMERA_BEARING) > 0.45) continue;
+      const rad = R - 2.2;
+      const tx = Math.sin(a) * rad, tz = Math.cos(a) * rad;
+      const hy = Math.cos(a - CAMERA_BEARING) < -0.5 ? 2.6 : 1.7;
+      const bracket = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.7, 5), iron);
+      bracket.position.set(tx, hy, tz);
+      bracket.rotation.set(Math.cos(a) * 0.4, 0, -Math.sin(a) * 0.4);
+      g.add(bracket);
+      const flameMat = new THREE.MeshStandardMaterial({
+        color: 0x2a1608, emissive: 0xff8a30, emissiveIntensity: 2.8, roughness: 1 });
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.62, 7), flameMat);
+      flame.position.set(tx - Math.sin(a) * 0.24, hy + 0.5, tz - Math.cos(a) * 0.24);
+      g.add(flame);
+      const light = new THREE.PointLight(0xff9040, 55, 20, 2);
+      light.position.set(flame.position.x, hy + 0.5, flame.position.z);
+      g.add(light);
+      this.croftTorches.push({ mat: flameMat, light, mesh: flame, phase: rng() * 10 });
+    }
+
+    // Two braziers standing on the floor, so the middle of the room is lit
+    // from something you can see rather than from nowhere.
+    for (const [ba, br] of [[CAMERA_BEARING + 2.4, 8.2], [CAMERA_BEARING - 2.4, 8.2]]) {
+      const bx = Math.sin(ba) * br, bz = Math.cos(ba) * br;
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.3, 0.4, 9), iron);
+      bowl.position.set(bx, 1.05, bz);
+      bowl.castShadow = true;
+      g.add(bowl);
+      for (let k = 0; k < 3; k++) {
+        const ang = (k / 3) * Math.PI * 2;
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.0, 4), iron);
+        leg.position.set(bx + Math.sin(ang) * 0.26, 0.5, bz + Math.cos(ang) * 0.26);
+        leg.rotation.set(Math.cos(ang) * 0.22, 0, -Math.sin(ang) * 0.22);
+        g.add(leg);
+      }
+      const coalMat = new THREE.MeshStandardMaterial({
+        color: 0x2a1206, emissive: 0xff6a1c, emissiveIntensity: 2.6, roughness: 1 });
+      const coals = new THREE.Mesh(new THREE.SphereGeometry(0.34, 9, 6), coalMat);
+      coals.scale.y = 0.45;
+      coals.position.set(bx, 1.25, bz);
+      g.add(coals);
+      const bl = new THREE.PointLight(0xff8a3a, 75, 19, 2);
+      bl.position.set(bx, 1.5, bz);
+      g.add(bl);
+      this.croftTorches.push({ mat: coalMat, light: bl, mesh: coals, phase: rng() * 10 });
+    }
+
+    /* THE FLOOR. Flagstones scored into the ground, and a drain at the centre
+       that everything down here slopes toward. */
+    for (let i = 0; i < 52; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = rng() * (R - 1.0);
+      const fl = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5 + rng() * 1.3, 0.05, 1.5 + rng() * 1.3), flag);
+      fl.position.set(Math.sin(a) * rad, 0.026, Math.cos(a) * rad);
+      fl.rotation.y = Math.round(rng() * 4) * Math.PI / 2;
+      g.add(fl);
+    }
+    const drain = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.95, 16), iron);
+    drain.rotation.x = -Math.PI / 2;
+    drain.position.y = 0.05;
+    g.add(drain);
+    for (let k = 0; k < 5; k++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 1.7), iron);
+      bar.position.set(-0.6 + k * 0.3, 0.05, 0);
+      g.add(bar);
+    }
+
+    // Straw, and chains hanging off the far wall.
+    for (let i = 0; i < 30; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * (0.65 + rng() * 0.6);
+      const straw = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5 + rng() * 0.6, 0.04, 0.06), bone);
+      straw.position.set(Math.sin(a) * rad, 0.045, Math.cos(a) * rad);
+      straw.rotation.set(0, rng() * 3, 0);
+      g.add(straw);
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = CAMERA_BEARING + Math.PI + (rng() - 0.5) * 1.6;
+      const rad = R - 1.0;
+      for (let k = 0; k < 8; k++) {
+        const link = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.03, 4, 7), iron);
+        link.position.set(Math.sin(a) * rad, 2.4 - k * 0.19, Math.cos(a) * rad);
+        link.rotation.x = k % 2 ? Math.PI / 2 : 0;
+        g.add(link);
+      }
+    }
+
+    g.visible = false;
+  }
+
 
   /* THE BOG. The lowest ground in the run, and the one place the wood is still
      drowning rather than dead.
@@ -1733,8 +2006,12 @@ export class Forest {
     }
 
     // --- what belongs to the WOOD ----------------------------------------
+    // The undercroft is INDOORS. No trees, no sky, no ground fog rolling
+    // through - a wood's furniture visible through a dungeon's walls was the
+    // single fastest way to stop believing either of them.
     const town = name === 'town';
-    const forest = !town;
+    const croft = name === 'undercroft';
+    const forest = !town && !croft;
     if (this.trees) this.trees.visible = forest;
     if (this.undergrowth) this.undergrowth.visible = forest;
     if (this.circleMark) this.circleMark.visible = forest;
@@ -1774,6 +2051,10 @@ export class Forest {
       f.mesh.material.color.setHex(T.fog);
       f.mesh.material.opacity = f.base * T.fogA;
     }
+    if (croft && !this.undercroft) this._buildUndercroft(this._tex);
+    if (this.undercroft) this.undercroft.visible = croft;
+    if (this.sky) this.sky.visible = !croft;
+
     if (this.drift) {
       // The drift is the WOOD's. A town does not have it, which is one more
       // way of saying you have come out of the trees.
@@ -1920,6 +2201,19 @@ export class Forest {
     }
     this.t += dt;
     const t = this.t;
+
+    // Torchlight. Two sine terms and a fast one, which is the difference
+    // between a lamp and a flame.
+    if (this.undercroft && this.undercroft.visible) {
+      for (const tr of this.croftTorches || []) {
+        const k = 0.8 + Math.sin(t * 6.1 + tr.phase) * 0.13
+                      + Math.sin(t * 2.3 + tr.phase * 1.7) * 0.09
+                      + Math.sin(t * 19 + tr.phase * 0.4) * 0.05;
+        tr.mat.emissiveIntensity = 2.6 * k;
+        tr.light.intensity = 9 * k;
+        tr.mesh.scale.y = 0.85 + k * 0.28;
+      }
+    }
 
     for (const l of (this.townLamps || [])) {
       if (!this.town || !this.town.visible) break;

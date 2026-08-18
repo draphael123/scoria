@@ -1042,8 +1042,147 @@ export const GAFFER = {
   },
 };
 
+
+/* -------------------------------------------------------------------------
+   THE UNDERCROFT'S OWN. Two foes that exist only in the opening.
+
+   A tutorial enemy has a different job from a run enemy: it has to be SAFE to
+   be wrong against. Everything here is slow, loud, and forgiving on purpose,
+   so the lesson is "I see the tell and I answer it" rather than "I died to the
+   thing that was teaching me".
+   ---------------------------------------------------------------------- */
+export const HUSK = {
+  gold: 6,
+  name: 'Husk',
+  rig: 'cinderbone',
+  hp: 30,
+  radius: 0.32,
+  height: 1.5,
+
+  // Slower than you walk, unlocked or locked. You can always leave.
+  moveSpeed: 2.2,
+  turnRate: 3.4,
+  preferredRange: 1.9,
+  circleSpeed: 1.1,
+
+  // Almost no poise: one blow of anything staggers it. The first thing the
+  // opening teaches about offence should be that offence WORKS.
+  poise: 6,
+  poiseRegen: 6,
+  poiseRegenDelay: 1.6,
+  staggerDuration: 1.1,
+  staggerDamageMul: 1.5,
+  staggerResist: 1.4,
+  staggerResistMul: 0.6,
+
+  punishRange: 2.6,
+  punishHesitate: 0.5,
+
+  // Nearly a second between attempts. A crowd of these is still a crowd you
+  // have time to think inside.
+  hesitateMin: 0.9,
+  hesitateMax: 1.7,
+  recoverIdle: 0.3,
+
+  attacks: {
+    swipe: {
+      id: 'swipe', label: 'SWIPE',
+      // A windup half again as long as anything in the run. This is the
+      // telegraph you learn to read, so it is drawn slowly.
+      windup: 0.72, active: 0.10, recover: 0.62,
+      damage: 6, poise: 0,
+      shape: 'arc', reach: 1.95, arc: 1.20,
+      step: 0.5,
+      weight: 1, minRange: 0, maxRange: 2.6,
+    },
+  },
+};
+
+/* -------------------------------------------------------------------------
+   THE TALLOWMAN. The thing at the bottom of the undercroft.
+
+   The works rendered its dead down for the tallow that greased the moulds,
+   and the man who did the rendering ate what was left over for forty years.
+   He is still down there. He got too big to get out.
+
+   As a fight he is one idea: HE COMMITS ENORMOUSLY AND SO MUST YOU. Every
+   attack has a windup you could read from across the room and a recovery long
+   enough to punish twice. Nothing he does is fast, nothing he does is subtle,
+   and nothing he does can be blocked cheaply — the answer is always the roll,
+   which is the one verb the opening spent four rooms teaching.
+   ---------------------------------------------------------------------- */
+export const TALLOWMAN = {
+  gold: 160,
+  name: 'The Tallowman',
+  rig: 'tallowman',
+  hp: 340,
+  radius: 0.95,
+  height: 2.9,
+
+  moveSpeed: 1.9,          // he cannot catch you. He does not have to.
+  turnRate: 1.5,           // and he turns like a barge, so flanking WORKS
+  preferredRange: 2.8,
+  circleSpeed: 0.6,
+
+  // Hyperarmour in all but name: you cannot stagger him out of a swing with
+  // chip damage, only with a real commitment of your own.
+  poise: 95,
+  poiseRegen: 14,
+  poiseRegenDelay: 2.6,
+  staggerDuration: 2.4,    // and the reward for it is enormous
+  staggerDamageMul: 1.8,
+  staggerResist: 3.0,
+  staggerResistMul: 0.4,
+
+  punishRange: 4.4,
+  punishHesitate: 0.35,
+
+  hesitateMin: 0.85,
+  hesitateMax: 1.9,
+  recoverIdle: 0.4,
+
+  attacks: {
+    // The bread and butter. Wind the cleaver back over one shoulder and bring
+    // it down. Roll THROUGH it, not away from it.
+    cleave: {
+      id: 'cleave', label: 'CLEAVE',
+      windup: 0.85, active: 0.12, recover: 1.05,
+      damage: 26, poise: 0,
+      shape: 'arc', reach: 3.4, arc: 1.5,
+      step: 1.5,
+      weight: 0.42, minRange: 0, maxRange: 4.6,
+    },
+    // The Asylum Demon's move: he leaves the ground and lands on you. A ring
+    // rather than a cone, so backing off does not answer it — only distance
+    // or i-frames do.
+    drop: {
+      id: 'drop', label: 'BELLY DROP',
+      windup: 1.05, active: 0.14, recover: 1.35,
+      damage: 32, poise: 0,
+      // A circle attack is centred on the attacker plus an offset, so this
+      // lands ON you rather than in front of him: backing straight off is not
+      // an answer, only distance or i-frames are.
+      shape: 'circle', radius: 3.1, offset: 0.9,
+      step: 2.6,
+      knock: 9,
+      weight: 0.33, minRange: 1.6, maxRange: 7.5,
+    },
+    // The punish for standing behind him: a full turn on the spot with the
+    // cleaver out. Enormous arc, enormous recovery.
+    sweep: {
+      id: 'sweep', label: 'SWEEP',
+      windup: 0.72, active: 0.16, recover: 1.5,
+      damage: 21, poise: 0,
+      shape: 'arc', reach: 3.6, arc: 6.0,
+      step: 0,
+      weight: 0.25, minRange: 0, maxRange: 4.0,
+    },
+  },
+};
+
 export const FOES = {
   slagbound: SLAGBOUND, cinderbone: CINDERBONE,
+  husk: HUSK, tallowman: TALLOWMAN,
   boltbone: BOLTBONE, kilnwarden: KILNWARDEN,
   skimmer: SKIMMER, blackdamp: BLACKDAMP, gaffer: GAFFER,
 };
@@ -1136,6 +1275,63 @@ export const ENCOUNTERS = {
     hpMul: 0.62,
     spawn: [[0, -4.6], [-4.0, -2.0], [4.0, -2.0]],
   },
+
+  /* -----------------------------------------------------------------------
+     THE UNDERCROFT. Where the opening happens, and it is not the wood.
+
+     The works bought lives, and it did not spend them all at once. What it had
+     not got round to using it kept down here, in cells, in the dark. You are
+     one of them. That is why you wake holding a weapon: they were going to
+     fold you INTO it.
+
+     Three rooms, and each one is allowed to teach exactly one thing:
+       the cell     the whole vocabulary, against something that cannot hurt you
+       the passage  the vocabulary against something that can, barely
+       the sump     the vocabulary against something that will, if you forget it
+     -------------------------------------------------------------------- */
+  cell: {
+    id: 'cell',
+    // A cellar, not a clearing. Tight enough that its walls are on screen.
+    radius: 10.5, name: 'The Cell', short: 'WAKE',
+    blurb: 'You are in a room the works kept people in. The door is open ' +
+           'now, which after four hundred years is not much of a mercy.',
+    foe: 'husk', theme: 'undercroft',
+    hpMul: 1.0,
+    rocks: 0,
+    // The tutorial opens this door itself, at the end of its list.
+    holdExit: true,
+    spawn: [],                 // the effigy is placed by the tutorial itself
+  },
+  passage: {
+    id: 'passage',
+    // A cellar, not a clearing. Tight enough that its walls are on screen.
+    radius: 10.5, name: 'The Long Passage', short: 'HUSKS',
+    blurb: 'The cells run the length of the undercroft, and most of them ' +
+           'are open. Whatever was owed down here was collected a long ' +
+           'time ago.',
+    foe: 'husk', theme: 'undercroft',
+    hpMul: 1.0,
+    rocks: 3,
+    // Two, and the second one waits. The first crowd you ever see should
+    // arrive as a SEQUENCE, so you learn that a room is not a snapshot.
+    spawn: [[0, -4.6], [-3.8, -1.4, null, { at: 6.0 }]],
+  },
+  sump: {
+    id: 'sump',
+    // A cellar, not a clearing. Tight enough that its walls are on screen.
+    radius: 10.5, name: 'The Sump', short: 'TALLOW',
+    blurb: 'The floor slopes to a drain at the bottom of the works, and ' +
+           'this is what has been sitting in it.',
+    foe: 'tallowman', theme: 'undercroft',
+    hpMul: 1.0,
+    rocks: 0,
+    boss: true,
+    // Killing him ends the OPENING, not the game. The tutorial walks you out
+    // of here and up into the town.
+    noWin: true,
+    spawn: [[0, -6.0, 'tallowman']],
+  },
+
   ossuary: {
     id: 'ossuary', name: 'The Barrow Ground', short: 'BONES',
     // Two come up out of the floor once the first three are engaged, so the
@@ -1466,6 +1662,11 @@ export const DEFAULT_ENCOUNTER = 'duel';
 //   ossuary  a crowd            yard     range, and a priority target
 //   gallery  your economy       kiln     ground denial
 //   casting  everything at once
+/* The opening's chain. Room 0 is the cell, which the tutorial sets directly;
+   after that it runs like any other chain, because it IS one - the opening
+   should teach you the shape of a run by being one. */
+export const UNDERCROFT_ORDER = ['passage', 'sump'];
+
 export const ROOM_ORDER = ['ossuary', 'yard', 'gallery', 'kiln', 'casting'];
 
 export const EXIT = {

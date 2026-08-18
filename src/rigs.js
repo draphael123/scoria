@@ -2052,6 +2052,291 @@ export function buildGaffer(actor) {
 /* A wicker training effigy on a post. Deliberately nothing like the
    Slagbound in outline — the tutorial should never teach you to read a shape
    that will not be there in the real fight. */
+
+/* ------------------------------------------------------------------------
+   THE TALLOWMAN. The thing at the bottom of the undercroft, and the first
+   boss anyone will see.
+
+   The design problem is that every other skeleton in this game is THIN, and
+   thin is the whole read: open ribs, a gap you can see through, a stick
+   figure that resolves into a person. A fat skeleton has to break that
+   silhouette hard enough to register from seven metres up, or it is just a
+   Cinderbone somebody scaled to 190%.
+
+   So the hierarchy is deliberately upside down from every other body here:
+
+     the BELLY is the largest mass, by a long way, and it is SOLID
+     the ribcage is half sunk into it, only the top hoops still showing
+     the head is tiny and set low, with no neck at all
+     the arms are enormous and the legs are stumps
+
+   That is a snowman with a small head, which is a shape nothing else in the
+   cast comes near - and the one that reads at any distance and any angle. He
+   is also the only thing in the game with translucent fat over the bone,
+   which is the fastest way to say what he has been eating.
+   --------------------------------------------------------------------- */
+export function buildTallowman(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  // Bone is the BRIGHTEST thing on him and the fat is dull, which is the
+  // whole read: a fat skeleton has to look like a skeleton somebody poured
+  // tallow over, not like a tallow figure. First pass had both at the same
+  // value and he came out as a heap of yellow spheres with no skeleton in it.
+  const bone = new THREE.MeshStandardMaterial({
+    color: 0xe6e0cc, roughness: 0.88, metalness: 0.04 });
+  const boneD = new THREE.MeshStandardMaterial({
+    color: 0xb4ac96, roughness: 0.94, metalness: 0.03 });
+  // Rendered fat: waxy, warm, and slightly see-through, so the ribs behind it
+  // are a suggestion rather than a detail.
+  const fat = new THREE.MeshStandardMaterial({
+    color: 0x9c8348, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.1 });
+  const fatD = new THREE.MeshStandardMaterial({
+    color: 0x6e5c30, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.08 });
+  const leather = new THREE.MeshStandardMaterial({ color: 0x1d1409, roughness: 1 });
+  const iron = new THREE.MeshStandardMaterial({
+    color: 0x4a443c, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.14 });
+  const edge = new THREE.MeshStandardMaterial({
+    color: 0x9aa0a4, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.2 });
+  const socket = new THREE.MeshStandardMaterial({
+    color: 0x140a04, emissive: PAL.crack, emissiveIntensity: 2.6, roughness: 1 });
+
+  // Pivot at the centre of mass, contents pushed back down - a roll about the
+  // feet sweeps the head through the floor.
+  const tumble = new THREE.Group();
+  tumble.position.y = h * 0.42;
+  g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.42;
+  tumble.add(tumbleInner);
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.30;
+  tumbleInner.add(hips);
+
+  // Pelvis, wide and heavy - it has to look like it is carrying the belly.
+  const pelvis = new THREE.Mesh(new THREE.SphereGeometry(r * 0.72, 10, 7), fatD);
+  pelvis.scale.set(1.15, 0.62, 0.95);
+  pelvis.castShadow = true;
+  hips.add(pelvis);
+
+  /* LEGS. Stumps: thick, short, and splayed, because a body this wide cannot
+     put its feet together. They are the reason he turns like a barge, which
+     is the one weakness the fight is built around. */
+  const legGeo = new THREE.CapsuleGeometry(r * 0.26, h * 0.06, 4, 8);
+  const legL = limb(legGeo, fat, 0);
+  const legR = limb(legGeo, fat, 0);
+  legL.position.set(-r * 0.52, 0, 0);
+  legR.position.set(r * 0.52, 0, 0);
+  legL.rotation.z = 0.14;
+  legR.rotation.z = -0.14;
+  for (const leg of [legL, legR]) {
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(r * 0.25, 8, 6), fatD);
+    knee.position.y = -h * 0.10;
+    leg.add(knee);
+    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.21, h * 0.06, 4, 8), fat);
+    shin.position.y = -h * 0.165;
+    shin.castShadow = true;
+    leg.add(shin);
+    // Bare foot bones poking out from under the fat: he is still a skeleton.
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.46, r * 0.16, r * 0.72), boneD);
+    foot.position.set(0, -h * 0.245, r * 0.18);
+    foot.castShadow = true;
+    leg.add(foot);
+    for (let t = -1; t <= 1; t++) {
+      const toe = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.05, r * 0.18, 2, 5), bone);
+      toe.rotation.x = Math.PI / 2;
+      toe.position.set(t * r * 0.13, -h * 0.25, r * 0.52);
+      leg.add(toe);
+    }
+  }
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.30;
+  tumbleInner.add(chest);
+
+  /* THE BELLY. The largest single object on any body in this game, and the
+     entire silhouette. It hangs FORWARD and LOW, so from above it is a wide
+     disc with the head peeking over the top of it - the read that says fat
+     from a camera that cannot see a profile. */
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(r * 0.98, 14, 11), fat);
+  belly.scale.set(1.05, 0.78, 1.0);
+  belly.position.set(0, h * 0.075, r * 0.2);
+  belly.castShadow = true;
+  chest.add(belly);
+
+  // Folds. Three shallow rings around it, which is what stops a sphere
+  // reading as a balloon.
+  for (let i = 0; i < 3; i++) {
+    const fold = new THREE.Mesh(
+      new THREE.TorusGeometry(r * (0.9 - i * 0.14), r * 0.09, 5, 14), fatD);
+    fold.rotation.x = Math.PI / 2;
+    fold.position.set(0, h * (-0.005 + i * 0.075), r * 0.2);
+    fold.scale.y = 0.8;
+    chest.add(fold);
+  }
+
+  /* RIBS, half drowned. Only the top three hoops clear the belly, which says
+     "there is a skeleton in here" without giving back the thin silhouette. */
+  const ribs = new THREE.Group();
+  chest.add(ribs);
+  /* Four hoops, sitting OVER the front of the belly rather than behind it.
+     Buried ribs are invisible ribs: the first pass hid them inside the mass
+     and the only thing left to look at was a sphere. */
+  for (let i = 0; i < 4; i++) {
+    const k = 1 - i * 0.11;
+    const hoop = new THREE.Mesh(
+      // A front CAGE, not a barrel hoop: the arc stops short of the back so
+      // the ribs read as ribs from above rather than as a corset.
+      new THREE.TorusGeometry(r * 1.0 * k, r * 0.085, 4, 11, Math.PI * 0.98), bone);
+    hoop.rotation.set(Math.PI / 2, 0, -Math.PI * 0.62);
+    hoop.position.set(0, h * (0.185 + i * 0.05), r * 0.18);
+    hoop.scale.z = 0.8;
+    hoop.castShadow = true;
+    ribs.add(hoop);
+  }
+  const sternum = new THREE.Mesh(new THREE.BoxGeometry(r * 0.26, h * 0.19, r * 0.14), bone);
+  sternum.position.set(0, h * 0.265, r * 0.78);
+  sternum.castShadow = true;
+  chest.add(sternum);
+
+  // Shoulders: two great knobs of fat over the joint, set WIDE. Together with
+  // the belly they give him a body three times the width of anything else.
+  /* Shoulders in BONE, and a blade of scapula standing up off each one. Two
+     more spheres of fat here was two more balloons on the stack; a hard, pale,
+     angular thing at each corner is what gives the mass an edge to end at. */
+  for (const sx of [-1, 1]) {
+    // Kept SMALLER than the head and set lower, or the three of them sit in a
+    // row at the same size and the top of the body is three balls again.
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(r * 0.27, 9, 7), boneD);
+    shoulder.position.set(sx * r * 1.0, h * 0.315, 0);
+    shoulder.scale.y = 0.75;
+    shoulder.castShadow = true;
+    chest.add(shoulder);
+    const scap = new THREE.Mesh(new THREE.BoxGeometry(r * 0.5, r * 0.62, r * 0.1), bone);
+    scap.position.set(sx * r * 0.72, h * 0.40, -r * 0.28);
+    scap.rotation.set(0.3, 0, -sx * 0.4);
+    scap.castShadow = true;
+    chest.add(scap);
+  }
+
+  /* THE HEAD. Deliberately TINY and sunk between the shoulders with no neck
+     at all: the small head is what makes everything else look enormous, and a
+     normal skull on this body would have read as a big skeleton rather than
+     as a fat one. */
+  const neck = new THREE.Group();
+  // Raised and pushed FORWARD. Sunk between the shoulders it was behind the
+  // belly from a camera that looks down, which on this rig means it did not
+  // exist — and the small head is the joke the whole silhouette rests on.
+  neck.position.set(0, h * 0.455, r * 0.24);
+  chest.add(neck);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.33, 10, 8), bone);
+  skull.scale.set(1, 0.92, 1.06);
+  skull.castShadow = true;
+  neck.add(skull);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.3, r * 0.13, r * 0.24), boneD);
+  jaw.position.set(0, -r * 0.2, r * 0.1);
+  neck.add(jaw);
+  // A double chin of fat under it, because the head is the one place the joke
+  // has to land.
+  const chin = new THREE.Mesh(new THREE.SphereGeometry(r * 0.36, 9, 7), fat);
+  chin.scale.set(1.1, 0.5, 0.9);
+  chin.position.set(0, -r * 0.3, r * 0.06);
+  neck.add(chin);
+
+  const eyes = [];
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.075, 6, 5), socket);
+    eye.position.set(sx * r * 0.12, r * 0.02, r * 0.25);
+    neck.add(eye);
+    eyes.push(eye);
+  }
+
+  /* ARMS. Massive, and the weapon arm carries a flensing cleaver on a short
+     haft - the tool he did the rendering with. It is deliberately WIDE rather
+     than long: the threat has to be legible as an area, because his whole
+     moveset is areas. */
+  const armGeo = new THREE.CapsuleGeometry(r * 0.24, h * 0.09, 4, 8);
+  const armBits = (parent) => {
+    parent.add(limb(armGeo, fat, 0));
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(r * 0.23, 8, 6), fatD);
+    elbow.position.y = -h * 0.105;
+    parent.add(elbow);
+    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.19, h * 0.085, 4, 8), fat);
+    fore.position.y = -h * 0.17;
+    fore.castShadow = true;
+    parent.add(fore);
+    // Bare hand bones: the fat stops at the wrist.
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(r * 0.3, r * 0.24, r * 0.34), boneD);
+    hand.position.y = -h * 0.235;
+    parent.add(hand);
+  };
+
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.95, h * 0.335, 0);
+  chest.add(pivot);
+  armBits(pivot);
+
+  const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.9, 6), leather);
+  haft.rotation.x = Math.PI / 2;
+  haft.position.set(0, -h * 0.235, 0.42);
+  pivot.add(haft);
+  // The cleaver: a wide slab with a hooked heel, thin in Y and long in Z
+  // because the shoulder rotates about X and that is the plane of the swing.
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.9, 1.5), edge);
+  blade.position.set(0, -h * 0.235, 1.45);
+  blade.castShadow = true;
+  pivot.add(blade);
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 1.5), iron);
+  spine.position.set(0, -h * 0.235 + 0.36, 1.45);
+  pivot.add(spine);
+  const heel = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.07, 4, 8, Math.PI), iron);
+  heel.rotation.set(0, Math.PI / 2, Math.PI * 0.1);
+  heel.position.set(0, -h * 0.235 - 0.2, 0.95);
+  pivot.add(heel);
+
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.95, h * 0.335, 0);
+  chest.add(offArm);
+  armBits(offArm);
+  // A rendering hook in the off hand, hanging.
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.05, 4, 9, Math.PI * 1.2), iron);
+  hook.rotation.set(0, Math.PI / 2, Math.PI * 0.6);
+  hook.position.set(0, -h * 0.34, 0.14);
+  offArm.add(hook);
+
+  // A butcher's apron, stiff with four hundred years of it.
+  /* A butcher's apron, stiff with four hundred years of it, hanging over the
+     FRONT of the belly. It is the one large dark shape on him and it does more
+     for the read than any amount of modelling: a single mass of one value is a
+     balloon, and the same mass cut in half by something dark is a body. */
+  const apron = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.86, r * 1.1, h * 0.32, 14,
+                                                          1, true, -1.15, 2.3), leather);
+  apron.material.side = THREE.DoubleSide;
+  apron.position.set(0, h * 0.055, r * 0.2);
+  apron.castShadow = true;
+  chest.add(apron);
+  // And a strap over one shoulder, so it is worn rather than draped.
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(r * 0.18, h * 0.3, r * 0.08), leather);
+  strap.position.set(-r * 0.4, h * 0.29, r * 0.62);
+  strap.rotation.z = 0.42;
+  chest.add(strap);
+
+  g.add(makeNose(r, 0xe8d0a0));
+
+  return {
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
+    body: belly, head: skull, blade, shield: null,
+    mat: fat, core: eyes[0], eyes,
+    tipScale: 1.5,
+    // He winds the cleaver back over the shoulder and brings it past his own
+    // knees, which is a longer arc than anything else swings.
+    swingArc: { rest: -0.22, wind: -2.9, end: 1.85 },
+    baseLean: 0.16, stride: 0, flash: 0, spin: 0, isPlayer: false,
+  };
+}
+
 export function buildEffigy(actor) {
   const g = new THREE.Group();
   const r = actor.radius, h = actor.height;

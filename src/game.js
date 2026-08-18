@@ -4,7 +4,7 @@ import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
 import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT, RISE,
          ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT, ZONES, INTERACT,
-         BOONS, BOON_MODS, RUN } from './config.js';
+         BOONS, BOON_MODS, RUN, UNDERCROFT_ORDER } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
@@ -119,15 +119,28 @@ export class Game {
 
   /* Where in the run you are. Room 0 is whatever the rack was set to; after
      that the chain is fixed, and each room introduces exactly one new idea. */
+  /* Which chain of rooms you are in. There are two: the opening, down in the
+     undercroft, and the run, out in the wood. Making this a field rather than
+     a module constant is the whole of what it took to have both - the opening
+     should teach you the shape of a run by BEING one, which means it has to go
+     through the same room-to-room machinery. */
+  get order() { return this._order || ROOM_ORDER; }
+  setChain(order, firstId) {
+    this._order = order;
+    this.encounterId = firstId;
+  }
+  get inUndercroft() { return this.order === UNDERCROFT_ORDER; }
+
   get roomIndex() {
-    const i = ROOM_ORDER.indexOf(this.encounterId);
+    const i = this.order.indexOf(this.encounterId);
     return i < 0 ? 0 : i + 1;
   }
-  get roomCount() { return ROOM_ORDER.length + 1; }
-  get nextRoom() { return ROOM_ORDER[this.roomIndex] || null; }
+  get roomCount() { return this.order.length + 1; }
+  get nextRoom() { return this.order[this.roomIndex] || null; }
   get isLastRoom() { return this.nextRoom === null; }
   get exitPos() {
-    const d = ARENA.radius - 1.15;
+    const d = (this.encounter && this.encounter.radius ? this.encounter.radius
+                                                       : ARENA.radius) - 1.15;
     return { x: Math.sin(EXIT.bearing) * d, z: Math.cos(EXIT.bearing) * d };
   }
 
@@ -358,7 +371,10 @@ export class Game {
   _supportState() {
     let handoff = 1, hesitate = 1, label = null;
     for (const e of this.enemies) {
-      if (e.dead || !e.def.support) continue;
+      // `def` is guarded because anything at all can be put in the enemy list:
+      // the tutorial's effigy is in there so the fight loop has something to
+      // swing at, and it is not a foe out of the table.
+      if (e.dead || !e.def || !e.def.support) continue;
       handoff = Math.min(handoff, e.def.support.handoffMul ?? 1);
       hesitate = Math.min(hesitate, e.def.support.hesitateMul ?? 1);
       label = e.def.support.label || label;
@@ -489,7 +505,14 @@ export class Game {
     }
 
     this._validateLock();
-    if (this.enemies.length || (this.pending && this.pending.length)) this._hadEnemies = true;
+    // A training post is not an ENEMY. It sits in the enemy list because that
+    // is where the fight loop looks for things to swing at, but a room whose
+    // only occupant was an effigy was never a room you cleared - and treating
+    // it as one raised a reward card in the tutorial's first room and then
+    // held the whole sim waiting for an answer.
+    if (this.enemies.some((e) => !e.isEffigy) || (this.pending && this.pending.length)) {
+      this._hadEnemies = true;
+    }
     this._releaseWaves(dt);
     this._updateAggro(dt);
 
@@ -546,31 +569,47 @@ export class Game {
       // tutorial empties the enemy list for a frame before spawning its
       // effigy, and without this guard that frame raised an offer nobody could
       // answer and the offer gate then halted the sim forever.
-      if (!this._hadEnemies) { this.exitOpen = true; return; }
-      // The room's reward, offered once. Held until the player picks, and the
-      // road does not open until they have — a choice you can walk away from
-      // is not a choice.
-      if (!this._clearPaid) {
-        this._clearPaid = true;
-        this.run.roomsCleared++;
-        const heal = this.run.mods.healOnClear;
-        if (heal) this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
-        this.rollOffer();
-        this.events.push({ type: 'offer', result: 'offer' });
-      }
-      if (this.offer) { this.exitT = 0; return; }
-      if (this.isLastRoom) {
-        if (!this.outcome) { this.outcome = 'win'; this.outcomeT = 0; }
+      if (!this._hadEnemies) {
+        // ...but a room may still hold its own door. The cell does: its lesson
+        // is a list, and a way out that is open from the first frame is a way
+        // out somebody walks through before the list has started.
+        if (!this.encounter.holdExit) this.exitOpen = true;
       } else {
-        this.exitT += dt;
-        // A beat before it opens, so the killing blow gets to land before the
-        // game starts pointing somewhere else.
-        if (this.exitT >= EXIT.openDelay) this.exitOpen = true;
-        if (this.exitOpen) {
-          const e = this.exitPos;
-          if (Math.hypot(this.player.x - e.x, this.player.z - e.z) <= EXIT.radius) {
-            this.advanceRoom();
-          }
+        // The room's reward, offered once. Held until the player picks, and
+        // the road does not open until they have — a choice you can walk away
+        // from is not a choice.
+        if (!this._clearPaid) {
+          this._clearPaid = true;
+          this.run.roomsCleared++;
+          const heal = this.run.mods.healOnClear;
+          if (heal) this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
+          this.rollOffer();
+          this.events.push({ type: 'offer', result: 'offer' });
+        }
+        if (this.offer) { this.exitT = 0; return; }
+        if (this.isLastRoom) {
+          // ...unless the room says otherwise. The bottom of the undercroft is
+          // the last room of ITS chain, but killing what is down there is not
+          // winning the game — it is the end of the opening, and the tutorial
+          // wants to walk you out of it.
+          if (!this.outcome && !this.encounter.noWin) { this.outcome = 'win'; this.outcomeT = 0; }
+          if (this.encounter.noWin) this.exitOpen = true;
+        } else {
+          this.exitT += dt;
+          // A beat before it opens, so the killing blow gets to land before
+          // the game starts pointing somewhere else.
+          if (this.exitT >= EXIT.openDelay) this.exitOpen = true;
+        }
+      }
+
+      /* Walking into the open door. This is deliberately OUTSIDE both branches
+         above: it used to sit inside the one that pays out a reward, so a room
+         that never had a reward to pay — the tutorial's cell — opened its door
+         and then never noticed anybody standing in it. */
+      if (this.exitOpen && !this.isLastRoom) {
+        const e = this.exitPos;
+        if (Math.hypot(this.player.x - e.x, this.player.z - e.z) <= EXIT.radius) {
+          this.advanceRoom();
         }
       }
     }
@@ -716,7 +755,10 @@ export class Game {
       this._resolveSolids(a);
     }
 
-    const bound = this.zone ? this.zone.radius : ARENA.radius;
+    // A room may be smaller than a clearing. The undercroft is: it is INDOORS,
+    // and walls the player can walk through are worse than no walls at all.
+    const bound = this.zone ? this.zone.radius
+                : (this.encounter.radius || ARENA.radius);
     for (const a of all) {
       if (a.dead) continue;
       const d = Math.hypot(a.x, a.z);
