@@ -87,6 +87,7 @@ function frame(now) {
   view.setReticle(game.player.lockTarget);
   view.updateSparks(dtReal);
   view.updateCamera(game.player, game.player.lockTarget, dtReal);
+  view.update(dtReal);            // braziers, embers, chains, occluder fade
   view.render();
 
   hud.update(game, dtReal);
