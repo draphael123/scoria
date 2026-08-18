@@ -71,7 +71,12 @@ export class Foe extends Actor {
     const { hesitateMin: a, hesitateMax: b } = this.def;
     const p2 = this.def.phase2;
     const gear = (p2 && this.phaseNum >= 2) ? (p2.hesitateMul ?? 1) : 1;
-    return (a + this.rng() * (b - a)) * (this.tempoMul || 1) * gear;
+    // `tempoMul` is what the ROOM is doing (a Gaffer keeping time);
+    // `depthTempo` is what the RUN is doing. They multiply, deliberately: a
+    // support enemy deep in a run should be worse than the same one near the
+    // top, because that is what "escalating" has to mean.
+    return (a + this.rng() * (b - a)) * (this.tempoMul || 1)
+           * (this.depthTempo || 1) * gear;
   }
 
   stagger(duration) {

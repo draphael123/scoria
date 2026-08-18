@@ -785,8 +785,11 @@ export const BOLTBONE = {
       id: 'snap', label: 'SNAPSHOT',
       windup: 0.34, active: 0.08, recover: 0.72,
       damage: 8, poise: 0,
-      shape: 'arc', reach: 1.6, arc: 0.5,
-      shot: { speed: 17, radius: 0.24, life: 1.6 },
+      // The key is `projectile`, not `shot`. Written wrong the first time,
+      // which made the archer's fast shot a 1.6-metre melee poke that could
+      // never reach anybody — it fired in every test and hit nothing, ever.
+      shape: 'arc', reach: 10.0, arc: 0.13,
+      projectile: { speed: 19, radius: 0.26, damage: 9, life: 1.5, color: 0xffdca0 },
       step: 0,
       weight: 0.3, minRange: 3.5, maxRange: 16,
     },
@@ -1407,9 +1410,147 @@ export const MASTERWORK = {
   },
 };
 
+
+/* -------------------------------------------------------------------------
+   THE PATTERN-MAKER. The elite, and the third boss-shaped thing in the game.
+
+   He drew the moulds. Every weapon the works ever poured came out of a shape
+   he cut first, which means every skeleton down here is walking around inside
+   something he designed — and he can still call them, because a pattern knows
+   its own castings.
+
+   He is built to break a habit rather than to test one. By the time you meet
+   him you have spent six rooms learning that the answer to everything is
+   CLOSE THE DISTANCE AND COMMIT. He does not permit that:
+
+     HE LEAVES.       A blink the moment you get inside his range, so pressure
+                      alone never resolves the fight.
+     HE THROWS.       Fire at range, on a fast tell, so standing off is not an
+                      answer either.
+     HE CALLS.        Two Cinderbones, and they arrive with the aggro token
+                      already spoken for — which is the one time in this game
+                      the crowd is genuinely the point rather than the texture.
+
+   The answer the fight wants is: kill what he calls, use them to walk him
+   into a corner, and punish the recovery on the summon. That is a different
+   verb from anything the run has asked for, which is why it is worth a body.
+   ---------------------------------------------------------------------- */
+export const MAGUS = {
+  gold: 220,
+  name: 'The Pattern-Maker',
+  /* He shares the Kilnwarden's body, and that is the lore rather than a
+     shortcut: he CUT their pattern. Every warden in the works came out of a
+     mould this man made, so the thing at the top of that line looking like a
+     bigger, colder version of them is exactly right — and it means you read
+     "this is the one that made the others" before he does anything. */
+  rig: 'kilnwarden',
+  rigScale: 1.16,
+  hp: 380,
+  radius: 0.42,
+  height: 1.92,
+
+  moveSpeed: 2.4,
+  turnRate: 4.4,
+  // He wants to be a long way off, and he corrects for it constantly.
+  preferredRange: 7.5,
+  circleSpeed: 2.2,
+
+  poise: 34,               // frail. Reaching him IS the fight.
+  poiseRegen: 12,
+  poiseRegenDelay: 1.6,
+  staggerDuration: 1.9,
+  staggerDamageMul: 1.9,
+  staggerResist: 1.8,
+  staggerResistMul: 0.5,
+
+  punishRange: 3.2,
+  punishHesitate: 0.3,
+
+  hesitateMin: 0.7,
+  hesitateMax: 1.5,
+  recoverIdle: 0.3,
+
+  /* THE BLINK. Not an attack — a reflex, checked every step. If you are
+     inside `within` and it is off cooldown, he is somewhere else. Held on the
+     foe as data so the behaviour lives next to the numbers that shape it. */
+  blink: {
+    within: 3.2,
+    cooldown: 3.4,
+    range: [7.5, 10.5],     // how far he goes
+    windup: 0.32,           // he is briefly visible and vulnerable first
+    tell: 'GONE',
+  },
+
+  phase2: {
+    at: 0.5,
+    label: 'THE MOULD CRACKS',
+    hesitateMul: 0.62,
+    windupMul: 0.86,
+    unlock: ['storm'],
+  },
+
+  attacks: {
+    // The staple. A single bolt, fast tell, punishes standing still at range.
+    bolt: {
+      id: 'bolt', label: 'CAST',
+      windup: 0.52, active: 0.08, recover: 0.6,
+      damage: 20, poise: 0,
+      shape: 'arc', reach: 12.0, arc: 0.16,
+      projectile: { speed: 13, radius: 0.32, damage: 20, life: 2.6, color: 0xff8adc },
+      step: 0,
+      weight: 0.36, minRange: 2.4, maxRange: 16,
+    },
+    // THE CALL. Two Cinderbones out of the floor. Enormous recovery, which is
+    // the window the whole fight is built around.
+    call: {
+      id: 'call', label: 'THE CALL',
+      windup: 0.92, active: 0.1, recover: 1.4,
+      damage: 0, poise: 0,
+      shape: 'arc', reach: 0.1, arc: 0.1,
+      summon: { foe: 'cinderbone', count: 2, radius: 4.2, max: 4 },
+      step: 0,
+      weight: 0.26, minRange: 0, maxRange: 20,
+    },
+    // A pool of fire where you are standing, for when you will not come to him.
+    brand: {
+      id: 'brand', label: 'BRAND',
+      windup: 0.8, active: 0.55, recover: 0.86,
+      damage: 24, poise: 0,
+      shape: 'circle', radius: 2.7, offset: 0,
+      zone: true, telegraph: 'zone',
+      step: 0,
+      weight: 0.24, minRange: 2.0, maxRange: 12,
+    },
+    // Close-range shove, so reaching him is not a free kill.
+    ward: {
+      id: 'ward', label: 'WARD',
+      windup: 0.34, active: 0.1, recover: 0.66,
+      damage: 14, poise: 0,
+      shape: 'circle', radius: 2.4, offset: 0,
+      step: 0, knock: 10,
+      weight: 0.26, minRange: 0, maxRange: 2.8,
+    },
+
+    // ---- second phase ------------------------------------------------
+    // Three bolts in a fan. The only ranged attack in the game you cannot
+    // sidestep on one axis.
+    storm: {
+      id: 'storm', label: 'THE POUR',
+      windup: 0.78, active: 0.1, recover: 1.0,
+      damage: 17, poise: 0,
+      shape: 'arc', reach: 12.0, arc: 0.5,
+      projectile: { speed: 12, radius: 0.30, damage: 17, life: 2.8, color: 0xff8adc,
+                    spread: 3, spreadArc: 0.44 },
+      step: 0,
+      phase: 2,
+      weight: 0.3, minRange: 2.4, maxRange: 16,
+    },
+  },
+};
+
 export const FOES = {
   slagbound: SLAGBOUND, cinderbone: CINDERBONE,
-  husk: HUSK, tallowman: TALLOWMAN, masterwork: MASTERWORK,
+  husk: HUSK, tallowman: TALLOWMAN, masterwork: MASTERWORK, magus: MAGUS,
   boltbone: BOLTBONE, kilnwarden: KILNWARDEN,
   skimmer: SKIMMER, blackdamp: BLACKDAMP, gaffer: GAFFER,
 };
@@ -1617,6 +1758,24 @@ export const ENCOUNTERS = {
             [-5.8, -4.0, 'kilnwarden'], [5.8, -4.0, 'kilnwarden'],
             [-3.2, 1.8, null, { atRemaining: 2 }]],
   },
+  /* THE PATTERN ROOM. The elite. Reached by choosing it on the route rather
+     than by walking the only road there is, which is most of why it is worth
+     having: an optional hard thing is a decision, a compulsory one is a wall. */
+  pattern: {
+    id: 'pattern', name: 'The Pattern Room', short: 'MOULD',
+    blurb: 'Every shape the works ever poured was cut in this room first. ' +
+           'The man who cut them is still at the bench, and he still knows ' +
+           'what he made.',
+    foe: 'magus', theme: 'works',
+    hpMul: 1.0,
+    rocks: 4,
+    // `boss` exempts a room from depth escalation; `finale` is what ENDS a
+    // run. The elite is the first and not the second, and conflating them
+    // meant killing the Pattern-Maker won you the game three rooms early.
+    boss: true,
+    spawn: [[0, -7.5, 'magus']],
+  },
+
   /* THE POURING FLOOR. The end of the run, and the only room in it with one
      thing in it. Everything before this has been about managing a crowd; this
      is the exam on the duel the opening taught. */
@@ -1629,6 +1788,7 @@ export const ENCOUNTERS = {
     hpMul: 1.0,
     rocks: 0,
     boss: true,
+    finale: true,
     spawn: [[0, -6.5, 'masterwork']],
   },
   casting: {
@@ -2187,6 +2347,167 @@ export const UNDERCROFT_ORDER = ['passage', 'sump'];
 /* The run's chain. The Masterwork is its own room rather than an extra body
    in the casting hall: a boss that shares a floor with five other things is a
    difficulty spike, and a boss you walk to through a door is an ENDING. */
+
+/* -------------------------------------------------------------------------
+   THE ROUTE — what makes run five different from run one.
+
+   Until now the run was six fixed rooms in a fixed order with fixed spawns.
+   Boons were the only thing that ever differed, which meant mastery had to
+   carry the entire burden of "come back tomorrow".
+
+   Three things generate variety here, and they are deliberately different
+   KINDS of thing:
+
+     WHICH rooms      drawn from tiered pools, so the order changes but the
+                      teaching order does not
+     HOW MANY bodies  scaled by depth, not by health
+     WHAT KIND of room a fight, an elite, a chest, an event, a rest
+
+   And the fourth thing, which matters more than the other three: at every
+   doorway you pick between TWO of them. A randomised route is variety; a
+   route you choose is a decision, and only one of those is a game.
+
+   ---- THE TIER RULE ------------------------------------------------------
+   A pure shuffle would break the only structural rule this game has kept
+   since Slice 1: ONE NEW IDEA PER ROOM, in an order where each is legible
+   because the one before it landed. You cannot open on the archers.
+
+   So rooms are drawn WITHIN tiers. Tier 1 rooms are all "a crowd of one kind
+   of thing". Tier 2 rooms each add exactly one idea to that. Tier 3 rooms
+   combine two. Inside a tier they are interchangeable and the order is rolled;
+   across tiers it is fixed. The teaching survives the shuffle.
+   ---------------------------------------------------------------------- */
+export const ROUTE = {
+  // How long a run is, in rooms before the boss.
+  length: 7,
+
+  /* Which tier a room at depth N may be drawn from. Index is depth (0-based),
+     so the shape of a run is stated here as one readable line rather than as
+     an algorithm somebody has to reverse-engineer. */
+  tierByDepth: [1, 1, 2, 2, 2, 3, 3],
+
+  pools: {
+    1: ['ossuary', 'yard'],
+    2: ['gallery', 'kiln', 'ossuary'],
+    3: ['casting', 'kiln', 'gallery'],
+  },
+
+  /* ESCALATION. Applied to the room's spawn COUNT and to how fast everything
+     commits — NOT to health. Inflating hp makes a fight longer; adding a body
+     and shortening the pause between commitments makes it harder, which is
+     the thing you actually wanted. */
+  escalate: {
+    // Extra bodies, by depth. Deliberately not linear: the jump from 4 to 5 is
+    // much larger than the jump from 5 to 6 because the aggro token means the
+    // fifth body is the first one that is ALWAYS off-screen.
+    extraByDepth: [0, 0, 1, 1, 1, 2, 2],
+    // Everything hesitates less as you go down. 1.0 at the top, 0.72 at the
+    // bottom — a 28% faster cadence, which is about the limit at which the
+    // one-telegraph guarantee still reads as generous.
+    tempoByDepth: [1.0, 0.96, 0.92, 0.88, 0.84, 0.78, 0.72],
+    // A little more health per body, because a body that dies in one combo
+    // stops being a body and starts being a speed bump.
+    hpByDepth: [1.0, 1.05, 1.12, 1.18, 1.25, 1.34, 1.42],
+  },
+
+  /* THE NODE TYPES, and how often each is offered. Weights are per DEPTH
+     BAND, because a chest in the first room is a gift and a chest in the last
+     one is a decision you make instead of fighting. */
+  nodes: {
+    fight: { name: 'A ROOM WITH SOMETHING IN IT', icon: 'sword', weight: 1 },
+    elite: { name: 'SOMETHING WORSE', icon: 'skull', weight: 0 },
+    chest: { name: 'SOMETHING LEFT BEHIND', icon: 'chest', weight: 0 },
+    event: { name: 'SOMETHING HAPPENING', icon: 'spark', weight: 0 },
+    rest:  { name: 'SOMEWHERE TO STOP', icon: 'fire', weight: 0 },
+  },
+
+  /* The shape of a run, as a per-depth weight table. Read down a column to
+     see what depth 3 can be; read across a row to see when chests appear.
+     This is the whole pacing design in one grid, which is the point of
+     writing it as a grid. */
+  weightsByDepth: [
+    // depth:      0     1     2     3     4     5     6
+    { fight: [1.00, 1.00, 0.70, 0.62, 0.55, 0.62, 0.70] },
+    { chest: [0.00, 0.24, 0.20, 0.16, 0.16, 0.10, 0.06] },
+    { event: [0.00, 0.20, 0.24, 0.24, 0.20, 0.14, 0.08] },
+    { rest:  [0.00, 0.00, 0.14, 0.16, 0.18, 0.14, 0.16] },
+    { elite: [0.00, 0.00, 0.00, 0.00, 0.24, 0.30, 0.30] },
+  ],
+};
+
+/* -------------------------------------------------------------------------
+   THE CHESTS AND THE THINGS THAT HAPPEN.
+
+   Non-combat rooms exist to make the route worth choosing. A branch between
+   two fights is a coin flip; a branch between a fight and a chest is a
+   decision about what you need right now, which is the only reason to draw a
+   map at all.
+
+   Every one of them pays into a currency that already exists. Nothing here
+   introduces a fourth thing to track.
+   ---------------------------------------------------------------------- */
+export const CHESTS = [
+  { id: 'strongbox', name: 'A Strongbox', gold: [60, 130],
+    text: 'Somebody hid this and did not come back for it.' },
+  { id: 'paybox', name: 'The Pay Chest', gold: [130, 240],
+    text: 'The last shift was never paid out. It is all still in here.' },
+  { id: 'reliquary', name: 'A Reliquary', gold: [20, 50], boon: true,
+    text: 'Not money. Something the iron kept.' },
+];
+
+export const EVENTS = [
+  {
+    id: 'trough', name: 'The Quenching Trough',
+    text: 'A trough of black water, still faintly warm. Four hundred years ' +
+          'and it has not gone cold, which is not a thing water does.',
+    choices: [
+      { label: 'DRINK', blurb: 'Heal 45. Whatever is in it is in you now.',
+        effect: 'heal45' },
+      { label: 'PUT YOUR BLADE IN IT', blurb: 'Take a boon. Lose 20 health.',
+        effect: 'boonForHp' },
+      { label: 'LEAVE IT', blurb: 'Nothing happens. Nothing usually does.',
+        effect: 'none' },
+    ],
+  },
+  {
+    id: 'ledger', name: 'A Loose Ledger Page',
+    text: 'One page, torn out of the roll. A column of names, and beside ' +
+          'each one a figure. Yours is not on it. Not yet.',
+    choices: [
+      { label: 'TAKE IT TO THE KEEPER', blurb: 'Gold, and a good deal of it.',
+        effect: 'gold200' },
+      { label: 'BURN IT', blurb: 'Take a boon. They were owed something.',
+        effect: 'boon' },
+      { label: 'PUT IT BACK', blurb: 'Heal to full. It costs nothing to be careful.',
+        effect: 'healFull' },
+    ],
+  },
+  {
+    id: 'rack', name: 'An Abandoned Rack',
+    text: 'A weapon rack with one thing still on it, and the thing is ' +
+          'shaking. Not from cold.',
+    choices: [
+      { label: 'TAKE IT UP', blurb: 'Two boons. Half your remaining health.',
+        effect: 'twoBoonsHalfHp' },
+      { label: 'BREAK IT', blurb: 'Gold, and it stops shaking.',
+        effect: 'gold140' },
+      { label: 'WALK PAST', blurb: 'It is still shaking behind you.',
+        effect: 'none' },
+    ],
+  },
+  {
+    id: 'shift', name: 'The Shift Bell',
+    text: 'A bell on a post, with a rope. Ringing it in a place like this ' +
+          'is the sort of thing that gets an answer.',
+    choices: [
+      { label: 'RING IT', blurb: 'Something comes. Whatever it is drops double.',
+        effect: 'ambush' },
+      { label: 'CUT THE ROPE', blurb: 'Heal 30, and nothing comes.',
+        effect: 'heal30' },
+    ],
+  },
+];
+
 export const ROOM_ORDER = ['ossuary', 'yard', 'gallery', 'kiln', 'casting', 'masterwork'];
 
 export const EXIT = {

@@ -352,6 +352,9 @@ export class View {
       rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
           : actor.isEffigy ? buildEffigy(actor)
           : (FOE_RIG[actor.def && actor.def.rig] || buildSlagbound)(actor);
+      // A foe may wear another's body at a different size. Cheap, and it says
+      // "the same thing, bigger" faster than any amount of new geometry.
+      if (actor.def && actor.def.rigScale) rig.group.scale.setScalar(actor.def.rigScale);
       this.rigs.set(actor, rig);
       this.scene.add(rig.group);
       const tg = buildTelegraph();

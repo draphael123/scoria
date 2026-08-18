@@ -11,7 +11,7 @@ import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
 import { saveBank, owns, buyStanding } from './mastery.js';
 import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER, DOMAINS,
-         MASTERY } from './config.js';
+         MASTERY, ROUTE, CHESTS, EVENTS, ENCOUNTERS } from './config.js';
 import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
@@ -383,6 +383,197 @@ function buildCard(b) {
   return card;
 }
 
+
+/* ---------------------------------------------------------------------------
+   THE FORK, AND THE INTERLUDES.
+
+   A route is only variety; a route you CHOOSE is a decision. This is the whole
+   of that decision — two doors at every depth, and whichever you do not take
+   is gone. Deliberately not a map you can study: a map you can exhaust stops
+   being a choice about scarcity and becomes a shopping list.
+   ------------------------------------------------------------------------ */
+const forkEl = document.getElementById('fork');
+const forkCards = document.getElementById('forkCards');
+const forkDepth = document.getElementById('forkDepth');
+const ludeEl = document.getElementById('lude');
+
+const NODE_ICON = {
+  // A door with a blade behind it.
+  fight: { h: 6,   svg: '<path d="M50 10 L60 34 L60 62 L50 72 L40 62 L40 34 Z"/>' +
+                        '<path d="M28 62 L72 62"/><path d="M50 72 L50 90"/>' },
+  // A skull, for the thing that is worse.
+  elite: { h: 286, svg: '<path d="M50 8 C74 8 86 26 86 46 C86 60 78 68 72 72 L72 88 L28 88 ' +
+                        'L28 72 C22 68 14 60 14 46 C14 26 26 8 50 8 Z"/>' +
+                        '<circle class="fill" cx="34" cy="48" r="8"/>' +
+                        '<circle class="fill" cx="66" cy="48" r="8"/>' +
+                        '<path d="M42 88 L42 74"/><path d="M58 88 L58 74"/>' },
+  // A strongbox.
+  chest: { h: 44,  svg: '<path d="M12 44 L88 44 L88 88 L12 88 Z"/>' +
+                        '<path d="M12 44 C12 24 28 14 50 14 C72 14 88 24 88 44"/>' +
+                        '<path d="M12 60 L88 60"/>' +
+                        '<path d="M44 56 L56 56 L56 74 L44 74 Z"/>' },
+  // A struck spark, for a thing happening.
+  event: { h: 196, svg: '<path d="M50 6 L50 34"/><path d="M50 66 L50 94"/>' +
+                        '<path d="M6 50 L34 50"/><path d="M66 50 L94 50"/>' +
+                        '<path d="M19 19 L39 39"/><path d="M61 61 L81 81"/>' +
+                        '<path d="M81 19 L61 39"/><path d="M39 61 L19 81"/>' +
+                        '<circle class="fill" cx="50" cy="50" r="11"/>' },
+  // A fire, for somewhere to stop.
+  rest:  { h: 26,  svg: '<path d="M50 8 C50 30 68 34 68 54 C68 72 60 88 50 88 ' +
+                        'C40 88 32 72 32 54 C32 34 50 30 50 8 Z"/>' +
+                        '<path d="M50 44 C50 56 58 60 58 68 C58 78 54 84 50 84 ' +
+                        'C46 84 42 78 42 68 C42 60 50 56 50 44 Z"/>' },
+  boss:  { h: 20,  svg: '<path d="M50 6 L88 22 C88 62 70 86 50 96 C30 86 12 62 12 22 Z"/>' +
+                        '<path d="M50 26 L50 74"/><path d="M32 44 L68 44"/>' },
+};
+
+/* What each door SAYS. The note is the only thing that separates two fight
+   doors, so it names the room rather than describing the idea — you are
+   choosing a place, and by the fifth run you know what the places are. */
+function nodeBlurb(node) {
+  if (node.kind === 'fight' || node.kind === 'boss') {
+    const enc = ENCOUNTERS[node.encounter];
+    return { kind: node.kind === 'boss' ? 'THE END OF IT' : 'A ROOM',
+             name: enc ? enc.name : 'A Room',
+             note: enc ? enc.short : '' };
+  }
+  if (node.kind === 'elite') {
+    return { kind: 'SOMETHING WORSE', name: 'The Pattern Room',
+             note: 'He made the moulds every one of them came out of. He can still call them.' };
+  }
+  if (node.kind === 'chest') {
+    const c = CHESTS.find((x) => x.id === node.chest) || CHESTS[0];
+    return { kind: 'LEFT BEHIND', name: c.name, note: c.text };
+  }
+  if (node.kind === 'event') {
+    const e = EVENTS.find((x) => x.id === node.event) || EVENTS[0];
+    return { kind: 'SOMETHING HAPPENING', name: e.name,
+             note: 'You will have to decide something.' };
+  }
+  return { kind: 'SOMEWHERE TO STOP', name: 'A Cold Fire',
+           note: 'Nothing comes here. Heal, and go on when you are ready.' };
+}
+
+function showFork() {
+  const pair = game.offers;
+  if (!pair) return;
+  forkCards.innerHTML = '';
+  pair.forEach((node, i) => {
+    const icon = NODE_ICON[node.kind] || NODE_ICON.fight;
+    const b = nodeBlurb(node);
+    const door = document.createElement('button');
+    door.className = 'fk-door';
+    door.style.setProperty('--h', icon.h);
+    door.innerHTML = `<div class="fk-icon"><svg viewBox="0 0 100 100">${icon.svg}</svg></div>`;
+    const kind = document.createElement('div');
+    kind.className = 'fk-kind'; kind.textContent = b.kind;
+    const name = document.createElement('div');
+    name.className = 'fk-name'; name.textContent = b.name;
+    const note = document.createElement('div');
+    note.className = 'fk-note'; note.textContent = b.note;
+    door.append(kind, name, note);
+    door.onclick = () => {
+      forkEl.classList.remove('on');
+      game.takeNode(i);
+      game.atFork = false;
+      audio.uiClick();
+      if (game.interlude) showInterlude();
+      else { resetHudSmoothing(); noteFoes(); showPlacard(game.encounter.name, ''); }
+    };
+    forkCards.appendChild(door);
+  });
+  forkDepth.textContent = `ROOM ${game.depth + 1} OF ${ROUTE.length + 1}`;
+  forkEl.classList.add('on');
+  audio.uiClick();
+}
+
+/* THE INTERLUDES. A chest opens, an event asks, a fire heals. All three pay
+   into a currency that already exists — nothing here adds a fourth thing to
+   keep track of, which is the rule that keeps a shop from becoming a system. */
+function applyEffect(effect) {
+  const p = game.player;
+  const heal = (n) => { p.hp = Math.min(p.maxHp, p.hp + n); };
+  const boon = () => { const o = game.rollOffer(); if (o && o.length) game.takeBoon(o[0]); };
+  switch (effect) {
+    case 'heal45': heal(45); break;
+    case 'heal30': heal(30); break;
+    case 'healFull': p.hp = p.maxHp; break;
+    case 'gold200': game.run.gold += 200; break;
+    case 'gold140': game.run.gold += 140; break;
+    case 'boon': boon(); break;
+    case 'boonForHp': boon(); p.hp = Math.max(1, p.hp - 20); break;
+    case 'twoBoonsHalfHp': boon(); boon(); p.hp = Math.max(1, Math.floor(p.hp * 0.5)); break;
+    case 'ambush': game.pendingAmbush = true; break;
+    default: break;
+  }
+  syncWeaponUI();
+}
+
+function closeInterlude() {
+  ludeEl.classList.remove('on');
+  game.leaveInterlude();
+  game.atFork = !!game.offers;
+  if (game.atFork) showFork();
+}
+
+function showInterlude() {
+  const it = game.interlude;
+  if (!it) return;
+  const kindEl = document.getElementById('ludeKind');
+  const nameEl = document.getElementById('ludeName');
+  const textEl = document.getElementById('ludeText');
+  const choices = document.getElementById('ludeChoices');
+  choices.innerHTML = '';
+
+  const add = (label, blurb, fn) => {
+    const b = document.createElement('button');
+    b.className = 'ld-choice';
+    const t = document.createElement('b'); t.textContent = label;
+    const d = document.createElement('span'); d.textContent = blurb;
+    b.append(t, d);
+    b.onclick = () => { fn(); audio.uiClick(); closeInterlude(); };
+    choices.appendChild(b);
+  };
+
+  if (it.kind === 'chest') {
+    const c = CHESTS.find((x) => x.id === it.chest) || CHESTS[0];
+    const roll = c.gold[0] + Math.floor(Math.random() * (c.gold[1] - c.gold[0]));
+    kindEl.textContent = 'LEFT BEHIND';
+    nameEl.textContent = c.name;
+    textEl.textContent = c.text;
+    add('OPEN IT', c.boon ? `${roll} gold, and something the iron kept.`
+                          : `${roll} gold.`, () => {
+      game.run.gold += roll;
+      if (c.boon) { const o = game.rollOffer(); if (o && o.length) game.takeBoon(o[0]); }
+      cui.flash(`${roll} GOLD`, 'good');
+      audio.victory();
+    });
+  } else if (it.kind === 'event') {
+    const e = EVENTS.find((x) => x.id === it.event) || EVENTS[0];
+    kindEl.textContent = 'SOMETHING HAPPENING';
+    nameEl.textContent = e.name;
+    textEl.textContent = e.text;
+    for (const ch of e.choices) add(ch.label, ch.blurb, () => applyEffect(ch.effect));
+  } else {
+    kindEl.textContent = 'SOMEWHERE TO STOP';
+    nameEl.textContent = 'A Cold Fire';
+    textEl.textContent = 'Somebody banked this and did not come back. It is ' +
+      'still just warm. Nothing has followed you in.';
+    add('SIT A WHILE', 'Heal to full.', () => {
+      game.player.hp = game.player.maxHp;
+      cui.flash('RESTED', 'good');
+    });
+    add('SHARPEN INSTEAD', 'Take a boon. It costs you a quarter of your health.',
+        () => {
+      // Never free. A boon with no price attached is the reason a route of
+      // nothing but fires beat a route of fights.
+      const o = game.rollOffer(); if (o && o.length) game.takeBoon(o[0]);
+      game.player.hp = Math.max(1, Math.floor(game.player.hp * 0.75));
+    });
+  }
+  ludeEl.classList.add('on');
+}
+
 /* ---------------------------------------------------------------------------
    THE ROOM REWARD. Presented when a room is cleared, and the sim is held until
    a card is taken — the Game already refuses to open the road while an offer
@@ -478,7 +669,21 @@ function doZoneAction(action) {
     enterZone('circle');
   } else if (action === 'begin') {
     game.leaveZone();
-    game.encounterId = (game.build && game.build.encounter) || 'duel';
+    /* THE ROUTE, rolled once when you walk out of the gate. Two runs of the
+       same weapon are now different places in a different order with a
+       different number of bodies in them, which is the thing mastery has been
+       carrying single-handed since it shipped. */
+    /* A NEW RUN IS A NEW RUN. newRun() only fired on death, so winning and
+       walking back out of the gate kept every boon and every coin of the last
+       one — the second run of a session started fifteen boons deep. */
+    game.run = null;
+    game.newRun();
+    game.outcome = null;
+    game.interlude = null;
+    game.rollRoute();
+    game.atFork = false;
+    game.encounterId = game.offers[0].encounter || 'ossuary';
+    game.depth = 0;
     game.roomsCleared = 0;
     started = true; paused = false;
     game.reset(); resetHudSmoothing(); noteFoes();
@@ -496,7 +701,16 @@ function updateZoneUI() {
 const pauseBtn = document.getElementById('pauseBtn');
 if (pauseBtn) pauseBtn.onclick = () => { menu.togglePause(); audio.uiClick(); };
 
-const unlockAudio = () => { audio.unlock(); audio.resume(); };
+const unlockAudio = () => {
+  audio.unlock();
+  audio.resume();
+  // If anybody has dropped real music into audio/, take it. Fire and forget:
+  // the synth is already playing, so a slow or failed fetch costs nothing.
+  audio.loadTracks().then((found) => {
+    const n = Object.keys(found).length;
+    if (n) console.log('[scoria] recorded music:', found);
+  });
+};
 window.addEventListener('pointerdown', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
 
@@ -796,6 +1010,15 @@ function frame(now) {
   if (wantOffer && !offerEl.classList.contains('on')) showOffer();
   if (!game.offer && offerEl.classList.contains('on')) offerEl.classList.remove('on');
   document.body.classList.toggle('offering', offerEl.classList.contains('on'));
+
+  // The fork, raised by the Game the moment you walk through a door.
+  if (started && game.atFork && !game.offer && !menu.open
+      && !forkEl.classList.contains('on') && !ludeEl.classList.contains('on')) {
+    showFork();
+  }
+  document.body.classList.toggle('offering',
+    offerEl.classList.contains('on') || forkEl.classList.contains('on')
+    || ludeEl.classList.contains('on'));
 
   if (purseGold && game.run) {
     purseGold.textContent = String(game.run.gold);

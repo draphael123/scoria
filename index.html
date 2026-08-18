@@ -488,6 +488,69 @@
     .of-text{font-size:10px;line-height:1.45}
   }
 
+  /* ===================== THE FORK ======================================
+     Two doors, and they are drawn as DOORS rather than as cards: the offer
+     screen already owns the card language and using it twice would make
+     picking a route feel like picking a boon. A fork is a place you are
+     standing in front of. */
+  #fork,#lude{position:absolute;inset:0;display:none;flex-direction:column;
+       align-items:center;justify-content:center;z-index:15;
+       background:radial-gradient(ellipse at center,rgba(8,6,5,.84),rgba(3,2,2,.985));
+       backdrop-filter:blur(3px)}
+  #fork.on,#lude.on{display:flex;animation:fadeUp .3s ease both}
+  .fk-head{font-family:Cormorant Garamond,Georgia,serif;font-size:28px;
+       letter-spacing:.18em;color:#e9dcc4}
+  .fk-sub{margin-top:6px;font-size:10px;letter-spacing:.34em;color:var(--faint);
+       text-transform:uppercase}
+  .fk-cards{display:flex;gap:26px;margin-top:30px;flex-wrap:wrap;justify-content:center;
+       padding:0 18px}
+  .fk-door{position:relative;width:min(268px,40vw);padding:22px 20px 24px;
+       border:1px solid var(--edge);background:linear-gradient(180deg,rgba(17,14,12,.95),rgba(8,7,6,.94));
+       text-align:center;transition:.2s;display:flex;flex-direction:column;
+       align-items:center;gap:10px;
+       /* An arch, cut with a radius on the top corners only. */
+       border-radius:120px 120px 6px 6px;overflow:hidden}
+  .fk-door::before{content:'';position:absolute;inset:0;opacity:.5;
+       background:radial-gradient(90% 55% at 50% 8%,hsla(var(--h),64%,44%,.34),transparent 70%)}
+  .fk-door:hover{border-color:hsla(var(--h),70%,62%,.8);transform:translateY(-6px)}
+  .fk-door>*{position:relative}
+  .fk-icon{width:52px;height:52px;margin-top:12px}
+  .fk-icon svg{width:100%;height:100%;overflow:visible}
+  .fk-icon svg *{stroke:hsla(var(--h),70%,82%,.95);fill:none;stroke-width:5;
+       stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;
+       filter:drop-shadow(0 0 8px hsla(var(--h),90%,60%,.5))}
+  .fk-icon svg .fill{fill:hsla(var(--h),70%,82%,.9);stroke:none}
+  .fk-kind{font-size:9px;letter-spacing:.3em;color:hsla(var(--h),58%,72%,.9);
+       text-transform:uppercase}
+  .fk-name{font-family:Cormorant Garamond,Georgia,serif;font-size:21px;color:#f0e6d2;
+       line-height:1.15}
+  .fk-note{font-size:11px;line-height:1.55;color:var(--dim);max-width:26ch}
+  .fk-depth{margin-top:26px;font-size:10px;letter-spacing:.3em;color:var(--faint);
+       text-transform:uppercase}
+
+  /* ---- an interlude --------------------------------------------------- */
+  .ld-card{width:min(560px,90vw);padding:30px 30px 26px;border:1px solid var(--edge);
+       background:linear-gradient(180deg,rgba(18,15,13,.96),rgba(8,7,6,.95));
+       text-align:center}
+  .ld-kind{font-size:9px;letter-spacing:.34em;color:var(--ember);text-transform:uppercase}
+  .ld-name{margin-top:10px;font-family:Cormorant Garamond,Georgia,serif;font-size:30px;
+       color:#f0e6d2}
+  .ld-text{margin-top:14px;font-size:13px;line-height:1.8;color:var(--dim)}
+  .ld-choices{margin-top:26px;display:flex;flex-direction:column;gap:10px}
+  .ld-choice{padding:13px 16px;border:1px solid var(--edge);background:rgba(0,0,0,.35);
+       text-align:left;transition:.16s}
+  .ld-choice:hover{border-color:rgba(255,179,71,.7);background:rgba(212,85,42,.13)}
+  .ld-choice b{display:block;font-size:12px;letter-spacing:.2em;color:var(--ink);
+       text-transform:uppercase;font-weight:400}
+  .ld-choice span{display:block;margin-top:5px;font-size:11px;color:var(--faint);
+       line-height:1.5}
+
+  @media (max-width:720px){
+    .fk-cards{gap:12px}
+    .fk-door{width:min(180px,44vw);padding:16px 12px 18px;border-radius:80px 80px 6px 6px}
+    .fk-name{font-size:16px}
+  }
+
   /* ===================== THE KEEPER'S BOOK ============================= */
   .std-root{max-width:760px;margin:0 auto;padding:0 20px 40px}
   .std-title{font-family:Cormorant Garamond,Georgia,serif;font-size:30px;
@@ -893,6 +956,25 @@
 
 <!-- The room's reward. Three cards, and the road does not open until one is
      taken — a choice you can walk away from is not a choice. -->
+<!-- THE FORK. Two ways on, and you take one. The route is the only thing in
+     the game that makes two runs of the same weapon different places. -->
+<div id="fork">
+  <div class="fk-head">Two Ways On</div>
+  <div class="fk-sub">the road forks here</div>
+  <div class="fk-cards" id="forkCards"></div>
+  <div class="fk-depth" id="forkDepth"></div>
+</div>
+
+<!-- An interlude: a chest, a thing happening, or somewhere to stop. -->
+<div id="lude">
+  <div class="ld-card">
+    <div class="ld-kind" id="ludeKind"></div>
+    <div class="ld-name" id="ludeName"></div>
+    <div class="ld-text" id="ludeText"></div>
+    <div class="ld-choices" id="ludeChoices"></div>
+  </div>
+</div>
+
 <div id="offer">
   <div class="of-head">The Iron Remembers</div>
   <div class="of-sub">take one</div>

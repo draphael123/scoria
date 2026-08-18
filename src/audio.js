@@ -305,6 +305,7 @@ export class Audio {
       lp.type = 'lowpass';
       lp.frequency.value = cfg.cutoff;
       lp.connect(out);
+      const droneGains = [];
       for (const f of cfg.drone) {
         const o = c.createOscillator();
         o.type = cfg.droneType;
@@ -315,12 +316,69 @@ export class Audio {
         g.gain.value = cfg.droneGain;
         o.connect(g); g.connect(lp);
         o.start(t);
+        droneGains.push(g);
       }
-      this._tracks[name] = { out, cfg, nextNote: t + 2, nextBeat: t + 1, nextAnvil: t + 9 };
+      this._tracks[name] = { out, cfg, droneGains,
+                             nextNote: t + 2, nextBeat: t + 1, nextAnvil: t + 9 };
     }
 
     this.track = null;
     this.setTrack('menu');
+  }
+
+  /* ---- RECORDED TRACKS, if there are any --------------------------------
+     Drop a file at audio/<name>.ogg (or .mp3) and it replaces that track's
+     synth. Nothing else changes: the same setTrack() crossfades it, the same
+     duck() ducks it, and if the file is missing or the fetch fails the synth
+     is still playing underneath and nobody notices.
+
+     Probed with HEAD rather than assumed, because a 404 that resolves to an
+     HTML error page and gets handed to decodeAudioData throws an exception
+     inside the audio thread — which is the kind of failure that takes the
+     whole sound system down and looks like "the game went silent".
+
+     Wired this way rather than shipping audio in the repo because I cannot
+     verify a licence by downloading a file, and a mis-licensed track is the
+     user's problem later, not mine. Put your own in and it just works. */
+  async loadTracks(names = ['menu', 'town', 'combat'], exts = ['ogg', 'mp3']) {
+    if (!this.ready) return {};
+    const found = {};
+    for (const name of names) {
+      for (const ext of exts) {
+        const url = `audio/${name}.${ext}`;
+        try {
+          const head = await fetch(url, { method: 'HEAD' });
+          if (!head.ok) continue;
+          const type = head.headers.get('content-type') || '';
+          if (!/audio|octet-stream/i.test(type)) continue;
+          const buf = await (await fetch(url)).arrayBuffer();
+          const audio = await this.ctx.decodeAudioData(buf);
+          this._useBuffer(name, audio);
+          found[name] = url;
+          break;
+        } catch { /* no file, or an undecodable one. The synth stands. */ }
+      }
+    }
+    return found;
+  }
+
+  /* Swap one track's source from the synth to a looping buffer. The synth
+     voices are silenced rather than stopped, because a stopped oscillator
+     cannot be restarted and somebody will want to A/B them. */
+  _useBuffer(name, buffer) {
+    const tr = this._tracks && this._tracks[name];
+    if (!tr) return;
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    src.connect(tr.out);
+    src.start(c.currentTime);
+    tr.src = src;
+    tr.recorded = true;
+    // Everything the synth was doing for this track stops being scheduled.
+    tr.cfg = { ...tr.cfg, beat: 0, noteGap: [1e9, 1e9], anvil: null, droneGain: 0 };
+    for (const node of tr.droneGains || []) node.gain.value = 0;
   }
 
   /* Crossfade to one of the three. Named rather than indexed so a caller reads

@@ -7,7 +7,8 @@ import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
 import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT, RISE,
          ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT, ZONES, INTERACT,
-         BOONS, BOON_MODS, RUN, UNDERCROFT_ORDER } from './config.js';
+         BOONS, BOON_MODS, RUN, UNDERCROFT_ORDER,
+         ROUTE, CHESTS, EVENTS } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
@@ -144,6 +145,150 @@ export class Game {
     // The pool can grow mid-run, so top the bar up by whatever was added
     // rather than leaving the player at the old maximum.
     this.player.refreshDerived();
+  }
+
+
+  /* -----------------------------------------------------------------------
+     THE ROUTE. Rolled once per run, and it is the reason two runs differ.
+
+     Every depth gets TWO offers and you take one. That is the whole design:
+     a randomised route is variety, a route you choose is a decision, and only
+     one of those is worth building. The other offer is discarded — it is not
+     a branch you can come back to, because a map you can exhaust stops being
+     a choice about scarcity.
+
+     The tier rule survives the shuffle: which POOL a depth draws from is
+     fixed, only which member of it is rolled. You can never open on the
+     archers, and the room that introduces zones can never precede the room
+     that introduces range.
+     -------------------------------------------------------------------- */
+  rollRoute() {
+    const pick = (arr) => arr[(this.rng() * arr.length) | 0];
+
+    /* What KIND a node is, weighted by depth. Read off the weightsByDepth
+       grid, which is the pacing design written as a grid on purpose — you can
+       see when chests stop appearing by reading across one row. */
+    const kindAt = (depth, exclude) => {
+      const bag = [];
+      for (const row of ROUTE.weightsByDepth) {
+        const [kind, weights] = Object.entries(row)[0];
+        if (kind === exclude) continue;
+        const w = weights[Math.min(depth, weights.length - 1)] || 0;
+        for (let i = 0; i < Math.round(w * 100); i++) bag.push(kind);
+      }
+      return bag.length ? bag[(this.rng() * bag.length) | 0] : 'fight';
+    };
+
+    const nodeAt = (depth, exclude) => {
+      const kind = kindAt(depth, exclude);
+      const tier = ROUTE.tierByDepth[Math.min(depth, ROUTE.tierByDepth.length - 1)];
+      if (kind === 'fight') {
+        return { kind, encounter: pick(ROUTE.pools[tier]), depth };
+      }
+      if (kind === 'elite') return { kind, encounter: 'pattern', depth };
+      if (kind === 'chest') return { kind, chest: pick(CHESTS).id, depth };
+      if (kind === 'event') return { kind, event: pick(EVENTS).id, depth };
+      return { kind, depth };                       // rest
+    };
+
+    /* THE INTERLUDE BUDGET, and it exists because the first version of this
+       was exploitable in a way three simulated runs found immediately.
+
+       Chests, events and rests all pay out, and none of them cost a fight. So
+       a route that happened to offer one at every depth could be walked
+       end to end without swinging once, arriving at the boss with fourteen
+       boons and two thousand gold — strictly better than playing the game.
+
+       Two rules fix it, and both are rules a player can feel:
+
+         ONE OF THE TWO DOORS IS ALWAYS A FIGHT. You may always choose to
+         fight; you may not always choose not to.
+         A RUN HOLDS AT MOST THREE INTERLUDES. After that both doors are
+         rooms with something in them. Skipping is a strategy with a budget
+         rather than a strategy with no downside. */
+    const route = [];
+    let spent = 0;
+    const MAX_SKIPS = 3;
+    for (let d = 0; d < ROUTE.length; d++) {
+      const combat = ['fight', 'elite'];
+      let a = nodeAt(d, null);
+      if (spent >= MAX_SKIPS && !combat.includes(a.kind)) a = nodeAt(d, a.kind);
+      if (spent >= MAX_SKIPS && !combat.includes(a.kind)) {
+        a = { kind: 'fight', depth: d,
+              encounter: pick(ROUTE.pools[ROUTE.tierByDepth[
+                Math.min(d, ROUTE.tierByDepth.length - 1)]]) };
+      }
+      // The second offer may never be the same KIND as the first: two fights
+      // side by side is not a choice, it is a delay with extra steps.
+      let b = nodeAt(d, a.kind);
+      const haveCombat = combat.includes(a.kind) || combat.includes(b.kind);
+      if (!haveCombat || spent >= MAX_SKIPS) {
+        b = { kind: 'fight', depth: d,
+              encounter: pick(ROUTE.pools[ROUTE.tierByDepth[
+                Math.min(d, ROUTE.tierByDepth.length - 1)]]) };
+      }
+      if (!combat.includes(a.kind) || !combat.includes(b.kind)) spent++;
+      route.push([a, b]);
+    }
+    // The boss is not offered. It is what the route is FOR.
+    route.push([{ kind: 'boss', encounter: 'masterwork', depth: ROUTE.length }]);
+    this.route = route;
+    this.depth = 0;
+    this.node = null;
+    return route;
+  }
+
+  get offers() { return this.route ? this.route[this.depth] || null : null; }
+
+  /* Escalation, read at reset. Applied to COUNT and TEMPO, not to health —
+     inflating hp makes a fight longer, which is not the same thing as harder.
+     A little hp goes on anyway, because a body that dies in one combo has
+     stopped being a body and become a speed bump. */
+  get escalation() {
+    const e = ROUTE.escalate;
+    const d = Math.min(this.depth || 0, e.extraByDepth.length - 1);
+    return { extra: e.extraByDepth[d], tempo: e.tempoByDepth[d], hp: e.hpByDepth[d] };
+  }
+
+  /* Take one of the two on offer and go there. Everything a doorway used to
+     do — carry health, bank the rite, pay the trough — happens here now,
+     because there is exactly one way forward and this is it. */
+  takeNode(which) {
+    const pair = this.offers;
+    if (!pair) return false;
+    const node = pair[Math.min(which, pair.length - 1)];
+    const p = this.player;
+    const carried = { hp: p.hp, stamina: p.stamina };
+    this.node = node;
+    this.roomsCleared = (this.roomsCleared || 0) + 1;
+
+    if (node.kind === 'chest' || node.kind === 'event' || node.kind === 'rest') {
+      // An interlude is not a room you fight in. It is resolved by the UI and
+      // then the route moves on, so the Game only has to hold what it IS.
+      this.interlude = { ...node };
+      this.exitOpen = false;
+      return true;
+    }
+
+    this.interlude = null;
+    this.encounterId = node.encounter;
+    this.reset(this.seed + 101 * this.roomsCleared);
+    this.player.hp = Math.max(1, carried.hp);
+    if (this.player.resource !== 'heat') this.player.stamina = carried.stamina;
+    if (owns(this.bankState, 'quenchtrough')) this.player.hp = this.player.maxHp;
+    this.bankMastery();
+    return true;
+  }
+
+  /* Finish an interlude and step the route forward. Called by the UI once the
+     chest is open or the choice is made. */
+  leaveInterlude() {
+    this.interlude = null;
+    this.depth++;
+    const pair = this.offers;
+    // An interlude does not advance you INTO a room, it advances you to the
+    // next fork — so the exit stays shut and the offer comes straight back up.
+    return !!pair;
   }
 
   /* ---- zones ------------------------------------------------------------ */
@@ -298,6 +443,11 @@ export class Game {
 
     const enc = this.encounter;
     const fallback = FOES[enc.foe] || SLAGBOUND;
+    // How much worse this room is for being deep. A boss room is exempt: its
+    // difficulty is its own, and scaling it by where it happens to sit would
+    // make the same boss a different fight for no stated reason.
+    const esc = (enc.boss || this.inUndercroft)
+      ? { extra: 0, tempo: 1, hp: 1 } : this.escalation;
     const n = enc.spawn.length;
     // A spawn entry may name its own foe. Mixed rooms are the point from the
     // Long Yard onward — an archer is only interesting next to something that
@@ -306,15 +456,37 @@ export class Game {
     // is standing there when you arrive.
     this.enemies = [];
     this.pending = [];
-    enc.spawn.forEach(([x, z, foeKey, when], i) => {
-      const make = () => new Foe({
-        def: (foeKey && FOES[foeKey]) || fallback,
-        x, z,
-        facing: Math.atan2(this.player.x - x, this.player.z - z),
-        rng: this.rng,
-        hpMul: enc.hpMul,
-        slot: i, slotCount: n,
-      });
+    /* THE ROOM'S OWN SPAWNS, plus however many the depth adds.
+
+       The extras are appended as SCHEDULED arrivals rather than as bodies
+       standing there when you walk in: a room that is deeper should escalate
+       during the fight, not present a bigger wall at the door. It is also the
+       only way the extra bodies stay fair — everything in this game that
+       arrives late arrives with a rise, and the rise is the tell. */
+    const spawns = enc.spawn.slice();
+    for (let k = 0; k < esc.extra; k++) {
+      const a = this.rng() * Math.PI * 2;
+      const rad = 4.2 + this.rng() * 3.2;
+      spawns.push([Math.sin(a) * rad, Math.cos(a) * rad, null,
+                   { at: 8 + k * 7 + this.rng() * 4 }]);
+    }
+    const total = spawns.length;
+    spawns.forEach(([x, z, foeKey, when], i) => {
+      const make = () => {
+        const f = new Foe({
+          def: (foeKey && FOES[foeKey]) || fallback,
+          x, z,
+          facing: Math.atan2(this.player.x - x, this.player.z - z),
+          rng: this.rng,
+          hpMul: (enc.hpMul || 1) * esc.hp,
+          slot: i, slotCount: total,
+        });
+        // Depth is a CADENCE, not a stat block. Everything commits sooner the
+        // further down you are, which is the pressure the one-telegraph rule
+        // was built to be able to survive.
+        f.depthTempo = esc.tempo;
+        return f;
+      };
       if (when) this.pending.push({ make, when });
       else this.enemies.push(make());
     });
@@ -611,6 +783,12 @@ export class Game {
       }
     }
 
+    /* THE BLINK, and THE CALL. Both live here rather than in the Foe because
+       both need things a Foe does not have: the blink needs the arena and the
+       call needs to add bodies to the enemy list, and an actor that can edit
+       the list it is being iterated inside is a bug waiting to be written. */
+    this._stepMagi(dt);
+
     this._releaseWaves(dt);
     this._updateAggro(dt);
 
@@ -736,7 +914,8 @@ export class Game {
           this.events.push({ type: 'offer', result: 'offer' });
         }
         if (this.offer) { this.exitT = 0; return; }
-        if (this.isLastRoom) {
+        // On a route, "last" is "the boss", not "the end of ROOM_ORDER".
+        if (this.route ? !!this.encounter.finale : this.isLastRoom) {
           // ...unless the room says otherwise. The bottom of the undercroft is
           // the last room of ITS chain, but killing what is down there is not
           // winning the game — it is the end of the opening, and the tutorial
@@ -755,10 +934,31 @@ export class Game {
          above: it used to sit inside the one that pays out a reward, so a room
          that never had a reward to pay — the tutorial's cell — opened its door
          and then never noticed anybody standing in it. */
-      if (this.exitOpen && !this.isLastRoom) {
+      /* Walking into the open door. On the undercroft's fixed chain this
+         advances directly; on a ROUTE it raises the fork instead and the
+         choice is what moves you. */
+      /* A BOSS ROOM IS NEVER A DOORWAY. Without this the route's advance ran
+         again once the route was exhausted, which re-reset the boss the moment
+         you killed it — you cleared the Masterwork and it stood back up. */
+      if (this.exitOpen && !this.encounter.finale
+          && (this.route ? true : !this.isLastRoom)) {
         const e = this.exitPos;
         if (Math.hypot(this.player.x - e.x, this.player.z - e.z) <= EXIT.radius) {
-          this.advanceRoom();
+          if (this.route) {
+            if (!this.atFork) {
+              this.depth++;
+              this.atFork = !!this.offers;
+              if (!this.atFork) {
+                // Out of route: the boss is the only thing left.
+                this.encounterId = 'masterwork';
+                const carried = { hp: this.player.hp, stamina: this.player.stamina };
+                this.reset(this.seed + 7777);
+                this.player.hp = Math.max(1, carried.hp);
+              }
+            }
+          } else if (!this.isLastRoom) {
+            this.advanceRoom();
+          }
         }
       }
     }
@@ -930,23 +1130,97 @@ export class Game {
      from a fixed camera 39 degrees above the ground, because the arc and the
      distance project onto the same screen axis.
      ------------------------------------------------------------------- */
+  /* Anything with a `blink` gets out when you get close, and anything whose
+     current attack carries a `summon` calls it up on the ACTIVE frame.
+
+     The blink is a reflex, not an attack: it is checked every step, gated on a
+     cooldown, and it deliberately does not interrupt a swing — you can still
+     punish him, you just cannot chase him. Without that last rule the fight
+     becomes unwinnable rather than difficult. */
+  _stepMagi(dt) {
+    for (const e of this.enemies) {
+      if (e.dead || !e.def.blink) continue;
+      e.blinkCd = Math.max(0, (e.blinkCd || 0) - dt);
+      const b = e.def.blink;
+      const gap = e.distanceTo(this.player);
+      if (gap > b.within || e.blinkCd > 0) continue;
+      if (e.state === STATE.ATTACK || e.state === STATE.STAGGER) continue;
+
+      // Somewhere else, on the far side of you, inside the arena.
+      const away = Math.atan2(e.x - this.player.x, e.z - this.player.z);
+      const spin = away + (this.rng() - 0.5) * 2.2;
+      const dist = b.range[0] + this.rng() * (b.range[1] - b.range[0]);
+      const lim = (this.encounter.radius || ARENA.radius) - 1.6;
+      let nx = this.player.x + Math.sin(spin) * dist;
+      let nz = this.player.z + Math.cos(spin) * dist;
+      const m = Math.hypot(nx, nz);
+      if (m > lim) { nx = (nx / m) * lim; nz = (nz / m) * lim; }
+
+      this.events.push({ type: 'blink', result: 'blink', foe: e,
+                         fromX: e.x, fromZ: e.z, x: nx, z: nz });
+      e.x = nx; e.z = nz;
+      e.vx = e.vz = 0;
+      e.facing = Math.atan2(this.player.x - nx, this.player.z - nz);
+      e.blinkCd = b.cooldown;
+      e.invuln = Math.max(e.invuln || 0, 0.12);
+    }
+
+    // THE CALL. Fired on the active frame of any attack carrying a summon.
+    for (const e of this.enemies) {
+      if (e.dead || !e.atk || !e.atk.summon) continue;
+      if (e.phase !== PHASE.ACTIVE || e.summonFired) continue;
+      e.summonFired = true;
+      const sm = e.atk.summon;
+      const alive = this.enemies.filter((x) => !x.dead && x.summoned).length;
+      const room = Math.max(0, (sm.max || 4) - alive);
+      const n = Math.min(sm.count || 1, room);
+      const def = FOES[sm.foe] || SLAGBOUND;
+      for (let i = 0; i < n; i++) {
+        const a = this.rng() * Math.PI * 2;
+        const rad = sm.radius * (0.5 + this.rng() * 0.6);
+        const f = new Foe({
+          def, x: this.player.x + Math.sin(a) * rad,
+          z: this.player.z + Math.cos(a) * rad,
+          facing: 0, seed: (this.seed + this.enemies.length * 977) | 0,
+        });
+        f.summoned = true;
+        // They come up out of the floor like everything else in this game, and
+        // the rise IS the tell: it is the only reason two extra bodies landing
+        // mid-fight is fair rather than a cheap shot.
+        f.state = STATE.EMERGE;
+        f.emergeT = 0;
+        this.enemies.push(f);
+        this.events.push({ type: 'rise', target: f, x: f.x, z: f.z, result: 'rise' });
+      }
+    }
+  }
+
   _fireShot(attacker) {
     const a = attacker.atk;
     if (!a || !a.projectile || attacker.shotFired) return;
     attacker.shotFired = true;
     const p = a.projectile;
-    const dir = attacker.facing;
     const muzzle = (attacker.radius || 0.4) + 0.35;
-    this.shots.push({
-      x: attacker.x + Math.sin(dir) * muzzle,
-      z: attacker.z + Math.cos(dir) * muzzle,
-      vx: Math.sin(dir) * p.speed,
-      vz: Math.cos(dir) * p.speed,
-      radius: p.radius, damage: p.damage, life: p.life,
-      color: p.color || 0xffb060,
-      owner: attacker, fromPlayer: !!attacker.isPlayer,
-      atk: a, dead: false,
-    });
+    /* A FAN, if the attack asks for one. Written as a count and a total arc so
+       a single bolt is just the n=1 case and there is one code path — the
+       alternative was a second, nearly identical spawner for the one attack
+       in the game that throws three of them. */
+    const n = Math.max(1, p.spread || 1);
+    const span = p.spreadArc || 0;
+    for (let i = 0; i < n; i++) {
+      const off = n === 1 ? 0 : (i / (n - 1) - 0.5) * span;
+      const dir = attacker.facing + off;
+      this.shots.push({
+        x: attacker.x + Math.sin(dir) * muzzle,
+        z: attacker.z + Math.cos(dir) * muzzle,
+        vx: Math.sin(dir) * p.speed,
+        vz: Math.cos(dir) * p.speed,
+        radius: p.radius, damage: p.damage, life: p.life,
+        color: p.color || 0xffb060,
+        owner: attacker, fromPlayer: !!attacker.isPlayer,
+        atk: a, dead: false,
+      });
+    }
   }
 
   _stepShots(dt) {

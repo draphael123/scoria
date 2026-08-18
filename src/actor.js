@@ -106,6 +106,8 @@ export class Actor {
     this.stateT = 0;
     this.atkAim = (def && def.zone && aim) ? { x: aim.x, z: aim.z } : null;
     this.shotFired = false;
+    // One summon per swing, for the same reason as one projectile per swing.
+    this.summonFired = false;
   }
 
   /* Advances the attack clock and returns true when it has fully finished. */
