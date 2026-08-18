@@ -247,48 +247,175 @@ export class Audio {
 
   /* Sparse, modal, slow. Music here exists to hold tension between exchanges,
      so it stays out of the way rather than driving. */
+  /* -----------------------------------------------------------------------
+     THREE PIECES OF MUSIC, and all of them synthesised.
+
+     No sample files: the whole game is still one folder of text, it deploys
+     anywhere, it needs no CDN and it cannot 404 at boot. Everything here is
+     built out of the same handful of oscillators and filters the sound effects
+     use, and everything is tuned in ONE table.
+
+     They are three, not one, because they have three different jobs:
+
+       MENU    nothing is happening and nothing should. A held chord, a bell
+               every eight seconds or so, no pulse at all - the ear has to
+               stay unhurried while you read.
+       TOWN    somewhere safe, and empty. The same modal language, warmer, with
+               a slow melody over it and one struck anvil every few bars: the
+               works are dead and the town still keeps their time.
+       COMBAT  a pulse. Low, insistent, on the beat, with the drone opened up
+               and the notes faster and lower in the scale. It is the only one
+               of the three with a tempo, which is what makes walking out of
+               the town gate feel like something.
+
+     All three run on the same clock and are crossfaded, so switching is a gain
+     ramp rather than a restart - a track that starts from the top every time
+     you open a menu is a track nobody can stand for ten minutes.
+     -------------------------------------------------------------------- */
   _startMusic() {
     const c = this.ctx;
     const t = c.currentTime;
 
-    const drone = c.createGain();
-    drone.gain.value = 0.055;
-    drone.connect(this.musicBus);
-    for (const f of [73.42, 110.0, 146.83]) {   // D / A / D
-      const o = c.createOscillator();
-      o.type = 'sawtooth';
-      o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
+    // D natural minor throughout, which is what the sound effects were already
+    // written against - the windup tone lands inside it rather than beside it.
+    this.MUSIC = {
+      menu:   { drone: [73.42, 110.0, 146.83], droneType: 'sawtooth', cutoff: 260,
+                droneGain: 0.055, beat: 0, noteGap: [6, 10], noteGain: 0.05,
+                noteType: 'triangle', attack: 0.9, decay: 5.0, octave: 1 },
+      town:   { drone: [73.42, 110.0, 164.81], droneType: 'sawtooth', cutoff: 340,
+                droneGain: 0.05, beat: 0, noteGap: [3.4, 6.5], noteGain: 0.055,
+                noteType: 'triangle', attack: 0.45, decay: 3.4, octave: 1,
+                anvil: [7, 13] },
+      combat: { drone: [73.42, 110.0, 138.59], droneType: 'sawtooth', cutoff: 620,
+                droneGain: 0.075, beat: 0.46, noteGap: [1.1, 2.6], noteGain: 0.042,
+                noteType: 'sawtooth', attack: 0.02, decay: 1.1, octave: 0.5 },
+    };
+    this._scale = [293.66, 329.63, 349.23, 392.0, 440.0, 466.16, 523.25];
+
+    /* One voice per track, all running all the time. Building them once and
+       riding the gains is what makes the crossfade seamless; starting and
+       stopping oscillators per switch clicks, and re-creating them drifts the
+       phase so the drone beats against itself. */
+    this._tracks = {};
+    for (const [name, cfg] of Object.entries(this.MUSIC)) {
+      const out = c.createGain();
+      out.gain.value = 0;
+      out.connect(this.musicBus);
       const lp = c.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 320;
-      o.connect(lp); lp.connect(drone);
-      o.start(t);
+      lp.frequency.value = cfg.cutoff;
+      lp.connect(out);
+      for (const f of cfg.drone) {
+        const o = c.createOscillator();
+        o.type = cfg.droneType;
+        // Detuned by a few cents so three saws read as one instrument with a
+        // width to it rather than as three oscillators.
+        o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
+        const g = c.createGain();
+        g.gain.value = cfg.droneGain;
+        o.connect(g); g.connect(lp);
+        o.start(t);
+      }
+      this._tracks[name] = { out, cfg, nextNote: t + 2, nextBeat: t + 1, nextAnvil: t + 9 };
     }
-    this._droneGain = drone;
 
-    // D natural minor, sparse and unhurried.
-    this._scale = [293.66, 329.63, 349.23, 392.0, 440.0, 466.16, 523.25];
-    this._nextNote = t + 3;
+    this.track = null;
+    this.setTrack('menu');
   }
+
+  /* Crossfade to one of the three. Named rather than indexed so a caller reads
+     as intent - setTrack('combat') at the gate, not setTrack(2). */
+  setTrack(name, fade = 1.6) {
+    if (!this.ready || !this._tracks || this.track === name) return;
+    this.track = name;
+    const t = this.ctx.currentTime;
+    for (const [k, tr] of Object.entries(this._tracks)) {
+      tr.out.gain.cancelScheduledValues(t);
+      tr.out.gain.setValueAtTime(tr.out.gain.value, t);
+      tr.out.gain.linearRampToValueAtTime(k === name ? 1 : 0, t + fade);
+    }
+  }
+
+  /* The struck anvil. A town whose works have been cold for four hundred years
+     still keeps their time, and this is the only literal thing in the score. */
+  _anvil(t0) {
+    const c = this.ctx;
+    for (const [f, d, peak] of [[1244, 1.9, 0.05], [1867, 1.2, 0.03], [622, 2.6, 0.035]]) {
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.01);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+      o.connect(g); g.connect(this._tracks.town.out);
+      o.start(t0); o.stop(t0 + d + 0.1);
+    }
+  }
+
+  /* The combat pulse. Deliberately a THUMP rather than a drum: it has to sit
+     under a fight without competing with the windup tone, which is the one
+     sound in this game that is load-bearing. */
+  _pulse(t0) {
+    const c = this.ctx;
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(96, t0);
+    o.frequency.exponentialRampToValueAtTime(42, t0 + 0.16);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+    o.connect(g); g.connect(this._tracks.combat.out);
+    o.start(t0); o.stop(t0 + 0.4);
+  }
+
+
 
   /* Called each frame; schedules the occasional note. */
+  /* Called each frame. Only the ACTIVE track schedules anything - the other
+     two hold their drones at zero gain and cost nothing but three oscillators
+     apiece, which is a great deal cheaper than the click of stopping them. */
   update(dt) {
-    if (!this.ready) return;
+    if (!this.ready || !this._tracks) return;
     const t = this.ctx.currentTime;
-    if (t >= this._nextNote) {
-      const f = this._scale[(Math.random() * this._scale.length) | 0];
+    const tr = this._tracks[this.track];
+    if (!tr) return;
+    const cfg = tr.cfg;
+
+    if (t >= tr.nextNote) {
+      const f = this._scale[(Math.random() * this._scale.length) | 0] * cfg.octave;
       const o = this.ctx.createOscillator();
-      o.type = 'triangle';
+      o.type = cfg.noteType;
       o.frequency.value = f;
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = cfg.cutoff * 2.2;
       const g = this.ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.045, t + 0.6);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 3.6);
-      o.connect(g); g.connect(this.musicBus);
-      o.start(t); o.stop(t + 3.8);
-      this._nextNote = t + 4 + Math.random() * 7;
+      g.gain.exponentialRampToValueAtTime(cfg.noteGain, t + cfg.attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + cfg.attack + cfg.decay);
+      o.connect(lp); lp.connect(g); g.connect(tr.out);
+      o.start(t); o.stop(t + cfg.attack + cfg.decay + 0.2);
+      const [lo, hi] = cfg.noteGap;
+      tr.nextNote = t + lo + Math.random() * (hi - lo);
+    }
+
+    if (cfg.beat && t >= tr.nextBeat) {
+      this._pulse(t);
+      tr.nextBeat = t + cfg.beat;
+    } else if (!cfg.beat) {
+      tr.nextBeat = t + 1;
+    }
+
+    if (cfg.anvil && t >= tr.nextAnvil) {
+      this._anvil(t);
+      const [lo, hi] = cfg.anvil;
+      tr.nextAnvil = t + lo + Math.random() * (hi - lo);
     }
   }
+
+
 
   /* Duck the music while a menu is open so UI reads clearly. */
   duck(on) {

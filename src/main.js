@@ -674,6 +674,15 @@ function frame(now) {
     game.player.lastAction = '—';
   }
   debug.update(game, dtReal);
+  /* WHICH OF THE THREE IS PLAYING, decided from state rather than pushed from
+     every place that changes state. One read per frame is far harder to get
+     wrong than eleven setTrack() calls scattered through the menu, the zones,
+     the tutorial and the death handler — and this is the kind of thing that is
+     only ever noticed when it is wrong. */
+  audio.setTrack(
+    (!started || menu.open) ? 'menu'
+    : game.zone ? 'town'
+    : 'combat');
   audio.update(dtReal);
 
   requestAnimationFrame(frame);
@@ -713,6 +722,9 @@ window.SCORIA = {
     game.reset(); view.reap(new Set()); resetHudSmoothing();
   },
   syncWeaponUI,
+  // Walking into a place, without walking. Verification needs it and so does
+  // anybody trying to look at the town without playing the opening first.
+  enterZone: (id) => enterZone(id),
   setEncounter: (id) => {
     game.encounterId = id;
     game.build = { ...(game.build || loadBuild()), encounter: id };
