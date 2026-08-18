@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { ARENA } from './config.js';
+import { ARENA, EXIT } from './config.js';
 
 /* The clearing: a forest the forge killed.
 
@@ -191,6 +191,7 @@ export class Forest {
     this._buildTrees(tex, hi);
     this._buildDeadfall(tex);
     this._buildRuin(tex);
+    this._buildRoad(tex);
     this._buildMist(tex, hi);
 
     this.ash = new Motes(hi ? 340 : 130, this.ashDot,
@@ -261,6 +262,13 @@ export class Forest {
       // the frustum, and they are what makes the clearing feel enclosed.
       const rad = ARENA.radius + 0.8 + Math.pow(rng(), 1.7) * 26;
 
+      // Leave the haul road clear. The way out has to be a GAP you can see
+      // through, not a bright marker painted in front of a solid wall of
+      // trunks — a wood with no hole in it reads as a wall however hard you
+      // light the spot in front of it.
+      const da = Math.abs(((a - EXIT.bearing + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      if (da < EXIT.gapAngle && rad < ARENA.radius + 17) continue;
+
       // How close to the camera's line of sight this bearing sits.
       const nearness = Math.cos(a - CAMERA_BEARING);
       const broken = nearness > 0.5 && rad < ARENA.radius + 9;
@@ -274,6 +282,8 @@ export class Forest {
     for (let i = 0; i < 5; i++) {
       const a = rng() * Math.PI * 2;
       const rad = ARENA.radius * 0.72 + rng() * 2.2;
+      if (Math.abs(((a - EXIT.bearing + Math.PI * 3) % (Math.PI * 2)) - Math.PI)
+          < EXIT.gapAngle) continue;
       growTree(segs, rng, Math.sin(a) * rad, Math.cos(a) * rad, 1.2 + rng() * 1.5, true);
     }
 
@@ -386,6 +396,130 @@ export class Forest {
       g.position.set(Math.sin(fa) * fr, 0, Math.cos(fa) * fr);
       this.scene.add(g);
       this.fires.push({ group: g, coals, light, phase: this.rng() * 10 });
+    }
+  }
+
+  /* ---------------------------------------------------------------------
+     THE HAUL ROAD. The way out of the clearing, and a real thing in the world
+     rather than a beam of light: this is the track they carted the good iron
+     down, and it was here before the fight was.
+
+     It is built ALWAYS and visible ALWAYS. The road does not appear when you
+     win — it was always the way out, you simply could not leave yet. What
+     changes when the room is cleared is the CHAIN slung across it and the
+     lamps on the posts. That is the difference between "the game has spawned
+     an exit" and "the thing that was barring your way has come down".
+     ------------------------------------------------------------------ */
+  _buildRoad(tex) {
+    const a = EXIT.bearing;
+    const sn = Math.sin(a), cs = Math.cos(a);
+    const R = ARENA.radius;
+
+    const wood = new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 0.97 });
+    const stone = new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.95 });
+    const iron = new THREE.MeshStandardMaterial({ color: 0x2a2320, roughness: 0.8, metalness: 0.5 });
+
+    const road = new THREE.Group();
+    this.scene.add(road);
+    this.road = road;
+
+    // Wheel ruts running from the circle out past the tree line. Two darker
+    // strips in the ash: cheap, and the clearest possible "this goes
+    // somewhere" without a single lumen of light.
+    for (const off of [-0.62, 0.62]) {
+      const rut = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.55, 30),
+        new THREE.MeshBasicMaterial({ color: 0x120f0c, transparent: true,
+          opacity: 0.42, depthWrite: false }));
+      rut.rotation.x = -Math.PI / 2;
+      rut.rotation.z = -a;
+      rut.position.set(sn * (R + 6) + cs * off, 0.016, cs * (R + 6) - sn * off);
+      road.add(rut);
+    }
+
+    // Sleepers laid across the track where it leaves the circle.
+    for (let i = 0; i < 6; i++) {
+      const d = R - 1.4 + i * 1.5;
+      const sleeper = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 0.42), wood);
+      sleeper.position.set(sn * d, 0.08, cs * d);
+      sleeper.rotation.y = -a;
+      sleeper.castShadow = true;
+      road.add(sleeper);
+    }
+
+    // Two gateposts, one of them leaning. Nothing here has been maintained in
+    // four hundred years.
+    this.lamps = [];
+    for (const sx of [-1, 1]) {
+      const px = sn * R + cs * sx * 1.75;
+      const pz = cs * R - sn * sx * 1.75;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.32, 3.4, 7), stone);
+      post.position.set(px, 1.7, pz);
+      post.rotation.z = (sx > 0 ? 0.26 : 0.05) * sx;
+      post.castShadow = true;
+      road.add(post);
+      this._registerOccluder(post, stone, 3.4);
+
+      // A hooded lamp on each post, dead until the room is cleared.
+      const lampMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1410, emissive: 0xff8a3a, emissiveIntensity: 0, roughness: 1 });
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.2, 9, 7), lampMat);
+      lamp.position.set(px, 3.32, pz);
+      road.add(lamp);
+      const hood = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.3, 7), iron);
+      hood.position.set(px, 3.6, pz);
+      road.add(hood);
+      const light = new THREE.PointLight(0xffa050, 0, 13, 2);
+      light.position.set(px, 3.1, pz);
+      road.add(light);
+      this.lamps.push({ mat: lampMat, light });
+    }
+
+    // THE CHAIN, slung between the posts while the room is held. This is the
+    // state change, and it is a physical one.
+    const chain = new THREE.Group();
+    road.add(chain);
+    for (let i = 0; i < 11; i++) {
+      const t = i / 10;
+      const sag = Math.sin(t * Math.PI) * 0.42;
+      const link = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.045, 4, 8), iron);
+      const off = (t - 0.5) * 3.5;
+      link.position.set(sn * R + cs * off, 1.95 - sag, cs * R - sn * off);
+      link.rotation.set(Math.PI / 2, i % 2 ? Math.PI / 2 : 0, -a);
+      link.castShadow = true;
+      chain.add(link);
+    }
+
+    // A board hung off it, because a barrier reads faster with something on it
+    // that a person clearly put there.
+    const board = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.62, 0.07), wood);
+    board.position.set(sn * R, 1.42, cs * R);
+    board.rotation.set(0.12, -a, 0.06);
+    board.castShadow = true;
+    chain.add(board);
+    this.chain = chain;
+  }
+
+  /* Called every frame with the Game's exitOpen. */
+  setRoadOpen(open, dt) {
+    const want = open ? 1 : 0;
+    this.roadT = this.roadT === undefined
+      ? want : this.roadT + (want - this.roadT) * Math.min(1, dt * 3.0);
+    const t = this.roadT;
+
+    if (this.chain) {
+      // The chain does not fade out. It FALLS, and lands in the ruts.
+      this.chain.position.y = -t * 1.62;
+      this.chain.rotation.x = t * 0.5;
+      this.chain.visible = t < 0.995;
+    }
+    // A slow breath on the lamps rather than a pulse: this is a lit wick at
+    // the edge of a dark wood, not a waypoint marker.
+    this._roadClock = (this._roadClock || 0) + dt;
+    const flicker = 0.86 + 0.14 * Math.sin(this._roadClock * 3.1);
+    for (const l of (this.lamps || [])) {
+      l.mat.emissiveIntensity = t * 3.4 * flicker;
+      l.light.intensity = t * 7.5 * flicker;
     }
   }
 

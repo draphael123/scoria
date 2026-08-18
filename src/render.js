@@ -153,22 +153,12 @@ export class View {
     return g;
   }
 
-  /* The way out of a cleared room. It has to be findable from anywhere in the
-     clearing without a minimap and without a floating marker, so it is a
-     column of light — the one vertical bright thing in a scene whose every
-     other light source sits on the ground. */
+  /* The threshold mark: a faint ring scuffed in the ash where the road leaves
+     the circle. Just enough to say "here", now that the road itself is doing
+     the work of saying "that way". */
   _buildExit() {
     const g = new THREE.Group();
     g.visible = false;
-
-    const shaftMat = new THREE.MeshBasicMaterial({
-      color: 0xffd9a0, transparent: true, opacity: 0.10, depthWrite: false,
-      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
-    const shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(EXIT.radius * 0.55, EXIT.radius * 1.05, 11, 16, 1, true), shaftMat);
-    shaft.position.y = 5.2;
-    shaft.renderOrder = 5;
-    g.add(shaft);
 
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0xffd9a0, transparent: true, opacity: 0.5, depthWrite: false,
@@ -179,26 +169,30 @@ export class View {
     ring.position.y = 0.02;
     g.add(ring);
 
-    const glow = new THREE.PointLight(0xffb066, 0, 14, 2);
-    glow.position.y = 1.4;
-    g.add(glow);
-
-    g.userData = { shaft, ring, glow, shaftMat, ringMat };
+    g.userData = { ring, ringMat };
     return g;
   }
 
-  /* Called every frame with the Game's exit state. Pulses, because a static
-     bright shape at the edge of a dark frame reads as scenery. */
+  /* Called every frame with the Game's exit state.
+
+     The way out used to be a column of light dropped on the tree line, which
+     was findable and completely inert — a waypoint, not a place. It is now the
+     haul road: a gap cut in the wood, wheel ruts, two gateposts, and a chain
+     across them. Clearing the room drops the CHAIN and lights the lamps. The
+     road was always there; what changes is that nothing is barring it.
+
+     A faint ring stays on the ground at the threshold, because the player
+     still needs to know exactly where the trigger is — but it is a mark in the
+     ash now rather than the thing you are walking toward. */
   setExit(open, pos, dt) {
+    this.forest.setRoadOpen(open, dt);
     const g = this.exit;
     g.visible = !!open;
-    if (!open) { g.userData.glow.intensity = 0; return; }
+    if (!open) return;
     g.position.set(pos.x, 0, pos.z);
     this._exitT = (this._exitT || 0) + dt;
-    const pulse = 0.5 + 0.5 * Math.sin(this._exitT * 2.4);
-    g.userData.shaftMat.opacity = 0.07 + pulse * 0.07;
-    g.userData.ringMat.opacity = 0.35 + pulse * 0.35;
-    g.userData.glow.intensity = 5 + pulse * 4;
+    const pulse = 0.5 + 0.5 * Math.sin(this._exitT * 1.7);
+    g.userData.ringMat.opacity = 0.16 + pulse * 0.12;
   }
 
   /* The room, as a look. Cold and lit from nowhere on the sorting floor;
@@ -301,8 +295,13 @@ export class View {
     } else {
       const st = actor.state === STATE.STAGGER;
       if (!rig.isEffigy) {
+        // How lit a body is AT REST belongs to the body. A slag creature
+        // glows; bone does not, and forcing 0.8 on it turned a skeleton the
+        // colour of fired clay.
+        const idle = rig.emissiveIdle ?? 0.8;
         rig.mat.emissive.setHex(st ? 0xffb060 : 0x3a1004);
-        rig.mat.emissiveIntensity = (st ? 2.4 : 0.8) * (actor.posturing ? AGGRO.postureDim + 0.35 : 1);
+        rig.mat.emissiveIntensity =
+          (st ? 2.4 : idle) * (actor.posturing ? AGGRO.postureDim + 0.35 : 1);
       }
       // The molten core brightens through the windup — a second, body-level
       // tell for players watching the enemy rather than the floor.

@@ -476,9 +476,13 @@ export const DEFAULT_ENCOUNTER = 'duel';
 export const ROOM2 = 'ossuary';
 
 export const EXIT = {
-  bearing: 0,             // rad; which way the gap opens, 0 = away from spawn
+  bearing: 0,             // rad; which way the road runs, 0 = away from spawn
   radius: 2.1,            // how close you must get to pass through
   openDelay: 0.9,         // beat after the last body falls, so the kill lands
+  // Half-angle of the hole cut in the tree ring for the road. The way out is a
+  // GAP you can see through — lighting a spot in front of an unbroken wall of
+  // trunks reads as a marker, not as somewhere to go.
+  gapAngle: 0.30,
 };
 
 /* -------------------------------------------------------------------------

@@ -580,14 +580,42 @@ export function buildKnight(actor, build, weapon) {
   };
 }
 
-/* ------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------
+   THE SLAGBOUND. A foreman's skeleton, grown over with cooled slag.
+
+   Same creature, same frame data, same fight — the name was always literal and
+   now the body admits it. It shares a family with the Cinderbone, which is the
+   point: the works killed everyone here, and what is left is a matter of what
+   size they were and how much of the melt ran over them.
+
+   Which means the two skeletons have to be told apart INSTANTLY, and size
+   alone will not do it in a frame where one of them may be behind you. So they
+   are separated on three axes at once:
+
+     MASS     r 0.55 / h 2.0 against 0.34 / 1.58, and hunched, so it occupies
+              roughly three times the ground
+     VALUE    its bone is dark and sooted where the Cinderbone's is pale — the
+              big one reads as a shadow, the small ones as chalk
+     LIGHT    the melt is still burning INSIDE its ribcage and shows between
+              the ribs. Nothing else in the game glows from within a cavity
+
+   That last one also carries the aggro token's tell: `core` is the furnace in
+   its chest, so a Slagbound without the token banks down to embers and the one
+   that may swing is lit from the inside.
+   --------------------------------------------------------------------- */
 export function buildSlagbound(actor) {
   const g = new THREE.Group();
   const r = actor.radius, h = actor.height;
 
-  const hide = new THREE.MeshStandardMaterial({
-    color: PAL.slag, roughness: 0.98, metalness: 0.1,
-    emissive: 0x3a1004, emissiveIntensity: 0.8 });
+  // Dark, sooted bone. Deliberately far from the Cinderbone's chalk.
+  // Bone must read as BONE. The body this replaced was slag, so its material
+  // carried a standing orange emissive — left on a skeleton it turned every
+  // rib the colour of fired clay and the read collapsed entirely. The glow now
+  // comes only from the furnace in the ribcage, which is where it belongs.
+  const bone = new THREE.MeshStandardMaterial({
+    color: 0xa39a89, roughness: 0.94, metalness: 0.04,
+    emissive: 0x3a1004, emissiveIntensity: 0.08 });
+  const boneD = new THREE.MeshStandardMaterial({ color: 0x796f60, roughness: 0.97 });
   const crust = new THREE.MeshStandardMaterial({ color: 0x2a221e, roughness: 1 });
   const molten = new THREE.MeshStandardMaterial({
     color: 0x1a0a04, emissive: PAL.crack, emissiveIntensity: 2.6, roughness: 1 });
@@ -596,76 +624,204 @@ export function buildSlagbound(actor) {
   hips.position.y = h * 0.4;
   g.add(hips);
 
-  const legGeo = new THREE.CapsuleGeometry(r * 0.34, h * 0.2, 3, 8);
-  const legL = limb(legGeo, hide, 0);
-  const legR = limb(legGeo, hide, 0);
-  legL.position.x = -r * 0.5;
-  legR.position.x = r * 0.5;
+  // Pelvis: a heavy ring, half swallowed by slag.
+  const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.74, r * 0.22, 5, 10), boneD);
+  pelvis.rotation.x = Math.PI / 2;
+  pelvis.scale.z = 0.74;
+  pelvis.castShadow = true;
+  hips.add(pelvis);
+  const pelvisSlag = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.46, 0), crust);
+  pelvisSlag.position.set(-r * 0.5, -r * 0.1, -r * 0.2);
+  hips.add(pelvisSlag);
+
+  // Legs: thick bone, a slag knee, and feet the melt has half buried.
+  const legGeo = new THREE.CapsuleGeometry(r * 0.30, h * 0.18, 3, 8);
+  const legL = limb(legGeo, bone, 0);
+  const legR = limb(legGeo, bone, 0);
+  legL.position.x = -r * 0.52;
+  legR.position.x = r * 0.52;
+  for (const leg of [legL, legR]) {
+    const knee = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.30, 0), crust);
+    knee.position.y = -h * 0.16;
+    knee.castShadow = true;
+    leg.add(knee);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.58, r * 0.26, r * 0.86), crust);
+    foot.position.set(0, -h * 0.345, r * 0.16);
+    foot.castShadow = true;
+    leg.add(foot);
+  }
   hips.add(legL, legR);
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.4;
   g.add(chest);
 
-  // Hunched and top-heavy, so it reads as a threat from directly above.
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(r * 1.02, h * 0.3, 4, 12), hide);
-  torso.position.y = h * 0.16;
-  torso.castShadow = true;
-  chest.add(torso);
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.17, r * 0.21, h * 0.34, 7), boneD);
+  spine.position.set(0, h * 0.16, -r * 0.16);
+  spine.castShadow = true;
+  chest.add(spine);
 
-  const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 10, 8), molten);
-  core.position.set(0, h * 0.18, r * 0.62);
-  core.scale.set(1, 1.5, 0.4);
+  // THE FURNACE. Still burning in the chest cavity, and seen BETWEEN the ribs
+  // rather than in front of them — a cavity full of light is a read nothing
+  // else in the game has, and it is what the aggro token dims.
+  const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.40, 12, 10), molten);
+  core.position.set(0, h * 0.17, -r * 0.10);
+  core.scale.set(1, 1.2, 0.7);
   chest.add(core);
 
-  const neck = new THREE.Group();
-  neck.position.y = h * 0.46;
-  chest.add(neck);
-  const headMass = new THREE.Mesh(new THREE.BoxGeometry(r * 0.95, r * 0.7, r * 1.0), crust);
-  headMass.position.z = r * 0.28;
-  headMass.rotation.x = 0.3;
-  headMass.castShadow = true;
-  neck.add(headMass);
+  // RIBCAGE. Six heavy hoops, biggest at the middle, each with a crust of slag
+  // welded across it so the cage reads as bone that has been RUN OVER by the
+  // melt rather than as a clean skeleton.
+  const ribs = new THREE.Group();
+  chest.add(ribs);
+  for (let i = 0; i < 6; i++) {
+    const k = 1 - Math.abs(i - 2.1) * 0.11;
+    const hoop = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 1.00 * k, r * 0.105, 5, 12, Math.PI * 1.34), bone);
+    hoop.rotation.set(Math.PI / 2, 0, -Math.PI * 0.67);
+    hoop.position.y = h * (0.045 + i * 0.052);
+    hoop.scale.z = 0.78;
+    hoop.castShadow = true;
+    ribs.add(hoop);
+    if (i % 2 === 0) {
+      const weld = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.22, 0), crust);
+      weld.position.set(r * 0.62 * k, h * (0.045 + i * 0.052), r * 0.2);
+      ribs.add(weld);
+    }
+  }
 
-  // Asymmetric growths, so its facing reads at a glance.
+  // Asymmetric slag growths over the shoulders. Kept from the original body
+  // because they are how its FACING reads at a glance, which the fight needs.
   for (const [sx, sc] of [[-1, 1.0], [1, 0.72]]) {
-    const lump = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.52 * sc, 0), crust);
-    lump.position.set(sx * r * 0.95, h * 0.38, -r * 0.1);
+    const lump = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.58 * sc, 0), crust);
+    lump.position.set(sx * r * 1.16, h * 0.28, -r * 0.26);
     lump.castShadow = true;
     chest.add(lump);
+  }
+  const clav = new THREE.Mesh(new THREE.BoxGeometry(r * 1.5, r * 0.18, r * 0.2), boneD);
+  clav.position.y = h * 0.33;
+  chest.add(clav);
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.40;
+  chest.add(neck);
+
+  // A big cracked skull, carried low and forward on a hunched neck. Its jaw
+  // hangs, which is most of what makes a skull read as a skull from above.
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.54, 14, 11), boneD);
+  skull.scale.set(0.94, 0.92, 1.22);
+  skull.position.set(0, r * 0.18, r * 0.26);
+  skull.rotation.x = 0.12;
+  skull.castShadow = true;
+  neck.add(skull);
+
+  // The face plate, tipped up toward the camera. Everything that says SKULL
+  // lives on it, and it is angled so this camera can see all of it.
+  const face = new THREE.Group();
+  face.position.set(0, r * 0.12, r * 0.36);
+  face.rotation.x = -0.10;
+  neck.add(face);
+
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(r * 0.92, r * 0.20, r * 0.30), bone);
+  brow.position.set(0, r * 0.30, r * 0.34);
+  brow.castShadow = true;
+  face.add(brow);
+
+  // Sockets: deep, wide, and DARK. Cones driven back into the skull, so from
+  // above they are two black pits rather than two painted dots.
+  for (const sx of [-1, 1]) {
+    const pit = new THREE.Mesh(new THREE.ConeGeometry(r * 0.26, r * 0.50, 7),
+      new THREE.MeshStandardMaterial({ color: 0x090604, roughness: 1 }));
+    pit.rotation.x = -Math.PI / 2;
+    pit.position.set(sx * r * 0.28, r * 0.13, r * 0.26);
+    face.add(pit);
+  }
+  // Nasal cavity — small, but it is the third point of the triangle that makes
+  // two holes read as a face instead of as damage.
+  const nasal = new THREE.Mesh(new THREE.ConeGeometry(r * 0.10, r * 0.26, 3),
+    new THREE.MeshStandardMaterial({ color: 0x090604, roughness: 1 }));
+  nasal.rotation.set(-Math.PI / 2, 0, Math.PI);
+  nasal.position.set(0, -r * 0.10, r * 0.34);
+  face.add(nasal);
+
+  // Cheekbones, so the face has width where a ball has none.
+  for (const sx of [-1, 1]) {
+    const zyg = new THREE.Mesh(new THREE.BoxGeometry(r * 0.20, r * 0.16, r * 0.30), bone);
+    zyg.position.set(sx * r * 0.40, -r * 0.02, r * 0.20);
+    zyg.rotation.z = sx * 0.3;
+    face.add(zyg);
+  }
+
+  // The jaw hangs open. On a skull seen from above this is the strongest
+  // single read there is — a closed jaw is just a chin.
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.66, r * 0.20, r * 0.60), bone);
+  jaw.position.set(0, -r * 0.34, r * 0.30);
+  jaw.rotation.x = 0.55;
+  jaw.castShadow = true;
+  face.add(jaw);
+  const teeth = new THREE.Mesh(new THREE.BoxGeometry(r * 0.56, r * 0.10, r * 0.10),
+    new THREE.MeshStandardMaterial({ color: 0xcfc6b2, roughness: 0.9 }));
+  teeth.position.set(0, -r * 0.24, r * 0.42);
+  face.add(teeth);
+
+  // A shard of slag driven through the crown. The thing that killed it, still
+  // in place.
+  const shard = new THREE.Mesh(new THREE.ConeGeometry(r * 0.20, r * 0.9, 5), crust);
+  shard.position.set(r * 0.16, r * 0.58, r * 0.06);
+  shard.rotation.set(0.3, 0, -0.4);
+  shard.castShadow = true;
+  neck.add(shard);
+
+  // Two coals down in the sockets. Small, because the furnace in the chest is
+  // the primary tell and two headlamps would compete with it.
+  for (const sx of [-1, 1]) {
+    const coal = new THREE.Mesh(new THREE.SphereGeometry(r * 0.10, 8, 6), molten);
+    coal.position.set(sx * r * 0.28, r * 0.13, r * 0.28);
+    coal.scale.z = 0.5;
+    face.add(coal);
   }
 
   const pivot = new THREE.Group();
   pivot.position.set(r * 1.0, h * 0.26, 0);
   chest.add(pivot);
 
-  const armGeo = new THREE.CapsuleGeometry(r * 0.26, h * 0.14, 3, 7);
-  pivot.add(limb(armGeo, hide, 0));
+  const armGeo = new THREE.CapsuleGeometry(r * 0.24, h * 0.16, 3, 7);
+  pivot.add(limb(armGeo, bone, 0));
+  const elbow = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.26, 0), crust);
+  elbow.position.y = -h * 0.14;
+  pivot.add(elbow);
 
-  // A slab of half-worked iron, still hot at the tip.
+  // A slab of half-worked iron, still hot at the tip. Unchanged, because it is
+  // the reach tell and reach is the one thing about this fight nobody should
+  // have to relearn.
   const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 1.0, 6), crust);
   haft.rotation.x = Math.PI / 2;
   haft.position.z = 0.5;
   pivot.add(haft);
-  const headSlab = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.4, 0.85), hide);
+  const headSlab = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.4, 0.85), boneD);
   headSlab.position.z = 1.35;
   headSlab.castShadow = true;
   pivot.add(headSlab);
-  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.16), molten);
+  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.16),
+    new THREE.MeshStandardMaterial({ color: 0x1a0a04, emissive: PAL.crack,
+      emissiveIntensity: 1.5, roughness: 1 }));
   tip.position.z = 1.76;
   pivot.add(tip);
 
   const offArm = new THREE.Group();
   offArm.position.set(-r * 1.0, h * 0.26, 0);
   chest.add(offArm);
-  offArm.add(limb(armGeo, hide, 0));
+  offArm.add(limb(armGeo, bone, 0));
 
   g.add(makeNose(r, PAL.ember));
 
   return {
     group: g, hips, chest, neck, legL, legR, pivot, offArm,
-    body: torso, head: headMass, blade: headSlab, shield: null,
-    mat: hide, core, tip,
+    body: spine, head: skull, blade: headSlab, shield: null,
+    mat: bone, core, tip,
+    // Bone sits nearly unlit at rest — see the material note above. The
+    // renderer reads this instead of assuming every foe glows.
+    emissiveIdle: 0.08,
     swingArc: { rest: -0.25, wind: -2.35, end: 1.35 },
     baseLean: 0.22, stride: 0, flash: 0, spin: 0, isPlayer: false,
   };

@@ -84,12 +84,26 @@ into the same button later without touching input, HUD or touch controls.
 
 ### Room two — the sorting floor
 
-Clear the clearing and the tree line opens: a column of light at the edge, and
-walking into it carries your health and stamina into the next room. That
-carry-over is the whole reason two rooms feel like somewhere you are *going*
-rather than a fight select — the first room has to cost you something.
+The way out is the **haul road** — the track they carted the good iron down,
+and it was there before the fight was. A gap cut in the tree ring, wheel ruts,
+sleepers, two gateposts, and a chain slung across them. The road does not
+*appear* when you win; clearing the room drops the **chain** and lights the
+lamps on the posts. That is the difference between the game spawning an exit
+and the thing barring your way coming down.
 
-Waiting there are five **Cinderbones**. Deliberately not weaker Slagbounds:
+Walking through carries your health and stamina into the next room, which is
+the whole reason two rooms feel like somewhere you are *going* rather than a
+fight select — the first room has to cost you something.
+
+Both foes are skeletons — the works killed everyone here, and what is left
+differs by how big they were and how much of the melt ran over them. The
+**Slagbound** is a foreman's skeleton grown over with cooled slag, still burning
+in its ribcage; the **Cinderbones** are the pickers. They are separated on three
+axes at once so neither is ever mistaken for the other: mass (r 0.55/h 2.0
+against 0.34/1.58), value (dark sooted bone against chalk), and light (a furnace
+visible between the ribs, which nothing else in the game has).
+
+Deliberately not weaker Slagbounds:
 
 |  | Slagbound | Cinderbone |
 |---|---|---|
