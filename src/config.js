@@ -1701,6 +1701,34 @@ ZONES.town.solids = [
    memory, and offering three things you cannot use is worse than offering one
    good one.
    ---------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------
+   WHAT A BOON IS ABOUT, which is how its card is coloured.
+
+   Colouring by TIER would only ever tell you how rare a thing is, and rarity
+   is the least interesting fact about a choice between three of them. Colour
+   by DOMAIN and the three cards on the table read as three different KINDS of
+   answer before you have finished the first line of text — which is the whole
+   job of a card being coloured at all.
+
+   Six, and no more: past about six the hues stop being distinguishable at a
+   glance under a bloom pass and the colour goes back to being decoration.
+   ---------------------------------------------------------------------- */
+export const DOMAINS = {
+  edge:  { name: 'THE EDGE',  hue: 6,   glyph: 'blade',
+           blurb: 'what it does when it lands' },
+  wind:  { name: 'THE WIND',  hue: 158, glyph: 'lung',
+           blurb: 'how long you can keep doing it' },
+  step:  { name: 'THE STEP',  hue: 196, glyph: 'boot',
+           blurb: 'where you are when it comes' },
+  ward:  { name: 'THE WARD',  hue: 216, glyph: 'shield',
+           blurb: 'what happens when you are wrong' },
+  weight:{ name: 'THE WEIGHT',hue: 32,  glyph: 'hammer',
+           blurb: 'what you do to its footing' },
+  tally: { name: 'THE TALLY', hue: 44,  glyph: 'coin',
+           blurb: 'what you take away with you' },
+};
+
 export const BOON_MODS = {
   // Every field here is read in exactly one place. If you add one, add the
   // read too, or it is a lie printed on a card.
@@ -1728,64 +1756,64 @@ export const BOON_MODS = {
 
 export const BOONS = [
   // --- universal --------------------------------------------------------
-  { id: 'whet', name: 'Whetstone Memory', tier: 1,
+  { id: 'whet', domain: 'edge', name: 'Whetstone Memory', tier: 1,
     text: 'It remembers being sharpened. +12% damage.',
     mods: { damageMul: 1.12 } },
-  { id: 'shift', name: 'The Long Shift', tier: 1,
+  { id: 'shift', domain: 'wind', name: 'The Long Shift', tier: 1,
     text: 'Twelve hours was normal. +18 stamina.',
     mods: { staminaFlat: 18 } },
-  { id: 'wind', name: 'Second Wind', tier: 1,
+  { id: 'wind', domain: 'wind', name: 'Second Wind', tier: 1,
     text: 'They worked through it. +9 stamina a second.',
     mods: { regenFlat: 9 } },
-  { id: 'cold', name: 'Cold Iron', tier: 2,
+  { id: 'cold', domain: 'step', name: 'Cold Iron', tier: 2,
     text: 'It has been dead a long time. +0.05s of i-frames.',
     mods: { iframeFlat: 0.05 } },
-  { id: 'step', name: "The Picker's Step", tier: 1,
+  { id: 'step', domain: 'step', name: "The Picker's Step", tier: 1,
     text: 'You learn to move on a slag floor. +16% roll, +6% walk.',
     mods: { rollMul: 1.16, moveMul: 1.06 } },
-  { id: 'hammer', name: 'Hammer Memory', tier: 2,
+  { id: 'hammer', domain: 'weight', name: 'Hammer Memory', tier: 2,
     text: 'It was struck ten thousand times. +28% poise damage.',
     mods: { poiseMul: 1.28 } },
-  { id: 'quench', name: 'Quench', tier: 2,
+  { id: 'quench', domain: 'ward', name: 'Quench', tier: 2,
     text: 'Breaking something gives it back. Heal 12 on a stagger.',
     mods: { healOnStagger: 12 } },
-  { id: 'cut', name: "The Foreman's Cut", tier: 2,
+  { id: 'cut', domain: 'edge', name: "The Foreman's Cut", tier: 2,
     text: 'He only ever needed the first one. +22% on a target at full health.',
     mods: { firstHitMul: 1.22 } },
-  { id: 'last', name: 'Last Shift', tier: 3,
+  { id: 'last', domain: 'edge', name: 'Last Shift', tier: 3,
     text: 'The end of one is when the work got done. +35% below a third health.',
     mods: { lowHpMul: 1.35 } },
-  { id: 'tally', name: 'Tally', tier: 1,
+  { id: 'tally', domain: 'tally', name: 'Tally', tier: 1,
     text: 'Somebody was counting. +45% gold.',
     mods: { goldMul: 1.45 } },
-  { id: 'grip', name: "Dead Man's Grip", tier: 2,
+  { id: 'grip', domain: 'wind', name: "Dead Man's Grip", tier: 2,
     text: 'The off hand never let go. Off-hand costs 40% less.',
     mods: { offhandCostMul: 0.6 } },
-  { id: 'signing', name: 'The Signing', tier: 2,
+  { id: 'signing', domain: 'ward', name: 'The Signing', tier: 2,
     text: 'A name off the roll is a debt paid. Heal 22 on clearing a room.',
     mods: { healOnClear: 22 } },
-  { id: 'shove', name: 'Shove', tier: 1,
+  { id: 'shove', domain: 'weight', name: 'Shove', tier: 1,
     text: 'Move or be moved. +55% knockback.',
     mods: { knockMul: 1.55 } },
-  { id: 'third', name: 'The Third Blow', tier: 3,
+  { id: 'third', domain: 'edge', name: 'The Third Blow', tier: 3,
     text: 'It was always the third that did it. +40% on a combo finisher.',
     mods: { comboMul: 1.40 },
     when: (w) => (w.combos || []).length > 0 },
 
   // --- weapon-gated -----------------------------------------------------
-  { id: 'shield', name: 'Shield Memory', tier: 2,
+  { id: 'shield', domain: 'ward', name: 'Shield Memory', tier: 2,
     text: 'It was held up for a long time. Guard absorbs +12%, bash costs 30% less.',
     mods: { guardAbsorbFlat: 0.12, abilityCostMul: 0.7 },
     when: (w) => w.offhand === 'guard' },
-  { id: 'hanging', name: 'The Hanging', tier: 3,
+  { id: 'hanging', domain: 'ward', name: 'The Hanging', tier: 3,
     text: 'Two men hung it and it never flinched. Hyperarmour costs you nothing.',
     mods: { armorPenaltyOff: 1 },
     when: (w) => (w.armorDamageMul || 1) > 1 },
-  { id: 'flense', name: 'Flensing Memory', tier: 2,
+  { id: 'flense', domain: 'edge', name: 'Flensing Memory', tier: 2,
     text: 'She was quick and she was thorough. +1 bleed a hit.',
     mods: { bleedFlat: 1 },
     when: (w) => (w.light || []).some((a) => a.bleed) },
-  { id: 'banked', name: 'Banked Heat', tier: 2,
+  { id: 'banked', domain: 'wind', name: 'Banked Heat', tier: 2,
     text: 'A good bellows-master never let it build. Heat sheds 70% faster.',
     mods: { heatDecayFlat: 11 },
     when: (w) => w.resource === 'heat' },

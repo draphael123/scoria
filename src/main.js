@@ -9,7 +9,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
-import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER } from './config.js';
+import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER, DOMAINS } from './config.js';
 import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
@@ -271,6 +271,105 @@ buildTrainSwap();
    at. The prompt appears when you are near, brightens when you are actually
    in range, and the action it fires is named in config rather than here.
    ------------------------------------------------------------------------ */
+
+/* ---------------------------------------------------------------------------
+   CARD GLYPHS. One woodcut mark per domain, drawn as bare paths on a 100-unit
+   box so the CSS can colour and scale them.
+
+   Deliberately drawn as OUTLINES with a single heavy stroke and almost no
+   fill: this is the same language the rest of the game's iconography is in,
+   it survives being tinted any hue, and at the size a card shows it the shape
+   is doing all the work anyway. Anything with interior detail turns to mud.
+   ------------------------------------------------------------------------ */
+const GLYPH = {
+  // THE EDGE — a blade, point up, with a guard.
+  blade: '<path d="M50 8 L62 34 L62 66 L50 76 L38 66 L38 34 Z"/>' +
+         '<path d="M26 66 L74 66"/><path d="M50 76 L50 92"/>' +
+         '<path d="M42 92 L58 92"/>',
+  // THE WIND — a pair of lungs, which is the least literal way to draw
+  // "how long you can keep going" that still reads instantly.
+  lung:  '<path d="M50 12 L50 46"/>' +
+         '<path d="M50 34 C36 34 22 44 22 60 C22 78 32 88 40 88 C46 88 46 78 46 66 L46 46"/>' +
+         '<path d="M50 34 C64 34 78 44 78 60 C78 78 68 88 60 88 C54 88 54 78 54 66 L54 46"/>',
+  /* THE STEP — a footprint. Drawn from ABOVE rather than in profile, which
+     is both the camera this game is played on and the only version that does
+     not read as a letter L: the profile boot was a vertical stroke meeting a
+     horizontal one and that is all the eye saw. */
+  boot:  '<path d="M50 6 C66 6 74 20 74 34 C74 46 66 52 64 60 L36 60 C34 52 26 46 26 34 C26 20 34 6 50 6 Z"/>' +
+         '<path d="M38 74 C38 66 40 64 50 64 C60 64 62 66 62 74 C62 86 58 94 50 94 C42 94 38 86 38 74 Z"/>' +
+         '<circle class="fill" cx="34" cy="20" r="5"/>' +
+         '<circle class="fill" cx="46" cy="14" r="5"/>' +
+         '<circle class="fill" cx="58" cy="16" r="5"/>' +
+         '<circle class="fill" cx="68" cy="24" r="4"/>',
+  // THE WARD — a kite shield with a boss.
+  shield:'<path d="M50 8 L86 22 C86 60 70 82 50 92 C30 82 14 60 14 22 Z"/>' +
+         '<circle class="fill" cx="50" cy="44" r="8"/>' +
+         '<path d="M50 8 L50 92"/>',
+  // THE WEIGHT — a smith's hammer, head down.
+  hammer:'<path d="M18 18 L82 18 L82 42 L18 42 Z"/>' +
+         '<path d="M44 42 L44 92"/><path d="M36 92 L52 92"/>',
+  // THE TALLY — a coin with a struck mark, and two behind it.
+  coin:  '<circle cx="44" cy="52" r="30"/>' +
+         '<path d="M44 36 L44 68"/><path d="M34 44 L54 44"/><path d="M34 60 L54 60"/>' +
+         '<path d="M62 26 A30 30 0 0 1 62 78"/>' +
+         '<path d="M72 32 A24 24 0 0 1 72 72"/>',
+};
+
+/* The card face. Built as one node rather than an innerHTML string so the
+   boon's own text can never be parsed as markup — the copy is authored, but
+   authored text with an apostrophe in it is exactly the sort of thing that
+   quietly stops rendering a month later. */
+function buildCard(b) {
+  const dom = DOMAINS[b.domain] || DOMAINS.edge;
+  const card = document.createElement('button');
+  card.className = 'of-card';
+  card.style.setProperty('--h', dom.hue);
+  card.setAttribute('aria-label', `${b.name}. ${b.text}`);
+
+  const face = document.createElement('div');
+  face.className = 'of-face';
+  card.appendChild(face);
+
+  // Tier as pips down the edge. One glance compares three cards.
+  const rank = document.createElement('div');
+  rank.className = 'of-rank';
+  for (let i = 0; i < (b.tier || 1); i++) rank.appendChild(document.createElement('i'));
+  face.appendChild(rank);
+
+  const dm = document.createElement('div');
+  dm.className = 'of-dom';
+  dm.textContent = dom.name;
+  face.appendChild(dm);
+
+  const art = document.createElement('div');
+  art.className = 'of-art';
+  art.innerHTML = `<svg viewBox="0 0 100 100">${GLYPH[dom.glyph] || GLYPH.blade}</svg>`;
+  face.appendChild(art);
+
+  const nm = document.createElement('div');
+  nm.className = 'of-name';
+  nm.textContent = b.name;
+  face.appendChild(nm);
+
+  const tx = document.createElement('div');
+  tx.className = 'of-text';
+  tx.textContent = b.text;
+  face.appendChild(tx);
+
+  // The numbers spelled out under the prose, because a boon you cannot
+  // compare is a boon you pick at random.
+  const mods = document.createElement('div');
+  mods.className = 'of-mods';
+  mods.textContent = Object.entries(b.mods).map(([k, v]) => {
+    const label = k.replace(/Mul$|Flat$/, '').replace(/([A-Z])/g, ' $1').toUpperCase();
+    if (k.endsWith('Mul')) return `${label} \u00d7${v}`;
+    return `${label} ${v > 0 ? '+' : ''}${v}`;
+  }).join('   ');
+  face.appendChild(mods);
+
+  return card;
+}
+
 /* ---------------------------------------------------------------------------
    THE ROOM REWARD. Presented when a room is cleared, and the sim is held until
    a card is taken — the Game already refuses to open the road while an offer
@@ -286,22 +385,7 @@ function showOffer() {
   offerCards.innerHTML = '';
   document.getElementById('offerGold').textContent = String(game.run.gold);
   for (const b of list) {
-    const card = document.createElement('button');
-    card.className = 'of-card';
-    const tier = ['', 'COMMON', 'UNCOMMON', 'RARE'][b.tier] || '';
-    card.innerHTML =
-      `<div class="of-tier">${tier}</div>` +
-      `<div class="of-name"></div>` +
-      `<div class="of-text"></div>` +
-      `<div class="of-mods"></div>`;
-    card.querySelector('.of-name').textContent = b.name;
-    card.querySelector('.of-text').textContent = b.text;
-    // The numbers spelled out under the prose, because a boon you cannot
-    // compare is a boon you pick at random.
-    card.querySelector('.of-mods').textContent =
-      Object.entries(b.mods).map(([k, v]) =>
-        `${k} ${v > 0 && Number.isInteger(v * 100) && v < 1.9 && v !== 1 ? '\u00d7' + v : (v > 0 ? '+' + v : v)}`)
-        .join('   ');
+    const card = buildCard(b);
     card.onclick = () => {
       game.takeBoon(b);
       offerEl.classList.remove('on');
@@ -649,6 +733,7 @@ function frame(now) {
   const wantOffer = started && !!game.offer && !menu.open;
   if (wantOffer && !offerEl.classList.contains('on')) showOffer();
   if (!game.offer && offerEl.classList.contains('on')) offerEl.classList.remove('on');
+  document.body.classList.toggle('offering', offerEl.classList.contains('on'));
 
   if (purseGold && game.run) {
     purseGold.textContent = String(game.run.gold);

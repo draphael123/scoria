@@ -332,30 +332,113 @@
   body.is-touch #pauseBtn{display:none}
   body.no-roomtag #roomTag{display:none}
 
-  /* ===================== THE ROOM REWARD =============================== */
+  /* ===================== THE ROOM REWARD ===============================
+     Cards, and they are meant to be looked at rather than read.
+
+     Everything below is one CSS custom property away from being a different
+     card: `--h` is the domain's hue and the whole face - frame, ground, glow,
+     glyph, the lit edge - is derived from it. So a new domain is one entry in
+     DOMAINS and nothing here changes at all.
+
+     Portrait, not landscape. A wide card is a menu row with a border on it;
+     the tall proportion is what makes three of them read as a HAND. */
   #offer{position:absolute;inset:0;display:none;flex-direction:column;
        align-items:center;justify-content:center;z-index:14;
-       background:radial-gradient(ellipse at center,rgba(8,6,5,.72),rgba(4,3,3,.93))}
+       background:radial-gradient(ellipse at center,rgba(8,6,5,.82),rgba(3,2,2,.985));
+       backdrop-filter:blur(3px)}
   #offer.on{display:flex;animation:fadeUp .3s ease both}
-  .of-head{font-size:12px;letter-spacing:.44em;color:var(--ember);text-transform:uppercase}
-  .of-sub{margin-top:8px;font-size:10px;letter-spacing:.3em;color:var(--faint);
+  /* The fight's HUD has no business showing through the choice that ends it. */
+  body.offering .hud,body.offering #keys{opacity:0;pointer-events:none}
+  .of-head{font-family:Cormorant Garamond,Georgia,serif;font-size:26px;letter-spacing:.2em;
+       color:#e9dcc4;text-transform:uppercase}
+  .of-sub{margin-top:6px;font-size:10px;letter-spacing:.34em;color:var(--faint);
        text-transform:uppercase}
-  .of-cards{display:flex;gap:14px;margin-top:28px;flex-wrap:wrap;justify-content:center;
-       padding:0 18px}
-  .of-card{width:min(248px,86vw);min-height:172px;padding:18px 18px 20px;
-       border:1px solid var(--edge);background:linear-gradient(180deg,rgba(16,13,11,.95),rgba(9,8,7,.92));
-       text-align:left;transition:.16s;display:flex;flex-direction:column;gap:9px}
-  .of-card:hover{border-color:rgba(255,179,71,.75);background:rgba(212,85,42,.13);
-       transform:translateY(-3px)}
-  .of-tier{font-size:9px;letter-spacing:.34em;color:var(--ember);text-transform:uppercase}
-  .of-name{font-family:Cormorant Garamond,Georgia,serif;font-size:22px;color:#e9dcc4;
-       line-height:1.15}
-  .of-text{font-size:12px;line-height:1.65;color:var(--dim)}
-  .of-mods{margin-top:auto;font-size:10px;letter-spacing:.1em;color:var(--faint);
-       font-family:ui-monospace,Consolas,monospace}
+  .of-cards{display:flex;gap:22px;margin-top:26px;flex-wrap:wrap;justify-content:center;
+       padding:0 18px;perspective:1200px}
+
+  .of-card{position:relative;width:min(216px,29vw);aspect-ratio:9/14;padding:0;
+       border:0;background:none;cursor:pointer;
+       transform-style:preserve-3d;
+       transition:transform .22s cubic-bezier(.2,.9,.3,1.2),filter .22s;
+       animation:dealIn .42s cubic-bezier(.2,.9,.3,1.15) both}
+  .of-card:nth-child(2){animation-delay:.07s}
+  .of-card:nth-child(3){animation-delay:.14s}
+  @keyframes dealIn{
+    from{opacity:0;transform:translateY(26px) rotateX(28deg) scale(.9)}
+    to{opacity:1;transform:none}}
+  .of-card:hover,.of-card:focus-visible{transform:translateY(-12px) scale(1.045);outline:none;
+       filter:drop-shadow(0 14px 26px rgba(0,0,0,.6))}
+
+  /* THE FACE. Two nested frames over a hue-derived ground - the outer one is
+     the card stock, the inner one is the illustration's window. */
+  .of-face{position:absolute;inset:0;display:flex;flex-direction:column;
+       border-radius:9px;overflow:hidden;
+       background:
+         radial-gradient(120% 80% at 50% 0%,
+           hsla(var(--h),62%,42%,.42), hsla(var(--h),40%,14%,.5) 62%, rgba(6,5,4,.9)),
+         linear-gradient(180deg,#141110,#0a0908);
+       box-shadow:
+         inset 0 0 0 1px hsla(var(--h),52%,62%,.5),
+         inset 0 0 0 5px rgba(8,6,5,.9),
+         inset 0 0 0 6px hsla(var(--h),46%,52%,.32),
+         inset 0 0 40px hsla(var(--h),70%,50%,.16),
+         0 6px 18px rgba(0,0,0,.5)}
+  .of-card:hover .of-face{box-shadow:
+         inset 0 0 0 1px hsla(var(--h),74%,72%,.85),
+         inset 0 0 0 5px rgba(8,6,5,.9),
+         inset 0 0 0 6px hsla(var(--h),64%,60%,.5),
+         inset 0 0 56px hsla(var(--h),80%,55%,.3),
+         0 10px 30px rgba(0,0,0,.6)}
+
+  /* Corner pips, the one piece of pure card-ness. */
+  .of-face::before,.of-face::after{content:'';position:absolute;width:9px;height:9px;
+       border:1px solid hsla(var(--h),60%,66%,.55);transform:rotate(45deg)}
+  .of-face::before{top:10px;left:10px}
+  .of-face::after{bottom:10px;right:10px}
+
+  .of-dom{margin:13px 0 0;font-size:8px;letter-spacing:.3em;text-align:center;
+       color:hsla(var(--h),58%,72%,.9);text-transform:uppercase}
+
+  /* THE ILLUSTRATION. A single woodcut glyph on a lit ground, sized to be
+     legible from across the room - the picture is what you actually pick
+     from, and the words are there to confirm it. */
+  .of-art{position:relative;margin:8px 14px 0;height:38%;
+       display:flex;align-items:center;justify-content:center;
+       border-top:1px solid hsla(var(--h),40%,50%,.22);
+       border-bottom:1px solid hsla(var(--h),40%,50%,.22);
+       background:radial-gradient(60% 70% at 50% 45%,hsla(var(--h),70%,44%,.3),transparent 70%)}
+  .of-art svg{width:56%;height:56%;overflow:visible;
+       filter:drop-shadow(0 0 9px hsla(var(--h),90%,60%,.55))}
+  .of-art svg *{stroke:hsla(var(--h),70%,84%,.96);fill:none;
+       stroke-width:5;stroke-linecap:round;stroke-linejoin:round;
+       vector-effect:non-scaling-stroke}
+  .of-art svg .fill{fill:hsla(var(--h),70%,84%,.92);stroke:none}
+
+  .of-name{font-family:Cormorant Garamond,Georgia,serif;font-size:19px;line-height:1.1;
+       color:#f0e6d2;text-align:center;padding:11px 12px 0}
+  .of-text{font-size:11px;line-height:1.55;color:var(--dim);text-align:center;
+       padding:7px 14px 0}
+  .of-mods{margin-top:auto;padding:0 10px 12px;font-size:9px;letter-spacing:.06em;
+       color:hsla(var(--h),44%,74%,.85);font-family:ui-monospace,Consolas,monospace;
+       text-align:center}
+
+  /* Rank, as pips down the left edge rather than a word: three cards whose
+     only difference in shape is how many marks they carry compare instantly. */
+  .of-rank{position:absolute;left:11px;top:50%;transform:translateY(-50%);
+       display:flex;flex-direction:column;gap:5px}
+  .of-rank i{width:4px;height:4px;background:hsla(var(--h),70%,72%,.9);
+       transform:rotate(45deg);display:block}
+
   .of-gold{margin-top:26px;font-size:11px;letter-spacing:.28em;color:var(--faint);
        text-transform:uppercase}
   .of-gold b{color:var(--hot);font-weight:400;font-size:15px;margin-right:5px}
+
+  @media (max-width:720px){
+    .of-cards{gap:11px}
+    .of-card{width:min(160px,30vw)}
+    .of-name{font-size:15px;padding-top:8px}
+    .of-text{font-size:10px;line-height:1.45}
+  }
 
   /* The run's gold, always visible under the resource bars. */
   #purse{position:absolute;left:calc(26px + var(--safe-l));top:calc(74px + var(--safe-t));
@@ -711,7 +794,7 @@
 <!-- The room's reward. Three cards, and the road does not open until one is
      taken — a choice you can walk away from is not a choice. -->
 <div id="offer">
-  <div class="of-head">THE IRON REMEMBERS</div>
+  <div class="of-head">The Iron Remembers</div>
   <div class="of-sub">take one</div>
   <div class="of-cards" id="offerCards"></div>
   <div class="of-gold"><b id="offerGold">0</b> gold</div>
