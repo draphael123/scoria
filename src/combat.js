@@ -80,6 +80,14 @@ export function applyDamage(attacker, target, atk, out) {
     : atk.damage;
   let damage = base * (attacker.damageMul || 1);
 
+  // Boon reads that need the TARGET or the ATTACK, so they cannot live on the
+  // player's own multiplier.
+  const mods = attacker.mods;
+  if (mods) {
+    if (atk.id === 'C1') damage *= mods.comboMul;
+    if (target.hp >= target.maxHp - 0.01) damage *= mods.firstHitMul;
+  }
+
   // Stagger amplifies incoming damage — this is the punish window.
   // Off the target's own definition — a Cinderbone is not a Slagbound.
   const tdef = target.def || SLAGBOUND;
@@ -178,15 +186,20 @@ export function applyDamage(attacker, target, atk, out) {
   target.knock(attacker.x, attacker.z,
     target.isPlayer
       ? (armored ? IMPACT.knockArmored : IMPACT.knockTaken)
-      : (atk.knock ?? (atk.heavy ? IMPACT.knockHeavy : IMPACT.knockLight)));
+      : (atk.knock ?? (atk.heavy ? IMPACT.knockHeavy : IMPACT.knockLight))
+        * ((attacker.mods && attacker.mods.knockMul) || 1));
 
   if (target.poise !== undefined) {
     const resist = target.staggerResist > 0 ? tdef.staggerResistMul : 1;
-    target.poise -= (atk.poise || 0) * resist;
+    target.poise -= (atk.poise || 0) * resist * ((attacker.mods && attacker.mods.poiseMul) || 1);
     target.poiseTimer = 0;
     if (target.poise <= 0) {
       target.poise = target.maxPoise;
       target.stagger(tdef.staggerDuration);
+      // Breaking something gives a little back, if the iron remembers how.
+      if (attacker.mods && attacker.mods.healOnStagger && attacker.maxHp) {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + attacker.mods.healOnStagger);
+      }
       target.knock(attacker.x, attacker.z, IMPACT.knockStagger);
       ev.result = 'stagger';
     }
@@ -205,7 +218,8 @@ export function applyDamage(attacker, target, atk, out) {
   // threshold. Deliberately NOT poise — poise is one big opening you earn once,
   // bleed is pressure you have to maintain.
   if (atk.bleed && ev.result !== 'iframe') {
-    target.bleed = Math.min(BLEED.maxStacks, (target.bleed || 0) + atk.bleed);
+    const extra = (attacker.mods && attacker.mods.bleedFlat) || 0;
+    target.bleed = Math.min(BLEED.maxStacks, (target.bleed || 0) + atk.bleed + extra);
     target.bleedFresh = 0;
     if (target.bleed >= BLEED.pop) {
       target.bleed = 0;

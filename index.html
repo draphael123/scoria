@@ -332,6 +332,37 @@
   body.is-touch #pauseBtn{display:none}
   body.no-roomtag #roomTag{display:none}
 
+  /* ===================== THE ROOM REWARD =============================== */
+  #offer{position:absolute;inset:0;display:none;flex-direction:column;
+       align-items:center;justify-content:center;z-index:14;
+       background:radial-gradient(ellipse at center,rgba(8,6,5,.72),rgba(4,3,3,.93))}
+  #offer.on{display:flex;animation:fadeUp .3s ease both}
+  .of-head{font-size:12px;letter-spacing:.44em;color:var(--ember);text-transform:uppercase}
+  .of-sub{margin-top:8px;font-size:10px;letter-spacing:.3em;color:var(--faint);
+       text-transform:uppercase}
+  .of-cards{display:flex;gap:14px;margin-top:28px;flex-wrap:wrap;justify-content:center;
+       padding:0 18px}
+  .of-card{width:min(248px,86vw);min-height:172px;padding:18px 18px 20px;
+       border:1px solid var(--edge);background:linear-gradient(180deg,rgba(16,13,11,.95),rgba(9,8,7,.92));
+       text-align:left;transition:.16s;display:flex;flex-direction:column;gap:9px}
+  .of-card:hover{border-color:rgba(255,179,71,.75);background:rgba(212,85,42,.13);
+       transform:translateY(-3px)}
+  .of-tier{font-size:9px;letter-spacing:.34em;color:var(--ember);text-transform:uppercase}
+  .of-name{font-family:Cormorant Garamond,Georgia,serif;font-size:22px;color:#e9dcc4;
+       line-height:1.15}
+  .of-text{font-size:12px;line-height:1.65;color:var(--dim)}
+  .of-mods{margin-top:auto;font-size:10px;letter-spacing:.1em;color:var(--faint);
+       font-family:ui-monospace,Consolas,monospace}
+  .of-gold{margin-top:26px;font-size:11px;letter-spacing:.28em;color:var(--faint);
+       text-transform:uppercase}
+  .of-gold b{color:var(--hot);font-weight:400;font-size:15px;margin-right:5px}
+
+  /* The run's gold, always visible under the resource bars. */
+  #purse{position:absolute;left:calc(26px + var(--safe-l));top:calc(74px + var(--safe-t));
+       font-size:11px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase}
+  #purse b{color:var(--hot);font-weight:400;margin-right:6px;font-size:13px}
+  #purse i{font-style:normal;color:var(--ember);margin-left:12px}
+
   /* The resource bar under two economies. Stamina is a reserve that drains
      toward danger; heat is a pressure that fills toward it, so it is coloured
      as a rising threat rather than as a dwindling supply. */
@@ -644,6 +675,8 @@
      something in front of you worth pressing a key at. -->
 <div id="prompt"><b id="promptKey">E</b><span id="promptText"></span></div>
 
+<div class="hud" id="purse"><b id="purseGold">0</b>gold<i id="purseBoons"></i></div>
+
 <div class="hud" id="kit">
   <div class="kitslot" id="kitWeapon"><b>—</b><span>right</span></div>
   <div class="kitslot" id="kitOff"><b>—</b><span>left</span></div>
@@ -674,6 +707,15 @@
 </button>
 
 <div class="hud" id="roomTag"><b id="roomNum"></b><span id="roomName"></span></div>
+
+<!-- The room's reward. Three cards, and the road does not open until one is
+     taken — a choice you can walk away from is not a choice. -->
+<div id="offer">
+  <div class="of-head">THE IRON REMEMBERS</div>
+  <div class="of-sub">take one</div>
+  <div class="of-cards" id="offerCards"></div>
+  <div class="of-gold"><b id="offerGold">0</b> gold</div>
+</div>
 
 <div id="placard"><b id="placardName"></b><span id="placardSub"></span></div>
 

@@ -427,12 +427,21 @@ export function buildKnight(actor, build, weapon) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.44;
-  tumble.add(hips);
+  tumbleInner.add(hips);
 
   const legL = buildLeg(D, h, steel, steelD, fit.legs);
   const legR = buildLeg(D, h, steel, steelD, fit.legs);
@@ -444,7 +453,7 @@ export function buildKnight(actor, build, weapon) {
   // waist together instead of shearing the model.
   const chest = new THREE.Group();
   chest.position.y = h * 0.44;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   // The cuirass. A lathe gives the breastplate its actual profile — wide over
   // the chest, drawn in hard at the waist — and flattening z turns a barrel
@@ -819,12 +828,21 @@ export function buildSlagbound(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.4;
-  tumble.add(hips);
+  tumbleInner.add(hips);
 
   // Pelvis: a heavy ring, half swallowed by slag.
   const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.74, r * 0.22, 5, 10), boneD);
@@ -856,7 +874,7 @@ export function buildSlagbound(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.4;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.17, r * 0.21, h * 0.34, 7), boneD);
   spine.position.set(0, h * 0.16, -r * 0.16);
@@ -1059,12 +1077,21 @@ export function buildCinderbone(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.46;
-  tumble.add(hips);
+  tumbleInner.add(hips);
 
   // Pelvis: a flat ring, so from above it reads as a hollow socket rather
   // than as a solid hip.
@@ -1106,7 +1133,7 @@ export function buildCinderbone(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.46;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   // A segmented spine rather than one tube: it catches the light in bands,
   // which is what makes a back read as vertebrae from directly above.
@@ -1291,12 +1318,21 @@ export function buildBoltbone(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.46;
-  tumble.add(hips);
+  tumbleInner.add(hips);
   const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.5, r * 0.13, 5, 10), boneD);
   pelvis.rotation.x = Math.PI / 2;
   pelvis.scale.z = 0.7;
@@ -1316,7 +1352,7 @@ export function buildBoltbone(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.46;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.09, r * 0.11, h * 0.28, 6), boneD);
   spine.position.y = h * 0.14;
@@ -1447,12 +1483,21 @@ export function buildKilnwarden(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.42;
-  tumble.add(hips);
+  tumbleInner.add(hips);
 
   // The robe: one solid cone to the floor. It has no legs to animate and that
   // is the point — it does not walk so much as ARRIVE, which sets it apart
@@ -1472,7 +1517,7 @@ export function buildKilnwarden(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.42;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.60, r * 0.78, h * 0.30, 12), robe);
   torso.position.y = h * 0.15;
@@ -1586,12 +1631,21 @@ export function buildSkimmer(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.40;
-  tumble.add(hips);
+  tumbleInner.add(hips);
   const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.68, r * 0.20, 5, 10), boneD);
   pelvis.rotation.x = Math.PI / 2;
   pelvis.scale.z = 0.72;
@@ -1619,7 +1673,7 @@ export function buildSkimmer(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.40;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.15, r * 0.19, h * 0.30, 7), boneD);
   spine.position.set(0, h * 0.15, -r * 0.14);
@@ -1744,19 +1798,28 @@ export function buildBlackdamp(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.34;
-  tumble.add(hips);
+  tumbleInner.add(hips);
   const legL = new THREE.Group();
   const legR = new THREE.Group();
   hips.add(legL, legR);
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.34;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   // The mass: a wide, low, shapeless bulk.
   const bulk = new THREE.Mesh(new THREE.SphereGeometry(r * 1.15, 14, 10), shroud);
@@ -1860,12 +1923,21 @@ export function buildGaffer(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.46;
-  tumble.add(hips);
+  tumbleInner.add(hips);
 
   const legGeo = new THREE.CapsuleGeometry(r * 0.15, h * 0.34, 3, 6);
   const legL = limb(legGeo, coatD, 0);
@@ -1882,7 +1954,7 @@ export function buildGaffer(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.46;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   // A long coat: narrow, straight, buttoned. The only tidy thing left here.
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.52, r * 0.62, h * 0.34, 12), coat);
@@ -1996,15 +2068,24 @@ export function buildEffigy(actor) {
   // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
   // here, so a roll can revolve the whole body without fighting the yaw. The
   // ground decals stay on the root, because they must not tumble with it.
+  //
+  // It is raised to the body's MIDDLE and its contents pushed back down by the
+  // same amount, because a pivot at the feet sweeps the head through the floor
+  // — which is exactly what a roll looked like before this. A body rolls about
+  // its centre of mass.
   const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
   g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
 
   const hips = new THREE.Group();
   hips.position.y = h * 0.4;
-  tumble.add(hips);
+  tumbleInner.add(hips);
   const chest = new THREE.Group();
   chest.position.y = h * 0.4;
-  tumble.add(chest);
+  tumbleInner.add(chest);
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.72, h * 0.26, 4, 10), straw);
   body.position.y = h * 0.16;
@@ -2338,10 +2419,19 @@ export function animateRig(rig, actor, dt, clock) {
   rig.hips.position.y = h * (rig.isPlayer ? 0.44 : 0.4) - dip;
   rig.chest.position.y = h * (rig.isPlayer ? 0.44 : 0.4) - dip;
 
-  // A roll physically lowers the whole body — used by the contact shadow too.
-  const rollDip = actor.state === STATE.ROLL
-    ? Math.sin(Math.PI * clamp(actor.stateT / rollDur, 0, 1)) * 0.4 : 0;
-  g.position.y = -rollDip;
+  // A roll ARCS. It used to be lowered by 0.4 as well as rotated, and with a
+  // real pivot that put the body's lowest point well under the floor — which
+  // is what "the roll goes through the ground" was. It now rises slightly at
+  // the apex, like something leaving the floor and coming back to it.
+  const rollT = actor.state === STATE.ROLL ? clamp(actor.stateT / rollDur, 0, 1) : 0;
+  const hop = actor.state === STATE.ROLL
+    ? Math.sin(Math.PI * rollT) * (actor.backstep ? 0.18 : 0.26) : 0;
+  g.position.y = hop;
+
+  // Whatever the pose does, nothing may finish below the floor. A clamp here
+  // is cheap and makes every future animation safe by default rather than by
+  // each one remembering to be.
+  if (g.position.y < 0) g.position.y = 0;
 
   // DEATH. It used to tip over as a rigid board in a single frame. Now it
   // buckles: the legs go, the body folds forward, and it settles — over most

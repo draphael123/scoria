@@ -567,6 +567,7 @@ export const WEAPON_ORDER = ['sword', 'greataxe', 'daggers', 'tome'];
    ENEMY — the Slagbound. Exactly two attacks: one fast, one slow overhead.
    ---------------------------------------------------------------------- */
 export const SLAGBOUND = {
+  gold: 40,
   name: 'Slagbound',
   rig: 'slagbound',
   hp: 180,
@@ -639,6 +640,7 @@ export const SLAGBOUND = {
    Slagbound, so the token changes hands two or three times as fast.
    ---------------------------------------------------------------------- */
 export const CINDERBONE = {
+  gold: 12,
   name: 'Cinderbone',
   rig: 'cinderbone',
   hp: 55,
@@ -666,8 +668,8 @@ export const CINDERBONE = {
 
   // A third of the Slagbound's hesitation. This is the crowd's whole pressure
   // budget: the token cycles fast, so the clearing is never quiet for long.
-  hesitateMin: 0.22,
-  hesitateMax: 0.60,
+  hesitateMin: 0.34,
+  hesitateMax: 0.82,
   recoverIdle: 0.12,
 
   attacks: {
@@ -706,6 +708,7 @@ export const CINDERBONE = {
    across ranged and melee alike: the aim line is a telegraph like any other.
    ---------------------------------------------------------------------- */
 export const BOLTBONE = {
+  gold: 16,
   name: 'Boltbone',
   rig: 'boltbone',
   hp: 42,
@@ -773,6 +776,7 @@ export const BOLTBONE = {
    you to leave a space. Three enemies, three different meanings of "move".
    ---------------------------------------------------------------------- */
 export const KILNWARDEN = {
+  gold: 30,
   name: 'Kilnwarden',
   rig: 'kilnwarden',
   hp: 74,
@@ -840,6 +844,7 @@ export const KILNWARDEN = {
    else needed doing. Both break its guard outright.
    ---------------------------------------------------------------------- */
 export const SKIMMER = {
+  gold: 46,
   name: 'Skimmer',
   rig: 'skimmer',
   hp: 150,
@@ -915,6 +920,7 @@ export const SKIMMER = {
    Against the tome it does the opposite and the same: it drives HEAT UP.
    ---------------------------------------------------------------------- */
 export const BLACKDAMP = {
+  gold: 26,
   name: 'Blackdamp',
   rig: 'blackdamp',
   hp: 86,
@@ -988,6 +994,7 @@ export const BLACKDAMP = {
    the guarantee the whole crowd design rests on, and no enemy is worth that.
    ---------------------------------------------------------------------- */
 export const GAFFER = {
+  gold: 62,
   name: 'The Gaffer',
   rig: 'gaffer',
   hp: 120,
@@ -1141,8 +1148,11 @@ export const ENCOUNTERS = {
     hpMul: 1.0,
     // A ring, so you arrive already surrounded and the first decision of the
     // fight is which way to break rather than which one to hit.
-    spawn: [[0, -5.2], [-4.6, -2.4], [4.6, -2.4],
-            [-3.4, 2.6, null, { at: 6.5 }], [3.4, 2.6, null, { at: 10.0 }]],
+    // Four, not five, and the last two are still on a timer. This is the
+    // first crowd the player ever meets and it was teaching the lesson by
+    // killing them rather than by making them move.
+    spawn: [[0, -5.2], [-4.6, -2.4],
+            [-3.4, 2.6, null, { at: 7.0 }], [3.4, 2.6, null, { at: 12.0 }]],
   },
   yard: {
     id: 'yard', name: 'The Long Yard', short: 'BOLTS',
@@ -1155,12 +1165,12 @@ export const ENCOUNTERS = {
     // archers cannot shoot through them.
     rocks: 8,
     // The archers are placed DEEP and apart, so no single break gets you both.
-    spawn: [[-2.6, -3.0], [2.6, -3.0], [0, 3.4],
-            [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone'],
-            // The Gaffer stands behind its own archers. Reaching it means
-            // crossing the yard under two aim lines, which is the price of
-            // turning the room's cadence back down.
-            [0, -9.4, 'gaffer']],
+    // Two archers and two pickers. The Gaffer used to stand behind them,
+    // which meant the room that INTRODUCES range also had the thing that
+    // makes everything commit faster — two new ideas at once, and the
+    // ordering rule says one. It has moved to the casting hall.
+    spawn: [[-2.6, -3.0], [2.6, -3.0],
+            [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone']],
   },
   gallery: {
     id: 'gallery', name: 'The Lower Gallery', short: 'DAMP',
@@ -1171,7 +1181,7 @@ export const ENCOUNTERS = {
     hpMul: 1.0,
     rocks: 7,
     spawn: [[0, -4.2, 'blackdamp'], [-4.8, -1.6, 'blackdamp'],
-            [-2.8, 2.6, null, { at: 5.0 }], [2.8, 2.6, null, { at: 9.0 }],
+            [-2.8, 2.6, null, { at: 6.0 }],
             [5.0, -1.6, null, { atRemaining: 2 }]],
   },
   kiln: {
@@ -1183,7 +1193,7 @@ export const ENCOUNTERS = {
     hpMul: 1.0,
     spawn: [[0, -4.4, 'slagbound'],
             [-5.8, -4.0, 'kilnwarden'], [5.8, -4.0, 'kilnwarden'],
-            [-3.2, 1.8], [3.2, 1.8]],
+            [-3.2, 1.8, null, { atRemaining: 2 }]],
   },
   casting: {
     id: 'casting', name: 'The Casting Hall', short: 'PLATE',
@@ -1193,8 +1203,10 @@ export const ENCOUNTERS = {
     foe: 'cinderbone', theme: 'kiln',
     hpMul: 1.0,
     rocks: 6,
+    // The finale keeps five, and it is the only room that gets the Gaffer:
+    // everything the run has taught you, at once, with the tempo turned up.
     spawn: [[0, -3.6, 'skimmer'], [0, -9.0, 'gaffer'],
-            [-5.4, -1.0, 'blackdamp', { at: 7.0 }],
+            [-5.4, -1.0, 'blackdamp', { at: 8.0 }],
             [4.6, 1.4, null, { atRemaining: 3 }],
             [-4.2, 3.0, null, { atRemaining: 2 }]],
   },
@@ -1320,6 +1332,124 @@ ZONES.town.solids = [
   { x: -2.0, z: 12.4, r: 0.5 },         // gate posts
   { x: 2.0, z: 12.4, r: 0.5 },
 ];
+
+
+/* -------------------------------------------------------------------------
+   THE RUN — gold, and what the iron remembers.
+
+   Boons are not upgrades bolted to a character. They are what the WEAPON has
+   picked up on this run, which is the premise stated as a system: iron that
+   holds a life holds what you do with it too. That also makes them the
+   playable, temporary rehearsal of permanent mastery — if a boon does not
+   feel good for one run, it will not feel good forever, and this is the cheap
+   place to find that out.
+
+   Every boon is a MOD written into one flat table the game reads at defined
+   points. Declarative on purpose: a boon that can run arbitrary code is a boon
+   nobody can reason about, and the interactions are the whole appeal.
+
+   `when` gates a boon to a build. A Stoker should not be offered a shield
+   memory, and offering three things you cannot use is worse than offering one
+   good one.
+   ---------------------------------------------------------------------- */
+export const BOON_MODS = {
+  // Every field here is read in exactly one place. If you add one, add the
+  // read too, or it is a lie printed on a card.
+  damageMul: 1,          // all damage you deal
+  poiseMul: 1,           // poise damage you deal
+  comboMul: 1,           // extra on a COMBO finisher specifically
+  firstHitMul: 1,        // against a target still on full health
+  lowHpMul: 1,           // while you are under a third
+  staminaFlat: 0,        // added to the pool
+  regenFlat: 0,          // added to the per-second return
+  heatDecayFlat: 0,      // the tome only
+  iframeFlat: 0,         // seconds added to the roll's invulnerable window
+  rollMul: 1,            // roll distance
+  moveMul: 1,
+  knockMul: 1,
+  bleedFlat: 0,          // extra stacks per landing hit
+  offhandCostMul: 1,
+  abilityCostMul: 1,
+  guardAbsorbFlat: 0,
+  armorPenaltyOff: 0,    // 1 removes the greataxe's +20% taken while armoured
+  healOnStagger: 0,
+  healOnClear: 0,
+  goldMul: 1,
+};
+
+export const BOONS = [
+  // --- universal --------------------------------------------------------
+  { id: 'whet', name: 'Whetstone Memory', tier: 1,
+    text: 'It remembers being sharpened. +12% damage.',
+    mods: { damageMul: 1.12 } },
+  { id: 'shift', name: 'The Long Shift', tier: 1,
+    text: 'Twelve hours was normal. +18 stamina.',
+    mods: { staminaFlat: 18 } },
+  { id: 'wind', name: 'Second Wind', tier: 1,
+    text: 'They worked through it. +9 stamina a second.',
+    mods: { regenFlat: 9 } },
+  { id: 'cold', name: 'Cold Iron', tier: 2,
+    text: 'It has been dead a long time. +0.05s of i-frames.',
+    mods: { iframeFlat: 0.05 } },
+  { id: 'step', name: "The Picker's Step", tier: 1,
+    text: 'You learn to move on a slag floor. +16% roll, +6% walk.',
+    mods: { rollMul: 1.16, moveMul: 1.06 } },
+  { id: 'hammer', name: 'Hammer Memory', tier: 2,
+    text: 'It was struck ten thousand times. +28% poise damage.',
+    mods: { poiseMul: 1.28 } },
+  { id: 'quench', name: 'Quench', tier: 2,
+    text: 'Breaking something gives it back. Heal 12 on a stagger.',
+    mods: { healOnStagger: 12 } },
+  { id: 'cut', name: "The Foreman's Cut", tier: 2,
+    text: 'He only ever needed the first one. +22% on a target at full health.',
+    mods: { firstHitMul: 1.22 } },
+  { id: 'last', name: 'Last Shift', tier: 3,
+    text: 'The end of one is when the work got done. +35% below a third health.',
+    mods: { lowHpMul: 1.35 } },
+  { id: 'tally', name: 'Tally', tier: 1,
+    text: 'Somebody was counting. +45% gold.',
+    mods: { goldMul: 1.45 } },
+  { id: 'grip', name: "Dead Man's Grip", tier: 2,
+    text: 'The off hand never let go. Off-hand costs 40% less.',
+    mods: { offhandCostMul: 0.6 } },
+  { id: 'signing', name: 'The Signing', tier: 2,
+    text: 'A name off the roll is a debt paid. Heal 22 on clearing a room.',
+    mods: { healOnClear: 22 } },
+  { id: 'shove', name: 'Shove', tier: 1,
+    text: 'Move or be moved. +55% knockback.',
+    mods: { knockMul: 1.55 } },
+  { id: 'third', name: 'The Third Blow', tier: 3,
+    text: 'It was always the third that did it. +40% on a combo finisher.',
+    mods: { comboMul: 1.40 },
+    when: (w) => (w.combos || []).length > 0 },
+
+  // --- weapon-gated -----------------------------------------------------
+  { id: 'shield', name: 'Shield Memory', tier: 2,
+    text: 'It was held up for a long time. Guard absorbs +12%, bash costs 30% less.',
+    mods: { guardAbsorbFlat: 0.12, abilityCostMul: 0.7 },
+    when: (w) => w.offhand === 'guard' },
+  { id: 'hanging', name: 'The Hanging', tier: 3,
+    text: 'Two men hung it and it never flinched. Hyperarmour costs you nothing.',
+    mods: { armorPenaltyOff: 1 },
+    when: (w) => (w.armorDamageMul || 1) > 1 },
+  { id: 'flense', name: 'Flensing Memory', tier: 2,
+    text: 'She was quick and she was thorough. +1 bleed a hit.',
+    mods: { bleedFlat: 1 },
+    when: (w) => (w.light || []).some((a) => a.bleed) },
+  { id: 'banked', name: 'Banked Heat', tier: 2,
+    text: 'A good bellows-master never let it build. Heat sheds 70% faster.',
+    mods: { heatDecayFlat: 11 },
+    when: (w) => w.resource === 'heat' },
+];
+
+export const RUN = {
+  offer: 3,             // cards on the table after a room
+  // Gold is deliberately not a pickup. Coins on the floor after a fight turn
+  // the end of every room into a chore, and this game's rooms already end with
+  // a walk to the road.
+  goldFloor: 0.85,      // random spread on a foe's drop
+  goldCeil: 1.25,
+};
 
 export const DEFAULT_ENCOUNTER = 'duel';
 

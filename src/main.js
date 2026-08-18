@@ -267,6 +267,50 @@ buildTrainSwap();
    at. The prompt appears when you are near, brightens when you are actually
    in range, and the action it fires is named in config rather than here.
    ------------------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------
+   THE ROOM REWARD. Presented when a room is cleared, and the sim is held until
+   a card is taken — the Game already refuses to open the road while an offer
+   is outstanding, so this is the only thing that can release it.
+   ------------------------------------------------------------------------ */
+const offerEl = document.getElementById('offer');
+const offerCards = document.getElementById('offerCards');
+const purseGold = document.getElementById('purseGold');
+const purseBoons = document.getElementById('purseBoons');
+
+function showOffer() {
+  const list = game.offer || [];
+  offerCards.innerHTML = '';
+  document.getElementById('offerGold').textContent = String(game.run.gold);
+  for (const b of list) {
+    const card = document.createElement('button');
+    card.className = 'of-card';
+    const tier = ['', 'COMMON', 'UNCOMMON', 'RARE'][b.tier] || '';
+    card.innerHTML =
+      `<div class="of-tier">${tier}</div>` +
+      `<div class="of-name"></div>` +
+      `<div class="of-text"></div>` +
+      `<div class="of-mods"></div>`;
+    card.querySelector('.of-name').textContent = b.name;
+    card.querySelector('.of-text').textContent = b.text;
+    // The numbers spelled out under the prose, because a boon you cannot
+    // compare is a boon you pick at random.
+    card.querySelector('.of-mods').textContent =
+      Object.entries(b.mods).map(([k, v]) =>
+        `${k} ${v > 0 && Number.isInteger(v * 100) && v < 1.9 && v !== 1 ? '\u00d7' + v : (v > 0 ? '+' + v : v)}`)
+        .join('   ');
+    card.onclick = () => {
+      game.takeBoon(b);
+      offerEl.classList.remove('on');
+      audio.uiClick();
+      cui.flash(b.name.toUpperCase(), 'good');
+      syncWeaponUI();
+    };
+    offerCards.appendChild(card);
+  }
+  offerEl.classList.add('on');
+  audio.victory();
+}
+
 const promptEl = document.getElementById('prompt');
 const promptText = document.getElementById('promptText');
 const placard = document.getElementById('placard');
@@ -437,6 +481,7 @@ let lastRefusal = -1;
 let exitAnnounced = false;
 let lastRoom = 0;
 let previewT = 0;
+let deathHandled = false;
 
 function frame(now) {
   const dtReal = Math.min((now - last) / 1000, 0.25);
@@ -474,6 +519,25 @@ function frame(now) {
     if (input.takeEdge('stepOne')) stepOnce = true;
     if (input.takeEdge('reset')) { game.reset(); resetHudSmoothing(); }
   }
+
+  // Dying ends the run. You walk back into Scoria with half of what you were
+  // carrying — enough that a bad run still moved you forward, little enough
+  // that it was worth not dying.
+  if (started && game.outcome === 'lose' && !game.zone && !deathHandled) {
+    deathHandled = true;
+    setTimeout(() => {
+      const kept = Math.floor((game.run.gold || 0) * 0.5);
+      const lost = (game.run.gold || 0) - kept;
+      const banked = (game.bank || 0) + kept;
+      game.newRun();
+      game.bank = banked;
+      game.run.gold = 0;
+      enterZone('town');
+      cui.flash(`YOU KEPT ${kept} OF ${kept + lost} GOLD`, 'bad');
+      deathHandled = false;
+    }, 2600);
+  }
+  if (game.outcome !== 'lose') deathHandled = false;
 
   if (started && (!paused || stepOnce)) {
     game.step(stepOnce ? 1 / 120 : dtReal, input, basis, onEvents);
@@ -555,6 +619,17 @@ function frame(now) {
   if (game.player.comboFlash) {
     cui.flash(game.player.comboFlash, 'good');
     game.player.comboFlash = null;
+  }
+
+  // The offer, raised by the Game the moment a room reports clear.
+  const wantOffer = started && !!game.offer && !menu.open;
+  if (wantOffer && !offerEl.classList.contains('on')) showOffer();
+  if (!game.offer && offerEl.classList.contains('on')) offerEl.classList.remove('on');
+
+  if (purseGold && game.run) {
+    purseGold.textContent = String(game.run.gold);
+    purseBoons.textContent = game.run.boons.length
+      ? game.run.boons.length + (game.run.boons.length === 1 ? ' boon' : ' boons') : '';
   }
 
   // The way on. Announced once when it opens, because a column of light at

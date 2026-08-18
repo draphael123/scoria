@@ -1,5 +1,5 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { PLAYER, WEAPONS, BLEED, COMBO_WINDOW, SOFT } from './config.js';
+import { PLAYER, WEAPONS, BLEED, COMBO_WINDOW, SOFT, BOON_MODS } from './config.js';
 import { derive, defaultBuild } from './character.js';
 import { clamp, damp, turnToward, angleDelta } from './util.js';
 
@@ -33,6 +33,10 @@ export class Player extends Actor {
     // For a heat weapon `stamina` holds HEADROOM rather than energy, and the
     // pool is a flat 100 — endurance buys stamina, and heat is not stamina.
     this.maxStamina = this.weapon.resource === 'heat' ? PLAYER.heatMax : this.derived.stamina;
+    // Boons live on the RUN, not on the player, because the player is rebuilt
+    // at every doorway. This is a reference to that table, not a copy.
+    this.mods = opts.mods || { ...BOON_MODS };
+    this.maxStamina += this.mods.staminaFlat;
     this.stamina = this.maxStamina;   // full headroom == stone cold
     this.staminaDelay = 0;
     this.staminaLock = 0;
@@ -79,7 +83,12 @@ export class Player extends Actor {
   get heat() { return PLAYER.heatMax - this.stamina; }
 
   get guard() {
-    return this.state === STATE.GUARD ? this.weapon.guard : null;
+    if (this.state !== STATE.GUARD) return null;
+    const g = this.weapon.guard;
+    if (!this.mods.guardAbsorbFlat) return g;
+    // Returned as a copy: the weapon table is shared and must never be
+    // written to by a run.
+    return { ...g, absorb: Math.min(0.95, g.absorb + this.mods.guardAbsorbFlat) };
   }
 
   /* ---- the roll, as this weapon carries it ------------------------------
@@ -102,7 +111,31 @@ export class Player extends Actor {
     const p = this.phase;
     return p === PHASE.WINDUP || p === PHASE.ACTIVE;
   }
-  get armorDamageMul() { return this.weapon.armorDamageMul ?? 1; }
+  /* +20% taken while armoured, unless a boon has bought that off. */
+  get armorDamageMul() {
+    if (this.mods.armorPenaltyOff) return 1;
+    return this.weapon.armorDamageMul ?? 1;
+  }
+
+  /* Recomputed when the run's mods change mid-fight — a boon that raises the
+     pool should hand you the difference immediately rather than leaving you
+     capped at the old maximum with a bar that says otherwise. */
+  refreshDerived() {
+    const base = this.weapon.resource === 'heat' ? PLAYER.heatMax : this.derived.stamina;
+    const wanted = base + this.mods.staminaFlat;
+    const gained = wanted - this.maxStamina;
+    this.maxStamina = wanted;
+    if (gained > 0) this.stamina = Math.min(this.maxStamina, this.stamina + gained);
+  }
+
+  /* Damage is the one number enough boons touch that it has to be derived
+     rather than stored — the low-health bonus changes as you take hits. */
+  get damageMul() {
+    let d = this.derived.damageMul * this.mods.damageMul;
+    if (this.hp / this.maxHp < 0.33) d *= this.mods.lowHpMul;
+    return d;
+  }
+  set damageMul(_) { /* derived; the Actor constructor's write is ignored */ }
 
   /* Every attack the player can throw funnels through here — light, heavy,
      combo, off-hand and ability alike — so the soft target is acquired in ONE
@@ -175,7 +208,9 @@ export class Player extends Actor {
     if (!regenBlocked) {
       // Heat bleeds off at a flat rate that endurance does NOT improve — the
       // tome is not a weapon you can build your way out of managing.
-      const rate = this.isHeat ? PLAYER.heatDecay : this.derived.staminaRegen;
+      const rate = this.isHeat
+        ? PLAYER.heatDecay + this.mods.heatDecayFlat
+        : this.derived.staminaRegen + this.mods.regenFlat;
       this.stamina = Math.min(this.maxStamina, this.stamina + rate * dt);
     }
 
@@ -204,7 +239,8 @@ export class Player extends Actor {
       // heavier roll is longer, so more of it is spent NOT invulnerable —
       // that tail is the weight, and it is where a greataxe gets punished.
       this.iframeActive = this.stateT >= R.iframeStart &&
-                          this.stateT <= R.iframeStart + this.derived.iframeWindow;
+                          this.stateT <= R.iframeStart + this.derived.iframeWindow
+                                       + this.mods.iframeFlat;
 
       // Speed curve: fast out of the gate, dead stop at the end.
       const speed = (this.rollDistance / dur) * 2.1 * Math.max(0, 1 - t) ** 0.7;
@@ -320,12 +356,13 @@ export class Player extends Actor {
     const act = OFFHAND_ACTION[this.offhand];
     if (act && input.take('offhand')) {
       const a = this.weapon[act];
-      if (a && this.canSpend(Math.max(0, a.stamina))) {
+      const cost = a ? a.stamina * (a.stamina > 0 ? this.mods.offhandCostMul : 1) : 0;
+      if (a && this.canSpend(Math.max(0, cost))) {
         // VENT costs negative — it hands the bar back — and its damage scales
         // with how much heat it just got rid of, so a full bar is a real hit
         // and a nearly-cold one is a nudge.
         if (this.offhand === 'vent') this.ventPower = PLAYER.heatMax - this.stamina;
-        this.spendStamina(a.stamina);
+        this.spendStamina(cost);
         this.startAttack(a, a.id);
         this.lastAction = a.id;
         return;
@@ -339,8 +376,9 @@ export class Player extends Actor {
     for (const ab of (this.weapon.abilities || [])) {
       if (!input.peek('ability' + ab.key)) continue;
       input.take('ability' + ab.key);
-      if (this.canSpend(ab.atk.stamina)) {
-        this.spendStamina(ab.atk.stamina);
+      const acost = ab.atk.stamina * this.mods.abilityCostMul;
+      if (this.canSpend(acost)) {
+        this.spendStamina(acost);
         this.startAttack(ab.atk, ab.name);
         this.lastAction = ab.name;
         return;
@@ -383,7 +421,7 @@ export class Player extends Actor {
 
     // --- speed -----------------------------------------------------------
     let speed = locked ? PLAYER.lockSpeed : PLAYER.moveSpeed;
-    speed *= this.weapon.moveScale * this.derived.moveScale;
+    speed *= this.weapon.moveScale * this.derived.moveScale * this.mods.moveMul;
     if (guarding) speed *= this.weapon.guard.moveScale;
     if (this.staminaLock > 0) speed *= 0.55;   // exhausted shuffle
 
@@ -402,7 +440,8 @@ export class Player extends Actor {
     this.comboIndex = 0;
     if (hasInput) {
       this.rollDir = Math.atan2(wantX, wantZ);
-      this.rollDistance = this.derived.rollDistance * this.rollScale.distance;
+      this.rollDistance = this.derived.rollDistance * this.rollScale.distance
+                        * this.mods.rollMul;
     } else {
       // No direction held: backstep. Away from the target if locked on.
       this.rollDir = locked ? this.angleTo(this.lockTarget) + Math.PI : this.facing + Math.PI;

@@ -159,6 +159,7 @@ export class Actor {
   }
 
   kill() {
+    if (this.dead) return;
     this.dead = true;
     this.state = STATE.DEAD;
     this.atk = null;

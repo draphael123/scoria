@@ -3,7 +3,8 @@ import { Foe } from './enemy.js';
 import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
 import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT, RISE,
-         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT, ZONES, INTERACT } from './config.js';
+         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT, ZONES, INTERACT,
+         BOONS, BOON_MODS, RUN } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
@@ -26,6 +27,71 @@ export class Game {
   }
 
   get encounter() { return ENCOUNTERS[this.encounterId] || ENCOUNTERS[DEFAULT_ENCOUNTER]; }
+
+
+  /* ---- the run ----------------------------------------------------------
+     Gold and boons live HERE rather than on the player, because the player is
+     rebuilt on every room change (the weapon is resolved in its constructor)
+     and a run that forgot itself at every doorway would not be a run.
+     ------------------------------------------------------------------- */
+  newRun() {
+    // The BANK is what has survived past runs. The run's purse is separate,
+    // and dying only hands half of it over — see main.js.
+    if (this.bank === undefined) this.bank = 0;
+    this.run = {
+      gold: 0,
+      boons: [],
+      mods: { ...BOON_MODS },
+      roomsCleared: 0,
+      kills: 0,
+    };
+    this.offer = null;
+    return this.run;
+  }
+
+  /* Three cards, drawn without replacement, filtered to what this build can
+     actually use — offering a Stoker a shield memory is worse than offering
+     one good thing, because it reads as the game not knowing what you hold. */
+  rollOffer() {
+    const w = this.player.weapon;
+    const taken = new Set(this.run.boons.map((b) => b.id));
+    const pool = BOONS.filter((b) => !taken.has(b.id) && (!b.when || b.when(w)));
+    const out = [];
+    // Weighted by tier: a run should mostly be small gains with the
+    // occasional one that changes how you play.
+    const weight = (b) => (b.tier === 1 ? 5 : b.tier === 2 ? 3 : 1);
+    const bag = [];
+    for (const b of pool) for (let i = 0; i < weight(b); i++) bag.push(b);
+    while (out.length < RUN.offer && bag.length) {
+      const pick = bag[(this.rng() * bag.length) | 0];
+      if (out.includes(pick)) {
+        // Drop every copy of it and try again, so a heavy-weighted boon
+        // cannot deadlock the draw once it has been chosen.
+        for (let i = bag.length - 1; i >= 0; i--) if (bag[i] === pick) bag.splice(i, 1);
+        continue;
+      }
+      out.push(pick);
+      for (let i = bag.length - 1; i >= 0; i--) if (bag[i] === pick) bag.splice(i, 1);
+    }
+    this.offer = out;
+    return out;
+  }
+
+  takeBoon(b) {
+    if (!b) return;
+    this.run.boons.push(b);
+    for (const [k, v] of Object.entries(b.mods || {})) {
+      // Multipliers compose, flats accumulate. Deciding that by the DEFAULT
+      // value means a new mod needs no special-casing here.
+      if (BOON_MODS[k] === 1) this.run.mods[k] *= v;
+      else this.run.mods[k] += v;
+    }
+    this.offer = null;
+    this.player.mods = this.run.mods;
+    // The pool can grow mid-run, so top the bar up by whatever was added
+    // rather than leaving the player at the old maximum.
+    this.player.refreshDerived();
+  }
 
   /* ---- zones ------------------------------------------------------------ */
   enterZone(id) {
@@ -96,10 +162,13 @@ export class Game {
     this.events = [];
     this.log = [];
 
+    if (!this.run) this.newRun();
+
     this.player = new Player({
       x: 0, z: 5.5, facing: Math.PI,
       build: this.build,
       weapon: this.build?.weapon,
+      mods: this.run.mods,
     });
 
     // A ZONE is a place, not a fight: nobody spawns, nothing can be won or
@@ -196,6 +265,11 @@ export class Game {
     this.aggroCd = 0;
 
     this.shots = [];
+    this._clearPaid = false;
+    // Latched at spawn, and only true for a room that actually had a fight in
+    // it. Recomputed rather than trusted, because the tutorial and the zones
+    // both mutate the enemy list after reset().
+    this._hadEnemies = false;
     this.outcome = null;   // 'win' | 'lose' | null
     this.outcomeT = 0;
     this.stats = { swings: 0, hitsDealt: 0, hitsTaken: 0, guarded: 0, rolls: 0,
@@ -415,6 +489,7 @@ export class Game {
     }
 
     this._validateLock();
+    if (this.enemies.length || (this.pending && this.pending.length)) this._hadEnemies = true;
     this._releaseWaves(dt);
     this._updateAggro(dt);
 
@@ -439,6 +514,19 @@ export class Game {
     }
     if (winding > this.stats.maxConcurrentWindup) this.stats.maxConcurrentWindup = winding;
 
+    // Gold is banked here rather than in kill(), because kill() is on Actor
+    // and the run is on the Game — and a body can die down several different
+    // paths (a blow, a bleed tick, a shot) that all end up back in this loop.
+    for (const e of this.enemies) {
+      if (e.dead && !e.paid) {
+        e.paid = true;
+        const base = (e.def && e.def.gold) || 0;
+        const spread = RUN.goldFloor + this.rng() * (RUN.goldCeil - RUN.goldFloor);
+        this.run.gold += Math.round(base * spread * this.run.mods.goldMul);
+        this.run.kills++;
+      }
+    }
+
     this._integrate(dt);
     this._stepShots(dt);
     for (const a of this.actors) tickBleed(a, dt, this.events);
@@ -454,6 +542,23 @@ export class Game {
       // A cleared room is only a WIN if it was the last one. Otherwise the
       // tree line opens and the fight is not over, it has moved.
       this.roomDone = true;
+      // A room that never had anybody in it is not a room you CLEARED. The
+      // tutorial empties the enemy list for a frame before spawning its
+      // effigy, and without this guard that frame raised an offer nobody could
+      // answer and the offer gate then halted the sim forever.
+      if (!this._hadEnemies) { this.exitOpen = true; return; }
+      // The room's reward, offered once. Held until the player picks, and the
+      // road does not open until they have — a choice you can walk away from
+      // is not a choice.
+      if (!this._clearPaid) {
+        this._clearPaid = true;
+        this.run.roomsCleared++;
+        const heal = this.run.mods.healOnClear;
+        if (heal) this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
+        this.rollOffer();
+        this.events.push({ type: 'offer', result: 'offer' });
+      }
+      if (this.offer) { this.exitT = 0; return; }
       if (this.isLastRoom) {
         if (!this.outcome) { this.outcome = 'win'; this.outcomeT = 0; }
       } else {
