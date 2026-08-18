@@ -53,18 +53,19 @@ export class Menu {
     title.appendChild(el('div', 'wordmark', 'SCORIA'));
     title.appendChild(el('div', 'tagline', 'the armoury rack is your character sheet'));
     title.appendChild(el('div', 'flavour',
-      'The forge-hall of Scoria burned for four hundred years and has been cold ' +
-      'for one. What still moves in it was not always a monster.<br><br>' +
-      'You came for the rack, and the rack is behind the Slagbound.'));
+      'The works at Scoria burned for four hundred years. What ran out of them ' +
+      'went into the ground, and the wood died standing.<br><br>' +
+      'The rack is still out there, past the burn circle. So is the thing ' +
+      'that used to tend the fire.'));
 
-    const beginBtn = el('button', 'btn primary', 'ENTER THE HALL');
+    const beginBtn = el('button', 'btn primary', 'ENTER THE CLEARING');
     const setBtn = el('button', 'btn', 'SETTINGS');
     const row = el('div', 'btn-row');
     row.append(beginBtn, setBtn);
     title.appendChild(row);
 
     title.appendChild(el('div', 'slice-note',
-      'Slice 0 &middot; one room, one blade, one Slagbound &middot; ' +
+      'Slice 0 &middot; one clearing, one blade, one Slagbound &middot; ' +
       'this build exists to answer whether the duel feels right'));
 
     beginBtn.onclick = () => { this.hide(); this.h.onBegin?.(); };

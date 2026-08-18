@@ -1,6 +1,6 @@
 # SCORIA
 
-An isometric souls-like action roguelike set in a dead forge-city.
+An isometric souls-like action roguelike set in a forest the forge killed.
 
 **Hook — the armoury rack is your character sheet.** Class is decided by weapon.
 Each weapon levels permanently across every run, so starting a run means walking
@@ -12,7 +12,7 @@ to the rack and choosing which mastery to carry in.
 
 ## Current state — Slice 0
 
-The combat-feel vertical slice. One room, one blade, one Slagbound. Everything
+The combat-feel vertical slice. One clearing, one blade, one Slagbound. Everything
 downstream (the run, the town, the trees) waits on the answer to a single
 question: **is a duel in an isometric camera actually fun?**
 
@@ -30,9 +30,14 @@ Shipped in this slice:
 
 Around the fight:
 
-- A fallen forge-hall built from procedural canvas textures — no binary assets
-- Ambient life: drifting embers, braziers flickering on layered sines, a
-  bloomery still burning, chains swaying
+- A dead forest built from procedural canvas textures — no binary assets. The
+  trees are grown by recursive branching, and every branch segment in the wood
+  is one instance of a single cylinder, so it all costs one draw call
+- Ambient life: drifting ash and embers, guttering fires on layered sines, the
+  ruined furnace still burning
+- Weapon trails, contact shadows, hit flashes and scorch decals
+- Floating damage typed by kind, a threat arc pointing at whatever is winding
+  up at you, combo pips, and a roll-cost ghost on the stamina bar
 - Tall props fade out when they come between the camera and the duel, because
   a fixed isometric camera gives the player no way to look around them
 - Title screen, pause menu and persisted settings (volumes, screen shake,
