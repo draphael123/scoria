@@ -16,7 +16,11 @@ export class Hud {
     this.foePoise = $('foePoise');
     this.lockPip = $('lockPip');
     this.banner = $('banner');
+    this.bannerText = $('bannerText');
+    this.bannerHint = $('bannerHint');
     this.flash = $('flash');
+    this.stGhost = $('stGhost');
+    this.lowhp = $('lowhp');
     this._hpChip = 1;
     this._foeChip = 1;
     this._flash = 0;
@@ -42,10 +46,23 @@ export class Hud {
     this._hpChip += (hp - this._hpChip) * Math.min(1, dt * 3.2);
     this.hpChip.style.width = (Math.max(this._hpChip, hp) * 100) + '%';
 
+    // Low-health danger vignette. A number on a bar is easy to miss mid-fight.
+    this.lowhp.classList.toggle('on', hp > 0 && hp < 0.28 && !p.dead);
+
     const st = clamp(p.stamina / p.maxStamina, 0, 1);
     this.stFill.style.width = (st * 100) + '%';
     this.stBar.classList.toggle('locked', p.staminaLock > 0);
     this.stBar.classList.toggle('guarding', p.state === STATE.GUARD);
+
+    // Ghost the cost of a ROLL on the stamina bar. Of everything stamina buys,
+    // the dodge is the one whose affordability you must know without looking.
+    const rollCost = PLAYER.roll.stamina / p.maxStamina;
+    const canRoll = st >= rollCost && p.staminaLock <= 0;
+    this.stBar.classList.toggle('canroll', canRoll);
+    if (canRoll) {
+      this.stGhost.style.left = ((st - rollCost) * 100) + '%';
+      this.stGhost.style.width = (rollCost * 100) + '%';
+    }
 
     if (e && !e.dead) {
       this.foe.classList.add('on');
@@ -67,7 +84,10 @@ export class Hud {
     }
 
     if (game.outcome) {
-      this.banner.textContent = game.outcome === 'win' ? 'SLAGBOUND FELLED' : 'YOU DIED';
+      this.bannerText.textContent = game.outcome === 'win' ? 'SLAGBOUND FELLED' : 'YOU DIED';
+      this.bannerHint.textContent = game.outcome === 'win'
+        ? 'the rack is yours — R to duel again'
+        : 'press R to rise';
       this.banner.className = 'banner on ' + game.outcome;
     } else {
       this.banner.className = 'banner';

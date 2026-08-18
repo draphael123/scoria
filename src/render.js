@@ -3,7 +3,8 @@ import { CAMERA } from './config.js';
 import { STATE, PHASE } from './actor.js';
 import { clamp, damp, lerp } from './util.js';
 import { buildTextures } from './textures.js';
-import { Hall } from './props.js';
+import { Forest } from './props.js';
+import { Fx } from './fx.js';
 
 const C = {
   steel:  0xc6ced6,
@@ -229,11 +230,14 @@ export class View {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x080a0d);
+    this.scene.background = new THREE.Color(0x06080b);
     // Fog is distance-from-CAMERA. An ortho camera parked 34u out sits inside
     // any near band, so this must start well beyond that or everything in the
     // scene fogs by the same amount and the image flattens to mud.
-    this.scene.fog = new THREE.Fog(0x0a0c10, 52, 112);
+    // Distance-from-CAMERA, and the ortho camera sits 34u out, so this must
+    // start well beyond that or every object fogs equally and the image
+    // flattens to mud. Tight enough here that the wood fades into darkness.
+    this.scene.fog = new THREE.Fog(0x0b0e13, 44, 96);
 
     this.camDir = new THREE.Vector3(...CAMERA.dir).normalize();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 240);
@@ -253,7 +257,8 @@ export class View {
     this.scene.environmentIntensity = 0.75;
     pmrem.dispose();
     this.tex.env.dispose();
-    this.hall = new Hall(this.scene, this.tex, this.quality);
+    this.forest = new Forest(this.scene, this.tex, this.quality);
+    this.fx = new Fx(this.scene, this.quality);
 
     this.rigs = new Map();
     this.telegraphs = new Map();
@@ -273,12 +278,12 @@ export class View {
 
   _buildLights() {
     // Cold from the open roof, warm bounce from the braziers below.
-    this.scene.add(new THREE.HemisphereLight(0x3d5674, 0x33200f, 0.95));
+    this.scene.add(new THREE.HemisphereLight(0x33465e, 0x241a12, 0.8));
 
     // Moonlight is the KEY, and keeping the key cold is the whole reason the
     // scene doesn't turn to brown soup — the braziers supply all the warmth.
-    const moon = new THREE.DirectionalLight(0xc4d6ec, 1.75);
-    moon.position.set(-11, 19, -14);
+    const moon = new THREE.DirectionalLight(0xbdd2ea, 1.9);
+    moon.position.set(-14, 20, -17);
     moon.castShadow = this.quality === 'high';
     if (moon.castShadow) {
       moon.shadow.mapSize.set(2048, 2048);
@@ -291,7 +296,7 @@ export class View {
     this.scene.add(moon);
     this.moon = moon;
 
-    const fill = new THREE.DirectionalLight(0xffb070, 0.7);
+    const fill = new THREE.DirectionalLight(0xff9c58, 0.5);
     fill.position.set(10, 7, 8);
     this.scene.add(fill);
   }
@@ -318,6 +323,8 @@ export class View {
       const tg = buildTelegraph();
       this.telegraphs.set(actor, tg);
       this.scene.add(tg.group);
+      rig.flash = 0;
+      this.fx.ensureActor(actor, isPlayer);
     }
     return rig;
   }
@@ -341,6 +348,7 @@ export class View {
         tg.outline.material.dispose(); tg.fill.material.dispose();
         this.telegraphs.delete(actor);
       }
+      this.fx.release(actor);
       const dbg = this._debugMeshes.get(actor);
       if (dbg) {
         this.debugGroup.remove(dbg.holder);
@@ -386,9 +394,20 @@ export class View {
     rig.pivot.rotation.x = swing;
     rig.body.rotation.x = rig.baseLean + lean;
 
+    // Contact shadow + weapon trail. The trail is not decoration: it is the
+    // only record of where the blade actually travelled during 90ms of active
+    // frames, which is exactly what a player needs to learn spacing.
+    this.fx.syncShadow(actor, rig);
+    this.fx.syncTrail(actor, rig,
+      actor.state === STATE.ATTACK && actor.atk && actor.phase === PHASE.ACTIVE);
+
     const rollDip = actor.state === STATE.ROLL
       ? Math.sin(Math.PI * clamp(actor.stateT / 0.6, 0, 1)) * 0.46 : 0;
     g.position.y = -rollDip;
+
+    // A white pop on the frame a blow lands. Without it a hit on a dark body
+    // is invisible unless you happen to be watching the health bar.
+    rig.flash = Math.max(0, (rig.flash || 0) - 0.09);
 
     if (isPlayer) {
       rig.shield.visible = actor.state === STATE.GUARD;
@@ -399,6 +418,10 @@ export class View {
         rig.mat.emissive.setHex(0xbfe4ff);
         rig.mat.emissiveIntensity = actor.guardFlash * 5;
       }
+      if (rig.flash > 0) {
+        rig.mat.emissive.setHex(0xffdddd);
+        rig.mat.emissiveIntensity = rig.flash * 3.2;
+      }
     } else {
       const st = actor.state === STATE.STAGGER;
       rig.mat.emissive.setHex(st ? 0xffb060 : 0x3a1004);
@@ -408,6 +431,10 @@ export class View {
       if (rig.core) {
         const w = actor.state === STATE.ATTACK ? 1 + actor.windupProgress * 2.6 : 1;
         rig.core.material.emissiveIntensity = 2.6 * w;
+      }
+      if (rig.flash > 0) {
+        rig.mat.emissive.setHex(0xffffff);
+        rig.mat.emissiveIntensity = 0.8 + rig.flash * 4.5;
       }
     }
 
@@ -531,10 +558,19 @@ export class View {
     rec.holder.rotation.y = actor.facing;
   }
 
+  /* Called when a blow connects, so the struck body pops white. */
+  flashActor(actor, amount = 1) {
+    const rig = this.rigs.get(actor);
+    if (rig) rig.flash = Math.min(1.4, amount);
+  }
+
+  scorch(x, z, scale) { this.fx.hitDecal(x, z, scale); }
+
   /* ---- world tick (set dressing only) ---------------------------------- */
   update(dt) {
-    this.hall.update(dt);
-    this.hall.fadeOccluders(this.camera, this.focus, dt);
+    this.forest.update(dt);
+    this.forest.fadeOccluders(this.camera, this.focus, dt);
+    this.fx.update(dt);
   }
 
   /* ---- camera ----------------------------------------------------------- */

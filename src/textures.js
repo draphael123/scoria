@@ -5,7 +5,7 @@ import * as THREE from '../vendor/three.module.js';
 
    NOTE: a CanvasTexture used as a COLOUR map must be flagged sRGB. Without it
    three treats the canvas as linear and the result renders washed out and far
-   too bright — a near-black stone wall ends up glowing. */
+   too bright — a near-black surface ends up glowing. */
 function makeTexture(size, draw, { repeat = 1, srgb = true } = {}) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
@@ -29,53 +29,92 @@ function grain(g, size, amount, alpha) {
   }
 }
 
-/* Flagstones — irregular slabs with mortar gaps and soot bloom. */
-export function flagstoneTexture() {
+/* Dead ground: ash over poisoned earth, with slag crust and fallen needles.
+   Deliberately desaturated so the ember telegraph is the only warm thing in
+   the frame that isn't a fire. */
+export function ashGroundTexture() {
   return makeTexture(512, (g, S) => {
-    g.fillStyle = '#1a1613';
+    g.fillStyle = '#2b2722';
     g.fillRect(0, 0, S, S);
 
-    const cols = 6;
-    const cell = S / cols;
-    for (let y = 0; y < cols; y++) {
-      const off = (y % 2) * cell * 0.5;
-      for (let x = -1; x <= cols; x++) {
-        const px = x * cell + off + 2 + rnd() * 3;
-        const py = y * cell + 2 + rnd() * 3;
-        const w = cell - 4 - rnd() * 5;
-        const h = cell - 4 - rnd() * 5;
-        const v = 44 + rnd() * 30;
-        g.fillStyle = `rgb(${v + 8},${v + 3},${v - 3})`;
-        g.beginPath();
-        g.moveTo(px + rnd() * 3, py + rnd() * 3);
-        g.lineTo(px + w - rnd() * 3, py + rnd() * 2);
-        g.lineTo(px + w - rnd() * 2, py + h - rnd() * 3);
-        g.lineTo(px + rnd() * 3, py + h - rnd() * 2);
-        g.closePath(); g.fill();
-
-        // worn highlight along the top edge of each slab
-        g.strokeStyle = `rgba(255,240,220,${0.03 + rnd() * 0.05})`;
-        g.lineWidth = 1.4;
-        g.beginPath(); g.moveTo(px + 2, py + 2); g.lineTo(px + w - 3, py + 2); g.stroke();
-      }
-    }
-    // soot and scorch, because this floor lived under a forge
-    for (let i = 0; i < 26; i++) {
-      const x = rnd() * S, y = rnd() * S, r = 18 + rnd() * 70;
+    // broad tonal drifts, so the ground isn't uniform noise
+    for (let i = 0; i < 40; i++) {
+      const x = rnd() * S, y = rnd() * S, r = 40 + rnd() * 130;
+      const v = 30 + rnd() * 28;
       const grd = g.createRadialGradient(x, y, 0, x, y, r);
-      grd.addColorStop(0, `rgba(10,7,5,${0.12 + rnd() * 0.2})`);
-      grd.addColorStop(1, 'rgba(10,7,5,0)');
+      grd.addColorStop(0, `rgba(${v + 12},${v + 8},${v},${0.16 + rnd() * 0.2})`);
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = grd;
       g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
     }
-    grain(g, S, 2200, 0.05);
-  }, { repeat: 9 });
+
+    // slag crust — vitrified black-green patches where the runoff cooled
+    for (let i = 0; i < 18; i++) {
+      const x = rnd() * S, y = rnd() * S, r = 16 + rnd() * 46;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, `rgba(14,17,14,${0.3 + rnd() * 0.3})`);
+      grd.addColorStop(0.7, 'rgba(18,20,17,.16)');
+      grd.addColorStop(1, 'rgba(18,20,17,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+
+    // dead needles and leaf litter
+    for (let i = 0; i < 900; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      const a = rnd() * Math.PI;
+      const l = 2 + rnd() * 8;
+      g.strokeStyle = `rgba(${70 + rnd() * 40},${58 + rnd() * 30},${40 + rnd() * 22},${0.1 + rnd() * 0.32})`;
+      g.lineWidth = 0.7 + rnd();
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      g.stroke();
+    }
+
+    // bone-pale flecks: splintered wood and ash clumps
+    for (let i = 0; i < 140; i++) {
+      g.fillStyle = `rgba(196,188,172,${0.05 + rnd() * 0.14})`;
+      g.beginPath(); g.arc(rnd() * S, rnd() * S, 0.6 + rnd() * 1.8, 0, 7); g.fill();
+    }
+
+    grain(g, S, 2400, 0.055);
+  }, { repeat: 11 });
 }
 
-/* Coursed stone blockwork for the hall walls. */
-export function stoneWallTexture() {
+/* Dead bark — pale, cracked, stripped. Trees that died standing go grey. */
+export function barkTexture() {
+  return makeTexture(256, (g, S) => {
+    g.fillStyle = '#4a443b';
+    g.fillRect(0, 0, S, S);
+    // vertical fissures
+    for (let i = 0; i < 60; i++) {
+      const x = rnd() * S;
+      g.strokeStyle = `rgba(${20 + rnd() * 18},${18 + rnd() * 14},${14 + rnd() * 10},${0.28 + rnd() * 0.5})`;
+      g.lineWidth = 0.8 + rnd() * 3.4;
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.bezierCurveTo(x + (rnd() - 0.5) * 22, S * 0.35, x + (rnd() - 0.5) * 22, S * 0.7, x + (rnd() - 0.5) * 14, S);
+      g.stroke();
+    }
+    // pale stripped highlights
+    for (let i = 0; i < 38; i++) {
+      const x = rnd() * S;
+      g.strokeStyle = `rgba(${140 + rnd() * 60},${132 + rnd() * 52},${116 + rnd() * 44},${0.08 + rnd() * 0.22})`;
+      g.lineWidth = 0.6 + rnd() * 2.2;
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.bezierCurveTo(x + (rnd() - 0.5) * 16, S * 0.4, x + (rnd() - 0.5) * 16, S * 0.75, x + (rnd() - 0.5) * 10, S);
+      g.stroke();
+    }
+    grain(g, S, 900, 0.07);
+  }, { repeat: 1 });
+}
+
+/* Ruined stonework, for what is left of the furnace. */
+export function stoneTexture() {
   return makeTexture(512, (g, S) => {
-    g.fillStyle = '#15110e';
+    g.fillStyle = '#181510';
     g.fillRect(0, 0, S, S);
     const rows = 8;
     const h = S / rows;
@@ -84,109 +123,79 @@ export function stoneWallTexture() {
       const w = S / n;
       const off = (r % 2) * w * 0.5;
       for (let c = -1; c <= n; c++) {
-        const x = c * w + off + 3;
-        const y = r * h + 3;
-        const v = 38 + rnd() * 26;
-        g.fillStyle = `rgb(${v + 6},${v + 2},${v - 4})`;
+        const x = c * w + off + 3, y = r * h + 3;
+        const v = 40 + rnd() * 24;
+        g.fillStyle = `rgb(${v + 4},${v + 2},${v - 5})`;
         g.fillRect(x, y, w - 6, h - 6);
-        g.fillStyle = `rgba(255,235,210,${0.02 + rnd() * 0.04})`;
+        g.fillStyle = `rgba(220,214,196,${0.02 + rnd() * 0.035})`;
         g.fillRect(x, y, w - 6, 2);
-        g.fillStyle = `rgba(0,0,0,${0.14 + rnd() * 0.16})`;
+        g.fillStyle = `rgba(0,0,0,${0.16 + rnd() * 0.18})`;
         g.fillRect(x, y + h - 8, w - 6, 2);
       }
     }
-    for (let i = 0; i < 16; i++) {
-      const x = rnd() * S, y = rnd() * S, r = 30 + rnd() * 90;
+    // soot, heavier near the bottom
+    for (let i = 0; i < 20; i++) {
+      const x = rnd() * S, y = S * 0.4 + rnd() * S * 0.6, r = 26 + rnd() * 80;
       const grd = g.createRadialGradient(x, y, 0, x, y, r);
-      grd.addColorStop(0, `rgba(6,4,3,${0.16 + rnd() * 0.22})`);
-      grd.addColorStop(1, 'rgba(6,4,3,0)');
+      grd.addColorStop(0, `rgba(6,5,4,${0.2 + rnd() * 0.26})`);
+      grd.addColorStop(1, 'rgba(6,5,4,0)');
       g.fillStyle = grd;
       g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
     }
-    grain(g, S, 1600, 0.06);
-  }, { repeat: 6 });
+    grain(g, S, 1400, 0.06);
+  }, { repeat: 3 });
 }
 
-/* Weathered timber for scaffolds and barrels. */
-export function timberTexture() {
-  return makeTexture(256, (g, S) => {
-    g.fillStyle = '#241a12';
-    g.fillRect(0, 0, S, S);
-    for (let i = 0; i < 46; i++) {
-      const y = rnd() * S;
-      g.strokeStyle = `rgba(${60 + rnd() * 40},${42 + rnd() * 28},${26 + rnd() * 18},${0.25 + rnd() * 0.4})`;
-      g.lineWidth = 0.6 + rnd() * 2.4;
-      g.beginPath();
-      g.moveTo(0, y);
-      g.bezierCurveTo(S * 0.3, y + (rnd() - 0.5) * 10, S * 0.7, y + (rnd() - 0.5) * 10, S, y + (rnd() - 0.5) * 6);
-      g.stroke();
-    }
-    grain(g, S, 700, 0.06);
-  }, { repeat: 1 });
-}
-
-/* Night sky gradient with a cold moon-wash. Painted onto a sky dome so the
-   hall reads as roofless rather than floating in void. */
+/* Overcast, moonlit night above bare branches. */
 export function skyTexture() {
-  return makeTexture(256, (g, S) => {
+  return makeTexture(512, (g, S) => {
     const grd = g.createLinearGradient(0, 0, 0, S);
-    grd.addColorStop(0.00, '#0a1018');
-    grd.addColorStop(0.42, '#121a22');
-    grd.addColorStop(0.72, '#1d1a19');
-    grd.addColorStop(1.00, '#2a1b12');   // forge-light bounce near the horizon
+    grd.addColorStop(0.00, '#070b12');
+    grd.addColorStop(0.34, '#0e151f');
+    grd.addColorStop(0.62, '#1a212a');
+    grd.addColorStop(0.82, '#2a2d2e');
+    grd.addColorStop(1.00, '#2f2a22');   // faint ember-light on the horizon
     g.fillStyle = grd;
     g.fillRect(0, 0, S, S);
-    // stars, thinning toward the horizon
-    for (let i = 0; i < 260; i++) {
-      const y = Math.pow(rnd(), 1.9) * S * 0.62;
-      const a = (1 - y / (S * 0.62)) * (0.25 + rnd() * 0.7);
-      g.fillStyle = `rgba(226,236,255,${a})`;
-      const r = rnd() < 0.9 ? 0.6 : 1.2;
-      g.beginPath(); g.arc(rnd() * S, y, r, 0, 7); g.fill();
-    }
-  }, { repeat: 1 });
-}
 
-/* A hanging banner. Kept muted so it never competes with a telegraph. */
-export function bannerTexture() {
-  return makeTexture(128, (g, S) => {
-    g.fillStyle = '#3a1d18';
-    g.fillRect(0, 0, S, S);
-    g.fillStyle = 'rgba(0,0,0,.35)';
-    g.fillRect(0, 0, S * 0.14, S);
-    g.fillRect(S * 0.86, 0, S * 0.14, S);
-    // a smith's mark: hammer over an anvil, drawn as simple heraldry
-    g.strokeStyle = 'rgba(196,170,120,.55)';
-    g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(S * 0.5, S * 0.24); g.lineTo(S * 0.5, S * 0.52);
-    g.moveTo(S * 0.34, S * 0.24); g.lineTo(S * 0.66, S * 0.24);
-    g.stroke();
-    g.fillStyle = 'rgba(196,170,120,.42)';
-    g.fillRect(S * 0.3, S * 0.6, S * 0.4, S * 0.09);
-    g.fillRect(S * 0.4, S * 0.69, S * 0.2, S * 0.1);
-    grain(g, S, 300, 0.08);
+    // torn cloud, letting the moon through in places
+    for (let i = 0; i < 60; i++) {
+      const x = rnd() * S, y = S * 0.1 + rnd() * S * 0.5;
+      const w = 40 + rnd() * 180, h = 8 + rnd() * 26;
+      const grd2 = g.createRadialGradient(x, y, 0, x, y, w);
+      grd2.addColorStop(0, `rgba(120,132,148,${0.04 + rnd() * 0.07})`);
+      grd2.addColorStop(1, 'rgba(120,132,148,0)');
+      g.fillStyle = grd2;
+      g.save(); g.translate(x, y); g.scale(1, h / w); g.translate(-x, -y);
+      g.beginPath(); g.arc(x, y, w, 0, 7); g.fill();
+      g.restore();
+    }
+
+    for (let i = 0; i < 190; i++) {
+      const y = Math.pow(rnd(), 2.0) * S * 0.5;
+      const a = (1 - y / (S * 0.5)) * (0.18 + rnd() * 0.55);
+      g.fillStyle = `rgba(214,226,246,${a})`;
+      g.beginPath(); g.arc(rnd() * S, y, rnd() < 0.9 ? 0.6 : 1.1, 0, 7); g.fill();
+    }
   }, { repeat: 1 });
 }
 
 /* Equirectangular environment. Metals in three.js render what they REFLECT —
    with no environment a metalness:0.9 material resolves to near black, which is
-   exactly how a steel-armoured knight ends up as an unreadable dark blob. This
-   gives the armour a cold sky above and warm forge-bounce below to catch. */
+   exactly how a steel-armoured knight ends up as an unreadable dark blob. */
 export function envTexture() {
   const cv = document.createElement('canvas');
   cv.width = 512; cv.height = 256;
   const g = cv.getContext('2d');
   const grd = g.createLinearGradient(0, 0, 0, 256);
-  grd.addColorStop(0.00, '#4b607e');                      // cold zenith
-  grd.addColorStop(0.42, '#3c4a5c');
-  grd.addColorStop(0.60, '#4a4238');
-  grd.addColorStop(0.80, '#8a4a1e');                      // forge bounce
-  grd.addColorStop(1.00, '#c2621f');
+  grd.addColorStop(0.00, '#48586e');   // cold zenith
+  grd.addColorStop(0.44, '#39434f');
+  grd.addColorStop(0.64, '#3d3a33');
+  grd.addColorStop(0.86, '#5c3a1e');   // low ember bounce
+  grd.addColorStop(1.00, '#8a4a1c');
   g.fillStyle = grd;
   g.fillRect(0, 0, 512, 256);
-  // a few warm hotspots so the steel picks up moving highlights, not a flat wash
-  for (const [x, y, r, c] of [[90, 205, 70, '#ff8a30'], [300, 215, 60, '#ff7a24'], [430, 200, 55, '#ff9440']]) {
+  for (const [x, y, r, c] of [[90, 210, 62, '#ff8a30'], [310, 218, 52, '#ff7a24'], [440, 205, 46, '#ffa050']]) {
     const rg = g.createRadialGradient(x, y, 0, x, y, r);
     rg.addColorStop(0, c); rg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
@@ -197,13 +206,30 @@ export function envTexture() {
   return t;
 }
 
+/* Soft banded mist for the ground layer. */
+export function mistTexture() {
+  return makeTexture(256, (g, S) => {
+    g.clearRect(0, 0, S, S);
+    for (let i = 0; i < 42; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      const r = 26 + rnd() * 76;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      const a = 0.03 + rnd() * 0.07;
+      grd.addColorStop(0, `rgba(188,198,208,${a})`);
+      grd.addColorStop(1, 'rgba(188,198,208,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+  }, { repeat: 1 });
+}
+
 export function buildTextures() {
   return {
-    flagstone: flagstoneTexture(),
-    stone: stoneWallTexture(),
-    timber: timberTexture(),
+    ground: ashGroundTexture(),
+    bark: barkTexture(),
+    stone: stoneTexture(),
     sky: skyTexture(),
-    banner: bannerTexture(),
+    mist: mistTexture(),
     env: envTexture(),
   };
 }

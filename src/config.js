@@ -10,7 +10,10 @@ export const SIM = {
 };
 
 export const ARENA = {
-  radius: 15,           // circular foundry floor
+  // A duel does not need a big room. Tightening this also brings the tree line
+  // inside the camera frustum, so the clearing actually reads as a clearing
+  // rather than as an empty plain with a wood somewhere off screen.
+  radius: 11.5,
   wallHeight: 1.4,
 };
 

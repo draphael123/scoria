@@ -2,6 +2,7 @@ import { Game } from './game.js';
 import { View } from './render.js';
 import { Input } from './input.js';
 import { Hud, Debug } from './ui.js';
+import { CombatUI } from './combatui.js';
 import { Audio } from './audio.js';
 import { Menu, loadSettings } from './menu.js';
 import { TouchControls, isTouchDevice } from './touch.js';
@@ -15,6 +16,7 @@ const view = new View(canvas, { quality: settings.quality });
 const input = new Input(window);
 const hud = new Hud();
 const debug = new Debug();
+const cui = new CombatUI();
 const audio = new Audio(settings);
 
 view.shakeScale = settings.shake;
@@ -33,7 +35,7 @@ let stepOnce = false;
 let started = false;
 let touch = null;
 
-function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; }
+function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); }
 
 /* -------------------------------------------------------------------------
    Menus
@@ -82,8 +84,12 @@ function onEvents(events) {
     if (ev.result === 'iframe') {
       // A clean dodge deserves to be felt, not merely survived.
       view.burst(ev.x, ev.z, 0xcfe8ff, 5, 0.5);
+      cui.fromEvent(ev, byPlayer);
       continue;
     }
+    view.flashActor(ev.target, ev.result === 'guarded' ? 0.5 : 1.1);
+    cui.fromEvent(ev, byPlayer);
+
     if (ev.result === 'guarded') {
       view.burst(ev.x, ev.z, 0x9fd0e8, 9, 0.9);
       view.addShake(0.22);
@@ -98,11 +104,13 @@ function onEvents(events) {
       const big = ev.result === 'stagger' || ev.atk.id === 'H1' || ev.atk.id === 'L3';
       view.burst(ev.x, ev.z, ev.result === 'stagger' ? 0xffd08a : 0xff8a3c, big ? 18 : 10, big ? 1.5 : 1);
       view.addShake(big ? 0.55 : 0.3);
+      if (big) view.scorch(ev.x, ev.z, 1.1);
       hud.hit('dealt');
       if (ev.result === 'stagger') audio.stagger(); else audio.hit(big ? 1.35 : 1, big);
     } else {
       view.burst(ev.x, ev.z, 0xd4321e, 14, 1.2);
       view.addShake(0.6);
+      view.scorch(ev.x, ev.z, 0.85);
       hud.hit('taken');
       audio.hit(1.2);
     }
@@ -141,6 +149,7 @@ function audioFromState() {
    ---------------------------------------------------------------------- */
 let last = performance.now();
 let lastFrameAt = last;
+let lastRefusal = -1;
 
 function frame(now) {
   const dtReal = Math.min((now - last) / 1000, 0.25);
@@ -182,6 +191,15 @@ function frame(now) {
 
   hud.setVisible(started && !menu.open);
   hud.update(game, dtReal);
+  cui.update(game, dtReal, view.camera, view.w, view.h, started && !menu.open);
+
+  // Tell the player WHY an input did nothing. Silence reads as a dropped
+  // input; naming the reason reads as a rule.
+  if (game.player.lastAction === 'no stam' && lastRefusal !== game.time) {
+    lastRefusal = game.time;
+    cui.refused();
+    game.player.lastAction = '—';
+  }
   debug.update(game, dtReal);
   audio.update(dtReal);
 
@@ -205,7 +223,7 @@ requestAnimationFrame(frame);
 
 // Headless handle for tuning and smoke tests.
 window.SCORIA = {
-  game, view, input, hud, debug, audio, menu, settings,
+  game, view, input, hud, debug, audio, menu, settings, cui,
   get touch() { return touch; },
   sim: (o) => game.sim(o),
   reset: (s) => { game.reset(s); paused = false; resetHudSmoothing(); },

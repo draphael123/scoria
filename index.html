@@ -84,6 +84,66 @@
   .banner.lose{color:#b33a2a}
   .banner.win{color:#e2c68a}
 
+  /* ------------------------- bars, refined ----------------------------- */
+  .bar u.ticks{position:absolute;inset:0;display:block;pointer-events:none;
+       background:repeating-linear-gradient(90deg,transparent 0 24px,rgba(0,0,0,.55) 24px 25px)}
+  #hpBar{border-color:rgba(0,0,0,.75)}
+  /* Ghost of what a roll costs. If this marker is off the end of the bar you
+     cannot dodge, which is the single most important thing to know. */
+  #stGhost{position:absolute;top:0;bottom:0;background:rgba(255,255,255,.16);
+       border-left:1px solid rgba(255,240,200,.65);display:none}
+  #stBar.canroll #stGhost{display:block}
+  #stBar.norolll{}
+
+  /* Persistent danger vignette under a quarter health. */
+  #lowhp{position:fixed;inset:0;pointer-events:none;z-index:3;opacity:0;
+       background:radial-gradient(ellipse at center,transparent 46%,rgba(120,14,8,.55) 100%);
+       transition:opacity .5s}
+  body.hud-on #lowhp.on{animation:lowpulse 1.5s ease-in-out infinite}
+  @keyframes lowpulse{0%,100%{opacity:.42}50%{opacity:.78}}
+
+  .banner{flex-direction:column;gap:14px}
+  .banner small{font-size:12px;letter-spacing:.28em;color:var(--faint);text-transform:uppercase}
+
+  /* ========================== COMBAT UI ================================= */
+  .cui-root{position:fixed;inset:0;pointer-events:none;z-index:7}
+  .cui-num{position:absolute;left:0;top:0;will-change:transform,opacity;
+       font-family:"Iowan Old Style",Palatino,Georgia,serif;font-weight:600;
+       text-shadow:0 2px 10px rgba(0,0,0,.95),0 0 22px rgba(0,0,0,.7);
+       font-variant-numeric:tabular-nums;letter-spacing:.02em;white-space:nowrap}
+  .cui-num.deal {font-size:27px;color:#f6e2c2}
+  .cui-num.big  {font-size:40px;color:#ffc86e}
+  .cui-num.take {font-size:29px;color:#f0574a}
+  .cui-num.block{font-size:19px;color:#a9cfe4;letter-spacing:.12em}
+  .cui-num.dodge{font-size:17px;color:#cfe8ff;letter-spacing:.24em}
+  .cui-num.break{font-size:22px;color:#fff;letter-spacing:.18em}
+
+  /* Points from the player toward whatever is winding up at them. */
+  .cui-warn{position:absolute;left:0;top:0;width:230px;height:230px;opacity:0;
+       transition:opacity .08s;
+       background:conic-gradient(from -34deg,transparent 0deg,rgba(226,96,44,.5) 20deg,
+                                 rgba(255,186,96,1) 34deg,rgba(226,96,44,.5) 48deg,transparent 68deg);
+       -webkit-mask:radial-gradient(circle,transparent 62px,#000 70px,#000 108px,transparent 115px);
+       mask:radial-gradient(circle,transparent 62px,#000 70px,#000 108px,transparent 115px);
+       filter:drop-shadow(0 0 8px rgba(255,140,60,.7))}
+  .cui-warn.on{opacity:1}
+  .cui-warn.hot{filter:drop-shadow(0 0 16px rgba(255,190,110,.95)) brightness(1.5)}
+
+  .cui-chain{left:calc(30px + var(--safe-l));bottom:calc(84px + var(--safe-b));
+       display:flex;gap:5px;opacity:0;transition:opacity .12s}
+  body.hud-on .cui-chain.on{opacity:1}
+  .cui-chain i{width:16px;height:3px;background:rgba(230,220,203,.2);display:block}
+  .cui-chain i.spent{background:rgba(212,85,42,.55)}
+  .cui-chain i.live{background:#ffd39a;box-shadow:0 0 8px rgba(255,190,110,.9)}
+
+  .cui-alert{position:fixed;left:50%;top:31%;transform:translate(-50%,-50%);z-index:7;
+       pointer-events:none;font-size:15px;letter-spacing:.34em;text-transform:uppercase;
+       opacity:0;text-shadow:0 2px 16px rgba(0,0,0,.95)}
+  .cui-alert.on{opacity:1}
+  .cui-alert.bad {color:#e2513f}
+  .cui-alert.warn{color:#e0b45a}
+  .cui-alert.good{color:#ffd08a}
+
   /* ============================= MENUS ================================== */
   .menu-root{position:fixed;inset:0;z-index:20;display:none;
              background:radial-gradient(ellipse at 50% 42%,rgba(20,14,10,.72),rgba(6,6,7,.94) 72%);
@@ -216,10 +276,12 @@
 </div>
 
 <div class="hud" id="bars">
-  <div class="barlbl">Vigour &middot; Stamina</div>
-  <div class="bar"><i id="hpChip"></i><i id="hpFill"></i></div>
-  <div class="bar" id="stBar"><i id="stFill"></i></div>
+  <div class="barlbl">Vigour</div>
+  <div class="bar" id="hpBar"><i id="hpChip"></i><i id="hpFill"></i><u class="ticks"></u></div>
+  <div class="bar" id="stBar"><i id="stFill"></i><i id="stGhost"></i><u class="ticks"></u></div>
 </div>
+
+<div id="lowhp"></div>
 
 <div class="hud" id="lockPip">LOCKED</div>
 
@@ -235,7 +297,7 @@
   <div><b>R</b>restart</div>
 </div>
 
-<div class="banner" id="banner"></div>
+<div class="banner" id="banner"><span id="bannerText"></span><small id="bannerHint"></small></div>
 
 <aside id="debug">
   <h1>FRAME DATA</h1>
