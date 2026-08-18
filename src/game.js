@@ -108,6 +108,10 @@ export class Game {
       this.enemies = [];
       this.pending = [];
       this.blockers = [];
+      // A zone's walls come from its own definition, and they are boxes: a
+      // building is not a circle and walking round one on an invisible bubble
+      // reads worse than clipping through it.
+      this.solids = (this.zone.solids || []).map((s) => ({ ...s }));
       this.player.lockTarget = null;
       this.player.x = this.zone.spawn[0];
       this.player.z = this.zone.spawn[1];
@@ -161,18 +165,23 @@ export class Game {
     // are in the same place every time you walk into it — cover you cannot
     // learn is not cover.
     this.blockers = [];
+    this.solids = [];
     const rocks = enc.rocks || 0;
     for (let i = 0; i < rocks; i++) {
       const a = this.rng() * Math.PI * 2;
       // Kept out of the middle: a boulder in the duelling circle would block
       // the fight rather than shape it.
       const rad = ARENA.radius * 0.42 + this.rng() * ARENA.radius * 0.44;
-      this.blockers.push({
+      const b = {
         x: Math.sin(a) * rad, z: Math.cos(a) * rad,
         r: 0.85 + this.rng() * 0.75,
         h: 1.5 + this.rng() * 1.5,
         seed: this.rng(),
-      });
+      };
+      this.blockers.push(b);
+      // The same rock that stops a bolt stops a body. Anything else is cover
+      // that only half exists, and the player will find the half that does not.
+      this.solids.push({ x: b.x, z: b.z, r: b.r * 0.82 });
     }
 
     // --- rooms ----------------------------------------------------------
@@ -484,6 +493,75 @@ export class Game {
 
   /* Integrate velocities, then push bodies apart. Flat circle collision on the
      XZ plane — no physics engine, because an ARPG wants authored contact. */
+
+  /* ---- solid geometry ---------------------------------------------------
+     Bodies used to pass straight through boulders and buildings. It showed up
+     on the ROLL because a roll is fast and long, but walking had the same
+     hole in it — nothing in the world was ever solid to an actor, only to a
+     projectile.
+
+     Two shapes, because one is not enough: a boulder is a circle and a
+     building is not. Approximating a five-metre shell with a circle makes you
+     slide around a house on an invisible bubble, which reads worse than
+     clipping through it did.
+
+     Resolved by POSITION rather than by velocity, so it works identically for
+     a walk, a roll, a lunge and a knockback — all of which move an actor by
+     writing x/z, and none of which should be able to end up inside a wall.
+     ------------------------------------------------------------------- */
+  _resolveSolids(a) {
+    const solids = this.solids;
+    if (!solids || !solids.length) return;
+    const r = a.radius;
+
+    for (const s of solids) {
+      if (s.r !== undefined) {
+        // --- circle ---------------------------------------------------
+        const dx = a.x - s.x, dz = a.z - s.z;
+        const d = Math.hypot(dx, dz);
+        const min = s.r + r;
+        if (d >= min) continue;
+        if (d < 1e-4) { a.x = s.x + min; continue; }   // dead centre: pick a side
+        a.x = s.x + (dx / d) * min;
+        a.z = s.z + (dz / d) * min;
+        continue;
+      }
+
+      // --- oriented box -----------------------------------------------
+      // Into the box's own frame, clamp to it, and push back out along
+      // whichever way is shortest.
+      const cs = Math.cos(-s.rot), sn = Math.sin(-s.rot);
+      const px = a.x - s.x, pz = a.z - s.z;
+      const lx = px * cs - pz * sn;
+      const lz = px * sn + pz * cs;
+
+      const cx = clamp(lx, -s.hw, s.hw);
+      const cz = clamp(lz, -s.hd, s.hd);
+      let nx = lx - cx, nz = lz - cz;
+      let d = Math.hypot(nx, nz);
+
+      if (d > r) continue;
+
+      if (d > 1e-5) {
+        // Outside the box, within the radius: push out along the normal.
+        nx = (nx / d) * r; nz = (nz / d) * r;
+      } else {
+        // Centre is INSIDE the box. Leave by the nearest face, or an actor
+        // that clips in during a lunge is stuck there forever.
+        const toX = s.hw - Math.abs(lx), toZ = s.hd - Math.abs(lz);
+        if (toX < toZ) { nx = Math.sign(lx || 1) * (s.hw + r); nz = lz; }
+        else           { nz = Math.sign(lz || 1) * (s.hd + r); nx = lx; }
+        a.x = s.x + (nx * cs + nz * sn);
+        a.z = s.z + (-nx * sn + nz * cs);
+        continue;
+      }
+
+      const wx = cx + nx, wz = cz + nz;
+      a.x = s.x + (wx * cs + wz * sn);
+      a.z = s.z + (-wx * sn + wz * cs);
+    }
+  }
+
   _integrate(dt) {
     const all = this.actors;
     const decay = Math.exp(-IMPACT.knockDecay * dt);
@@ -495,6 +573,14 @@ export class Game {
       a.z += (a.vz + a.kz) * dt;
       a.kx *= decay;
       a.kz *= decay;
+    }
+
+    // Out of the walls first, then off each other, then inside the boundary.
+    // Order matters: doing bodies first would let a shove put you into a
+    // building and leave you there.
+    for (const a of all) {
+      if (a.dead || a.emerging) continue;
+      this._resolveSolids(a);
     }
 
     for (let i = 0; i < all.length; i++) {
@@ -518,6 +604,11 @@ export class Game {
         a.x -= dx * push * aw; a.z -= dz * push * aw;
         b.x += dx * push * bw; b.z += dz * push * bw;
       }
+    }
+
+    for (const a of all) {
+      if (a.dead || a.emerging) continue;
+      this._resolveSolids(a);
     }
 
     const bound = this.zone ? this.zone.radius : ARENA.radius;

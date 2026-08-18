@@ -1195,6 +1195,10 @@ export const ZONES = {
     sub: 'what the works left behind',
     radius: 15.0,
     spawn: [0, 7.5],
+    // Solids: every wall of every building, plus the standing furniture.
+    // Generated from TOWN_BUILDINGS below the export so the two can never
+    // disagree about where a wall is.
+    solids: [],
     props: [
       // The rack, and the reason to walk anywhere.
       { id: 'rack', kind: 'rack', x: 0, z: -5.0, r: 2.4,
@@ -1220,6 +1224,67 @@ export const ZONES = {
    than the trigger radius, so the game tells you a thing is interactive
    before it asks you to interact with it. */
 export const INTERACT = { hint: 4.2 };
+
+
+/* The town's buildings, declared once and used twice: props.js builds the
+   geometry from this and game.js collides against it. Two lists would drift,
+   and a wall you can see but walk through is worse than no wall.
+
+   `rot` is radians; `hw`/`hd` are half-extents. A ruin is a set of WALLS
+   rather than a box, so you can walk into the shell of a house and stand in
+   what used to be somebody's front room. */
+export const TOWN_BUILDINGS = [
+  // --- west side of the street -----------------------------------------
+  { id: 'w1', x: -8.6, z: 1.2, w: 5.6, d: 4.8, rot: 0.10, h: 3.1,
+    walls: ['n', 'w', 'e'], ruin: 'roofless' },
+  { id: 'w2', x: -9.4, z: -6.6, w: 5.0, d: 4.4, rot: -0.22, h: 2.6,
+    walls: ['n', 'w'], ruin: 'collapsed' },
+  { id: 'w3', x: -7.6, z: 8.6, w: 4.8, d: 4.0, rot: 0.48, h: 2.2,
+    walls: ['s', 'w', 'e'], ruin: 'burned' },
+  // --- east side --------------------------------------------------------
+  { id: 'e1', x: 9.0, z: 0.4, w: 6.0, d: 5.0, rot: -0.08, h: 3.4,
+    walls: ['n', 'e', 's'], ruin: 'roofless' },
+  { id: 'e2', x: 8.4, z: -7.2, w: 4.6, d: 4.2, rot: 0.30, h: 2.4,
+    walls: ['e', 's'], ruin: 'collapsed' },
+  { id: 'e3', x: 8.2, z: 8.0, w: 5.2, d: 4.4, rot: -0.36, h: 2.9,
+    walls: ['n', 'e'], ruin: 'burned' },
+  // --- the long hall at the head of the street, behind the rack ---------
+  { id: 'hall', x: 0, z: -11.0, w: 9.0, d: 5.4, rot: 0, h: 4.6,
+    walls: ['n', 'w', 'e'], ruin: 'hall' },
+];
+
+
+/* Turn the building list into collision boxes — one per standing wall, laid
+   out in the building's own frame and then rotated into the world. Done here,
+   once, rather than by hand: a hand-written collider list is a second source
+   of truth and will be wrong within a week. */
+function wallSolids(b) {
+  const out = [];
+  const t = 0.34;                       // wall half-thickness
+  const put = (lx, lz, hw, hd) => {
+    const cs = Math.cos(b.rot), sn = Math.sin(b.rot);
+    out.push({
+      x: b.x + lx * cs + lz * sn,
+      z: b.z - lx * sn + lz * cs,
+      hw, hd, rot: b.rot,
+    });
+  };
+  const hw = b.w / 2, hd = b.d / 2;
+  if (b.walls.includes('n')) put(0, -hd, hw, t);
+  if (b.walls.includes('s')) put(0, hd, hw, t);
+  if (b.walls.includes('w')) put(-hw, 0, t, hd);
+  if (b.walls.includes('e')) put(hw, 0, t, hd);
+  return out;
+}
+
+ZONES.town.solids = [
+  ...TOWN_BUILDINGS.flatMap(wallSolids),
+  { x: -4.4, z: 4.6, r: 1.15 },         // the well
+  { x: 5.0, z: 5.4, r: 0.55 },          // the dead tree
+  { x: 3.2, z: -2.0, r: 1.05 },         // the cart
+  { x: -2.0, z: 12.4, r: 0.5 },         // gate posts
+  { x: 2.0, z: 12.4, r: 0.5 },
+];
 
 export const DEFAULT_ENCOUNTER = 'duel';
 

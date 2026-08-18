@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { ARENA, EXIT } from './config.js';
+import { ARENA, EXIT, TOWN_BUILDINGS } from './config.js';
 
 /* The clearing: a forest the forge killed.
 
@@ -163,6 +163,18 @@ class Motes {
 
   update(dt) {
     this.t += dt;
+
+    // The fog breathes and turns. Two sheets moving at different rates read
+    // as depth; one sheet reads as a decal.
+    for (const f of (this.fogSheets || [])) {
+      f.mesh.rotation.z += f.spin * dt;
+      f.mesh.position.x += f.dx * dt;
+      f.mesh.position.z += f.dz * dt;
+      if (Math.abs(f.mesh.position.x) > 7) f.dx *= -1;
+      if (Math.abs(f.mesh.position.z) > 7) f.dz *= -1;
+      f.mesh.material.opacity = f.base * (0.75 + 0.25 * Math.sin(this.t * 0.3 + f.spin * 90));
+    }
+    if (this.drift) this.drift.update(dt);
     const p = this.pos;
     for (let i = 0; i < this.count; i++) {
       const i3 = i * 3;
@@ -198,8 +210,12 @@ export class Forest {
     this._buildTrees(tex, hi);
     this._buildDeadfall(tex);
     this._buildRuin(tex);
+
     this._buildRoad(tex);
     this._buildMist(tex, hi);
+
+    this._buildGroundFog(tex);
+    this._buildDrift(hi);
 
     this.ash = new Motes(hi ? 340 : 130, this.ashDot,
       { rise: [0.05, 0.3], size: 0.09, opacity: 0.24, color: 0xb9bcc0, top: 12, seed: 11 });
@@ -521,7 +537,7 @@ export class Forest {
 
     g.visible = false;
     this.yard = g;
-    ruin.add(g);
+    this.scene.add(g);
   }
 
   /* THE KILN MOUTH. The heat is back on, so this one is built out of LIGHT
@@ -585,7 +601,7 @@ export class Forest {
 
     g.visible = false;
     this.kiln = g;
-    ruin.add(g);
+    this.scene.add(g);
   }
 
 
@@ -602,58 +618,186 @@ export class Forest {
   _buildTown(tex) {
     const rng = makeRng(80808);
     const g = new THREE.Group();
-    const stone = new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.96 });
-    const wood = new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 0.97 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 1 });
-    const iron = new THREE.MeshStandardMaterial({ color: 0x3a322c, roughness: 0.8, metalness: 0.5 });
 
-    // Roofless shells down both sides of a street. Three walls and no roof
-    // reads as abandoned far faster than a whole house with the lights off.
-    const shell = (x, z, w, d, rot) => {
-      const h = 2.6 + rng() * 1.6;
+    /* The town's own palette. It must not read as the forest with houses in
+       it: the wood is bark, ash and cold blue, so the town is DRESSED STONE,
+       soot-blackened timber and a warmer grey. Same lighting, different
+       material vocabulary, which is what actually separates two places. */
+    const stone  = new THREE.MeshStandardMaterial({ color: 0x7d7466, roughness: 0.92, metalness: 0.02 });
+    const stoneD = new THREE.MeshStandardMaterial({ color: 0x554e45, roughness: 0.96 });
+    const burnt  = new THREE.MeshStandardMaterial({ color: 0x241d18, roughness: 1 });
+    const timber = new THREE.MeshStandardMaterial({ color: 0x3f3327, roughness: 0.97 });
+    const slate  = new THREE.MeshStandardMaterial({ color: 0x4a4f57, roughness: 0.85, metalness: 0.1 });
+    const iron   = new THREE.MeshStandardMaterial({ color: 0x3a322c, roughness: 0.8, metalness: 0.5 });
+    const dark   = new THREE.MeshStandardMaterial({ color: 0x14100d, roughness: 1 });
+
+    /* --- the buildings ---------------------------------------------------
+       Built from TOWN_BUILDINGS, the same list the collider is generated
+       from. A ruin is walls plus a way it failed, and the FAILURE is what
+       stops seven shells reading as seven of the same shell. */
+    for (const b of TOWN_BUILDINGS) {
       const hs = new THREE.Group();
-      hs.position.set(x, 0, z);
-      hs.rotation.y = rot;
-      const wall = (wx, wz, ww, wd, hh) => {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(ww, hh, wd), stone);
-        m.position.set(wx, hh / 2, wz);
-        m.castShadow = true;
-        m.receiveShadow = true;
-        hs.add(m);
-        this._registerOccluder(m, stone, hh);
-      };
-      wall(0, -d / 2, w, 0.3, h);
-      wall(-w / 2, 0, 0.3, d, h * (0.7 + rng() * 0.3));
-      wall(w / 2, 0, 0.3, d, h * (0.6 + rng() * 0.35));
-      // A collapsed corner, so no two shells are the same silhouette.
-      for (let i = 0; i < 4; i++) {
-        const rubble = new THREE.Mesh(
-          new THREE.BoxGeometry(0.4 + rng() * 0.5, 0.3 + rng() * 0.3, 0.4 + rng() * 0.4), stone);
-        rubble.position.set((rng() - 0.5) * w, 0.16, (rng() - 0.5) * d);
-        rubble.rotation.set(rng(), rng() * 3, rng());
-        rubble.castShadow = true;
-        hs.add(rubble);
-      }
+      hs.position.set(b.x, 0, b.z);
+      hs.rotation.y = b.rot;
       g.add(hs);
-    };
-    shell(-8.2, 1.0, 5.0, 4.4, 0.10);
-    shell(-9.0, -6.4, 4.4, 4.0, -0.22);
-    shell(8.6, 0.2, 5.4, 4.6, -0.08);
-    shell(8.0, -7.0, 4.0, 3.8, 0.3);
-    shell(-7.2, 8.2, 4.2, 3.6, 0.5);
 
-    // The street itself: two ruts of packed ground running the length of it.
-    for (const off of [-1.5, 1.5]) {
-      const rut = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.5, 30),
-        new THREE.MeshBasicMaterial({ color: 0x14110e, transparent: true,
-          opacity: 0.4, depthWrite: false }));
-      rut.rotation.x = -Math.PI / 2;
-      rut.position.set(off, 0.015, 0);
-      g.add(rut);
+      const hw = b.w / 2, hd = b.d / 2;
+      const jag = () => 0.55 + rng() * 0.45;      // how much of the wall is left
+
+      const wall = (lx, lz, ww, wd, frac) => {
+        const h = b.h * frac;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(ww, h, wd), stone);
+        m.position.set(lx, h / 2, lz);
+        m.castShadow = true; m.receiveShadow = true;
+        hs.add(m);
+        this._registerOccluder(m, stone, h);
+        // A broken top course, so no wall ends in a clean straight line.
+        const n = Math.max(2, Math.round(ww / 0.8));
+        for (let i = 0; i < n; i++) {
+          const bw = ww / n;
+          const chunk = new THREE.Mesh(
+            new THREE.BoxGeometry(bw * 0.92, 0.18 + rng() * 0.42, wd * 0.94), stoneD);
+          chunk.position.set(lx - ww / 2 + bw * (i + 0.5), h + 0.1, lz);
+          chunk.castShadow = true;
+          if (rng() > 0.25) hs.add(chunk);
+        }
+        return m;
+      };
+
+      if (b.walls.includes('n')) wall(0, -hd, b.w, 0.42, jag());
+      if (b.walls.includes('s')) wall(0,  hd, b.w, 0.42, jag());
+      if (b.walls.includes('w')) wall(-hw, 0, 0.42, b.d, jag());
+      if (b.walls.includes('e')) wall( hw, 0, 0.42, b.d, jag());
+
+      // A doorway: a lintel standing over a gap in whichever wall faces the
+      // street. It is the one detail that makes a shell read as a HOUSE.
+      const doorSide = b.x < 0 ? hw : -hw;
+      const post = (dx) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, 2.0, 0.4), stoneD);
+        m.position.set(doorSide, 1.0, dx);
+        m.castShadow = true;
+        hs.add(m);
+      };
+      post(-0.7); post(0.7);
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.34, 1.9), timber);
+      lintel.position.set(doorSide, 2.1, 0);
+      lintel.castShadow = true;
+      hs.add(lintel);
+
+      // How it fell.
+      if (b.ruin === 'burned') {
+        // Charred roof beams, fallen in and leaning against the walls.
+        for (let i = 0; i < 5; i++) {
+          const beam = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 0.2, b.d * (0.8 + rng() * 0.5)), burnt);
+          beam.position.set(-hw + rng() * b.w, 0.5 + rng() * 1.4, (rng() - 0.5) * b.d * 0.5);
+          beam.rotation.set(0.4 + rng() * 0.8, rng() * 0.6, (rng() - 0.5) * 0.8);
+          beam.castShadow = true;
+          hs.add(beam);
+        }
+        const scorch = new THREE.Mesh(
+          new THREE.PlaneGeometry(b.w * 1.3, b.d * 1.3),
+          new THREE.MeshBasicMaterial({ color: 0x0d0a08, transparent: true,
+            opacity: 0.5, depthWrite: false }));
+        scorch.rotation.x = -Math.PI / 2;
+        scorch.position.y = 0.02;
+        hs.add(scorch);
+      } else if (b.ruin === 'collapsed') {
+        // Half the building is a heap. Rubble spilling out over the footprint.
+        for (let i = 0; i < 16; i++) {
+          const r2 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.35 + rng() * 0.6, 0.28 + rng() * 0.4, 0.35 + rng() * 0.5), stone);
+          r2.position.set((rng() - 0.5) * b.w * 1.1, 0.15 + rng() * 0.9, (rng() - 0.5) * b.d * 1.1);
+          r2.rotation.set(rng(), rng() * 3, rng());
+          r2.castShadow = true;
+          hs.add(r2);
+        }
+      } else if (b.ruin === 'hall') {
+        // The long hall keeps its gable and a row of empty windows — the one
+        // building in the town with any architecture left.
+        const gable = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.9, 2.6, 0.5), stone);
+        gable.position.set(0, b.h + 0.9, -hd);
+        gable.castShadow = true;
+        hs.add(gable);
+        this._registerOccluder(gable, stone, b.h + 2.2);
+        for (let i = -2; i <= 2; i++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.5, 0.6), dark);
+          win.position.set(i * 1.7, 2.3, -hd);
+          hs.add(win);
+        }
+        for (const sx of [-1, 1]) {
+          const buttress = new THREE.Mesh(new THREE.BoxGeometry(0.6, b.h * 0.8, 1.0), stoneD);
+          buttress.position.set(sx * hw, b.h * 0.4, -hd * 0.4);
+          buttress.castShadow = true;
+          hs.add(buttress);
+        }
+      } else {
+        // Roofless: a few surviving rafters across the top.
+        for (let i = 0; i < 4; i++) {
+          const raf = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.98, 0.16, 0.16), timber);
+          raf.position.set(0, b.h * (0.72 + rng() * 0.2), -hd + (i + 0.7) * (b.d / 4.6));
+          raf.rotation.z = (rng() - 0.5) * 0.12;
+          raf.castShadow = true;
+          hs.add(raf);
+        }
+      }
+
+      // A chimney stack on about half of them. Vertical, and it is what gives
+      // the town a SKYLINE, which is most of what makes it not a forest.
+      if (rng() > 0.45) {
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.8, b.h + 1.8 + rng() * 1.6, 0.8), stoneD);
+        ch.position.set(hw * 0.6, (b.h + 1.8) / 2, -hd * 0.6);
+        ch.castShadow = true;
+        hs.add(ch);
+        this._registerOccluder(ch, stoneD, b.h + 2.4);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.22, 1.05), slate);
+        cap.position.set(hw * 0.6, b.h + 1.8, -hd * 0.6);
+        hs.add(cap);
+      }
     }
 
-    // A well nobody draws from.
+    /* --- the street ------------------------------------------------------
+       Cobbles rather than ash. The GROUND is the fastest way to tell two
+       places apart, because it is the thing under every shot of the game. */
+    const cobbleMat = new THREE.MeshStandardMaterial({ color: 0x4b4740, roughness: 0.95 });
+    const street = new THREE.Mesh(new THREE.PlaneGeometry(7.0, 30), cobbleMat);
+    street.rotation.x = -Math.PI / 2;
+    street.position.y = 0.012;
+    street.receiveShadow = true;
+    g.add(street);
+    for (let i = 0; i < 90; i++) {
+      const c = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4 + rng() * 0.3, 0.06, 0.4 + rng() * 0.3), stoneD);
+      c.position.set((rng() - 0.5) * 6.4, 0.03, (rng() - 0.5) * 28);
+      c.rotation.y = rng() * Math.PI;
+      g.add(c);
+    }
+    // A gutter down each side of it.
+    for (const off of [-3.4, 3.4]) {
+      const gut = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 30), burnt);
+      gut.position.set(off, 0.03, 0);
+      g.add(gut);
+    }
+
+    /* --- a boundary wall, so the town has an EDGE ------------------------
+       The wood ends because the trees stop. A town ends because somebody
+       built a wall, and having one is most of why this reads as somewhere
+       people lived rather than a clearing with props in it. */
+    for (let i = 0; i < 34; i++) {
+      const a2 = (i / 34) * Math.PI * 2;
+      // Leave the street open at both ends.
+      const along = Math.abs(Math.sin(a2));
+      if (along < 0.34) continue;
+      const rad = 14.4;
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(2.6, 1.0 + rng() * 0.9, 0.5), stone);
+      seg.position.set(Math.sin(a2) * rad, 0.5, Math.cos(a2) * rad);
+      seg.rotation.y = -a2;
+      seg.castShadow = true;
+      g.add(seg);
+    }
+
+    // The well.
     const well = new THREE.Group();
     well.position.set(-4.4, 0, 4.6);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.9, 12), stone);
@@ -665,24 +809,27 @@ export class Forest {
     mouth.position.y = 0.92;
     well.add(mouth);
     for (const sx of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.0, 0.16), wood);
-      post.position.set(sx * 0.9, 1.0, 0);
-      post.castShadow = true;
-      well.add(post);
+      const post2 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.0, 0.16), timber);
+      post2.position.set(sx * 0.9, 1.0, 0);
+      post2.castShadow = true;
+      well.add(post2);
     }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.16, 0.16), wood);
-    beam.position.y = 2.0;
-    well.add(beam);
+    const beam2 = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.16, 0.16), timber);
+    beam2.position.y = 2.0;
+    well.add(beam2);
+    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.3, 8), timber);
+    bucket.position.set(0, 1.4, 0);
+    well.add(bucket);
     g.add(well);
 
-    // One dead tree in the square, and a cart with nothing in it.
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.4, 4.6, 7), wood);
+    // One dead tree, a cart, and barrels — the leftovers of people.
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.4, 4.6, 7), timber);
     trunk.position.set(5.0, 2.3, 5.4);
     trunk.castShadow = true;
     g.add(trunk);
-    this._registerOccluder(trunk, wood, 4.6);
+    this._registerOccluder(trunk, timber, 4.6);
     for (let i = 0; i < 4; i++) {
-      const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.11, 1.8, 5), wood);
+      const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.11, 1.8, 5), timber);
       branch.position.set(5.0, 3.4 + i * 0.3, 5.4);
       branch.rotation.set(0.9, i * 1.6, 0.7);
       g.add(branch);
@@ -691,42 +838,48 @@ export class Forest {
     const cart = new THREE.Group();
     cart.position.set(3.2, 0, -2.0);
     cart.rotation.y = 0.6;
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 1.2), wood);
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 1.2), timber);
     bed.position.y = 0.72;
     bed.castShadow = true;
     cart.add(bed);
     for (const sx of [-1, 1]) {
-      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.09, 5, 12), wood);
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.09, 5, 12), timber);
       wheel.position.set(sx * 0.8, 0.46, 0.68);
       wheel.rotation.y = Math.PI / 2;
       cart.add(wheel);
     }
     g.add(cart);
 
-    // THE RACK. The only lit thing in the town, and the only thing in it that
-    // does anything — an empty place with exactly one reason to cross it.
+    for (let i = 0; i < 7; i++) {
+      const a2 = rng() * Math.PI * 2;
+      const rad = 6.5 + rng() * 6;
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.32, 0.8, 9), timber);
+      barrel.position.set(Math.sin(a2) * rad, 0.4, Math.cos(a2) * rad);
+      if (rng() > 0.6) { barrel.rotation.z = Math.PI / 2; barrel.position.y = 0.36; }
+      barrel.castShadow = true;
+      g.add(barrel);
+    }
+
+    /* --- THE RACK -------------------------------------------------------- */
     const rack = new THREE.Group();
     rack.position.set(0, 0, -5.0);
-    const frameMat = wood;
     for (const sx of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.4, 0.2), frameMat);
-      post.position.set(sx * 1.5, 1.2, 0);
-      post.castShadow = true;
-      rack.add(post);
+      const post2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.4, 0.2), timber);
+      post2.position.set(sx * 1.5, 1.2, 0);
+      post2.castShadow = true;
+      rack.add(post2);
     }
     for (const y of [0.75, 1.85]) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.14, 0.16), frameMat);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.14, 0.16), timber);
       bar.position.y = y;
       bar.castShadow = true;
       rack.add(bar);
     }
-    // Four weapons on it, roughed in — enough that the rack reads as a rack
-    // and that four distinct silhouettes are hanging there.
     const steel = new THREE.MeshStandardMaterial({ color: 0xc0c6cc, roughness: 0.3, metalness: 0.9 });
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.5, 0.03), steel);
     blade.position.set(-1.05, 1.35, 0.14);
     rack.add(blade);
-    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 2.1, 6), frameMat);
+    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 2.1, 6), timber);
     haft.position.set(-0.35, 1.25, 0.14);
     rack.add(haft);
     const bit = new THREE.Mesh(
@@ -748,8 +901,6 @@ export class Forest {
     glow.position.set(1.15, 1.5, 0.21);
     rack.add(glow);
 
-    // A brazier beside it. The one warm light, and the thing that tells you
-    // where to walk from anywhere in the town.
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.28, 0.4, 9), iron);
     bowl.position.set(2.4, 1.0, -0.3);
     bowl.castShadow = true;
@@ -767,25 +918,115 @@ export class Forest {
     light.position.set(2.4, 1.6, -0.3);
     rack.add(light);
     this.townFire = { coals, light, phase: 2.2 };
-
     g.add(rack);
 
-    // The gate out, at the end of the street.
-    for (const sx of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 3.6, 8), stone);
-      post.position.set(sx * 2.0, 1.8, 12.4);
-      post.castShadow = true;
-      g.add(post);
-      this._registerOccluder(post, stone, 3.6);
+    /* --- lamp posts down the street, all but one of them dead ----------- */
+    this.townLamps = [];
+    for (const [lz, lit] of [[-1.0, false], [3.6, true], [8.4, false], [-8.0, false]]) {
+      for (const sx of [-1, 1]) {
+        const lp = new THREE.Group();
+        lp.position.set(sx * 3.9, 0, lz);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 3.0, 6), iron);
+        pole.position.y = 1.5;
+        pole.castShadow = true;
+        lp.add(pole);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), iron);
+        arm.position.set(-sx * 0.25, 2.9, 0);
+        lp.add(arm);
+        const lampMat = new THREE.MeshStandardMaterial({
+          color: 0x1b1510, emissive: 0xffb060,
+          emissiveIntensity: lit ? 1.4 : 0, roughness: 1 });
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.34, 0.26), lampMat);
+        lamp.position.set(-sx * 0.45, 2.75, 0);
+        lp.add(lamp);
+        if (lit) {
+          const l2 = new THREE.PointLight(0xffb878, 7, 9, 2);
+          l2.position.set(-sx * 0.45, 2.6, 0);
+          lp.add(l2);
+          this.townLamps.push({ mat: lampMat, light: l2, phase: rng() * 6 });
+        }
+        g.add(lp);
+      }
     }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.5, 0.6), stone);
-    lintel.position.set(0, 3.6, 12.4);
-    lintel.castShadow = true;
-    g.add(lintel);
+
+    // The gate out.
+    for (const sx of [-1, 1]) {
+      const post2 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 3.6, 8), stone);
+      post2.position.set(sx * 2.0, 1.8, 12.4);
+      post2.castShadow = true;
+      g.add(post2);
+      this._registerOccluder(post2, stone, 3.6);
+    }
+    const glintel = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.5, 0.6), stone);
+    glintel.position.set(0, 3.6, 12.4);
+    glintel.castShadow = true;
+    g.add(glintel);
+
+    /* --- the works, on the horizon --------------------------------------
+       The reason the town is empty, visible from it, and far too big. It also
+       gives the sky something to sit against, which the wood never needed
+       because the wood HAS a skyline. */
+    const worksMat = new THREE.MeshStandardMaterial({ color: 0x191c22, roughness: 1 });
+    for (const [wx, wz, wr, wh] of [[-26, -46, 5.5, 26], [-14, -52, 4.0, 19], [-36, -44, 3.2, 15]]) {
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(wr * 0.62, wr, wh, 10), worksMat);
+      stack.position.set(wx, wh / 2, wz);
+      g.add(stack);
+    }
+    const worksBody = new THREE.Mesh(new THREE.BoxGeometry(34, 13, 12), worksMat);
+    worksBody.position.set(-26, 6.5, -50);
+    g.add(worksBody);
+    const worksGlow = new THREE.Mesh(new THREE.PlaneGeometry(9, 4),
+      new THREE.MeshBasicMaterial({ color: 0xff6a20, transparent: true, opacity: 0.5, fog: false }));
+    worksGlow.position.set(-26, 3.0, -43.8);
+    g.add(worksGlow);
 
     g.visible = false;
     this.town = g;
-    ruin.add(g);
+    this.scene.add(g);
+  }
+
+  /* ---------------------------------------------------------------------
+     GROUND FOG. Six broad, very faint sheets lying just above the floor,
+     drifting at different rates and counter-rotating.
+
+     This is the single cheapest atmosphere in the game and it does more than
+     anything else here, because on a fixed overhead camera the FLOOR is most
+     of the picture — and an unbroken flat floor is what makes a scene read as
+     a diagram. Kept under the knee, so it never touches the ground telegraph.
+     ------------------------------------------------------------------ */
+  _buildGroundFog(tex) {
+    const g = new THREE.Group();
+    this.groundFog = g;
+    this.fogSheets = [];
+    this.scene.add(g);
+    const rng = makeRng(1717);
+    for (let i = 0; i < 6; i++) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(44, 44),
+        new THREE.MeshBasicMaterial({
+          map: tex.mist, transparent: true, depthWrite: false,
+          opacity: 0.05 + rng() * 0.05, color: 0x9fb0c4, fog: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.28 + i * 0.16;
+      m.renderOrder = 3;
+      g.add(m);
+      this.fogSheets.push({
+        mesh: m, spin: (rng() - 0.5) * 0.024,
+        dx: (rng() - 0.5) * 0.10, dz: (rng() - 0.5) * 0.10,
+        base: m.material.opacity,
+      });
+    }
+  }
+
+  /* Slow, cold motes drifting between the trunks. Not fireflies — the wood is
+     dead — but the same trick: a few points of light at DIFFERENT depths is
+     what gives a flat scene its third dimension back. */
+  _buildDrift(hi) {
+    this.drift = new Motes(hi ? 90 : 36, this.emberDot, {
+      rise: [-0.04, 0.12], size: 0.13, opacity: 0.5, color: 0x9fc6e8,
+      top: 5.5, additive: true, seed: 404,
+    });
+    this.scene.add(this.drift.points);
   }
 
   /* ---------------------------------------------------------------------
@@ -956,6 +1197,22 @@ export class Forest {
     if (bonesOn && !this.bones) this._buildBones();
     if (this.bones) this.bones.visible = bonesOn;
 
+    // The fog is tinted per place, which is a third of what separates them:
+    // cold blue in the wood, a dirty grey in the town, and hot low smoke at
+    // the kiln.
+    const FOG_TINT = { town: 0x8f9aa8, kiln: 0xff9a5a, yard: 0x7f92ab,
+                       ossuary: 0x8fa4bc, clearing: 0x9fb0c4 };
+    for (const f of (this.fogSheets || [])) {
+      f.mesh.material.color.setHex(FOG_TINT[name] || FOG_TINT.clearing);
+      f.mesh.material.opacity = f.base * (name === 'kiln' ? 1.7 : name === 'town' ? 1.25 : 1);
+    }
+    if (this.drift) {
+      // The drift is the WOOD's. A town does not have it, which is one more
+      // way of saying you have come out of the trees.
+      this.drift.points.visible = name !== 'town';
+      this.drift.points.material.color.setHex(name === 'kiln' ? 0xffb070 : 0x9fc6e8);
+    }
+
     const town = name === 'town';
     if (town && !this.town) this._buildTown(this._tex);
     if (this.town) this.town.visible = town;
@@ -1062,7 +1319,7 @@ export class Forest {
 
     g.visible = false;
     this.bones = g;
-    ruin.add(g);
+    this.scene.add(g);
   }
 
   /* Mist, as billboards standing among the trees rather than as horizontal
@@ -1132,6 +1389,13 @@ export class Forest {
     this.t += dt;
     const t = this.t;
 
+    for (const l of (this.townLamps || [])) {
+      if (!this.town || !this.town.visible) break;
+      const k = 0.82 + Math.sin(this.t * 5.3 + l.phase) * 0.11
+                     + Math.sin(this.t * 1.9 + l.phase * 2.1) * 0.07;
+      l.mat.emissiveIntensity = 1.4 * k;
+      l.light.intensity = 7 * k;
+    }
     if (this.townFire && this.town && this.town.visible) {
       const f = this.townFire;
       const k = 0.8 + Math.sin(this.t * 7.1 + f.phase) * 0.13
