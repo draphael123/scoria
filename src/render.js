@@ -273,14 +273,16 @@ export class View {
       const t = actor.windupProgress;
       const s = Math.max(0.001, t);
       tg.fill.scale.set(s, s, s);
-      tg.fill.material.opacity = 0.30 + 0.34 * t;
-      tg.fill.material.color.setHex(t > 0.86 ? C.hot : C.ember);
-      tg.outline.material.opacity = 0.18 + 0.14 * t;
+      // Held down deliberately: under bloom a hot fill blows out into a
+      // featureless disc, and the EDGE is the information the player needs.
+      tg.fill.material.opacity = 0.26 + 0.20 * t;
+      tg.fill.material.color.setHex(t > 0.92 ? C.hot : C.ember);
+      tg.outline.material.opacity = 0.20 + 0.30 * t;
     } else {
       tg.fill.scale.set(1, 1, 1);
-      tg.fill.material.color.setHex(0xffffff);
-      tg.fill.material.opacity = 0.55;
-      tg.outline.material.opacity = 0.40;
+      tg.fill.material.color.setHex(C.hot);
+      tg.fill.material.opacity = 0.42;
+      tg.outline.material.opacity = 0.6;
     }
   }
 
