@@ -22,6 +22,9 @@ export class Hud {
     this._flash = 0;
   }
 
+  /* The HUD belongs to the fight, not to the menus. */
+  setVisible(on) { document.body.classList.toggle('hud-on', on); }
+
   hit(kind) {
     this._flash = kind === 'taken' ? 0.55 : 0.2;
     this.flash.style.background = kind === 'taken'

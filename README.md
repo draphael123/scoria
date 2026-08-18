@@ -6,6 +6,8 @@ An isometric souls-like action roguelike set in a dead forge-city.
 Each weapon levels permanently across every run, so starting a run means walking
 to the rack and choosing which mastery to carry in.
 
+**Play it:** https://scoria.vercel.app
+
 ## Current state — Slice 0
 
 The combat-feel vertical slice. One room, one blade, one Slagbound. Everything
@@ -23,6 +25,21 @@ Shipped in this slice:
   fill scales 0 → 1, so the fill reaching the outline *is* the moment of impact
 - Hitstop and screen shake on impact
 - A frame-data debug overlay (F1) — the actual tuning instrument
+
+Around the fight:
+
+- A fallen forge-hall built from procedural canvas textures — no binary assets
+- Ambient life: drifting embers, braziers flickering on layered sines, a
+  bloomery still burning, chains swaying
+- Tall props fade out when they come between the camera and the duel, because
+  a fixed isometric camera gives the player no way to look around them
+- Title screen, pause menu and persisted settings (volumes, screen shake,
+  quality, frame-data overlay)
+- Synthesised audio — no sample files. The enemy windup plays a rising tone
+  that resolves exactly on impact, giving the telegraph a second channel for
+  when the floor decal is hidden behind your own body
+- Touch controls with a floating movement stick, so strafing round a locked
+  target works with a thumb that never lands twice in the same place
 
 ## Running it
 
@@ -44,9 +61,13 @@ Then open http://localhost:5810
 | Shift / F | Guard |
 | Space | Roll (backstep with no direction held) |
 | Tab / Q | Lock-on |
+| Esc | Menu |
 | F1 | Frame-data overlay |
 | P / . | Pause / step one frame |
 | R | Restart |
+
+On touch devices the controls appear automatically: drag anywhere on the left
+half to move, buttons on the right to strike, and hold GUARD to block.
 
 ## Tuning
 

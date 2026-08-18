@@ -8,7 +8,10 @@ export class Input {
     this.axis = { x: 0, y: 0 };     // raw WASD, camera-plane
     this.held = { guard: false };
     this.buffer = [];               // [{ action, age }]
-    this.edges = { lock: false, debug: false, pause: false, stepOne: false, reset: false };
+    this.edges = { lock: false, debug: false, pause: false, stepOne: false, reset: false, menu: false };
+    // Touch fills these; sample() merges them with the keyboard so both input
+    // paths land in exactly the same place.
+    this.touch = { x: 0, y: 0, guard: false };
     this._keys = new Set();
     this.enabled = true;
 
@@ -30,6 +33,7 @@ export class Input {
         case 'KeyP':       this.edges.pause = true; break;
         case 'Period':     this.edges.stepOne = true; break;
         case 'KeyR':       this.edges.reset = true; break;
+        case 'Escape':     this.edges.menu = true; break;
       }
     };
     this._onKeyUp = (e) => { this._keys.delete(e.code); };
@@ -58,10 +62,17 @@ export class Input {
     if (k.has('KeyD') || k.has('ArrowRight')) x += 1;
     if (k.has('KeyA') || k.has('ArrowLeft'))  x -= 1;
     const len = Math.hypot(x, y);
-    this.axis.x = len > 0 ? x / len : 0;
-    this.axis.y = len > 0 ? y / len : 0;
+    if (len > 0) {
+      this.axis.x = x / len;
+      this.axis.y = y / len;
+    } else {
+      // Touch is analogue, so it is NOT normalised — a half-deflected thumb
+      // should walk, not sprint.
+      this.axis.x = this.touch.x;
+      this.axis.y = this.touch.y;
+    }
 
-    this.held.guard = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyF');
+    this.held.guard = k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyF') || this.touch.guard;
 
     for (const b of this.buffer) b.age += dt;
     this.buffer = this.buffer.filter((b) => b.age < BUFFER_WINDOW);
@@ -81,6 +92,17 @@ export class Input {
     if (!this.edges[name]) return false;
     this.edges[name] = false;
     return true;
+  }
+
+  /* Drop everything held — used when a menu opens so the knight doesn't keep
+     walking into the Slagbound behind the pause screen. */
+  releaseAll() {
+    this._keys.clear();
+    this.buffer.length = 0;
+    this.touch.x = this.touch.y = 0;
+    this.touch.guard = false;
+    this.axis.x = this.axis.y = 0;
+    this.held.guard = false;
   }
 
   /* Headless drive: scripted input for sim(). */

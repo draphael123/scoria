@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>SCORIA — Slice 0</title>
-<meta name="description" content="Isometric souls-like combat prototype. One room, one blade, one Slagbound.">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0a09">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SCORIA</title>
+<meta name="description" content="An isometric souls-like in a dead forge-hall. The armoury rack is your character sheet.">
 <style>
   :root{
     --ink:#e6dccb;
@@ -13,27 +16,33 @@
     --ember:#d4552a;
     --hot:#ffb347;
     --steel:#8fb4c8;
-    --panel:rgba(12,10,9,.90);
+    --panel:rgba(12,10,9,.92);
     --edge:rgba(230,220,203,.14);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-l:env(safe-area-inset-left,0px);
+    --safe-r:env(safe-area-inset-right,0px);
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;background:#0b0a09;overflow:hidden}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:#0b0a09;overflow:hidden;overscroll-behavior:none}
   body{
     font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
     color:var(--ink);-webkit-font-smoothing:antialiased;
+    touch-action:none;user-select:none;-webkit-user-select:none;
   }
-  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
+  /* ============================== HUD =================================== */
   .hud{position:fixed;pointer-events:none;user-select:none;z-index:5;
-       text-shadow:0 1px 10px rgba(0,0,0,.85)}
+       text-shadow:0 1px 10px rgba(0,0,0,.85);opacity:0;transition:opacity .35s}
+  body.hud-on .hud{opacity:1}
 
-  /* ------------------------------- player bars ------------------------- */
-  #bars{left:34px;bottom:34px;width:300px}
-  .bar{position:relative;height:15px;border:1px solid rgba(0,0,0,.65);
+  #bars{left:calc(30px + var(--safe-l));bottom:calc(30px + var(--safe-b));width:min(300px,42vw)}
+  .bar{position:relative;height:15px;border:1px solid rgba(0,0,0,.7);
        background:rgba(0,0,0,.55);box-shadow:0 2px 10px rgba(0,0,0,.6);overflow:hidden}
   .bar + .bar{margin-top:7px;height:10px}
   .bar i{position:absolute;inset:0 auto 0 0;display:block;width:100%}
-  #hpChip{background:#7a2118;transition:none}
+  #hpChip{background:#7a2118}
   #hpFill{background:linear-gradient(180deg,#c8443a,#8e2820)}
   #stFill{background:linear-gradient(180deg,#c9b46a,#8d7a36)}
   #stBar.guarding #stFill{background:linear-gradient(180deg,#8fb4c8,#4d7186)}
@@ -41,10 +50,9 @@
   @keyframes pulse{from{box-shadow:0 0 0 rgba(212,85,42,0)}to{box-shadow:0 0 14px rgba(212,85,42,.85)}}
   .barlbl{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
 
-  /* ------------------------------- foe bar ----------------------------- */
-  #foe{top:38px;left:50%;transform:translateX(-50%);width:min(560px,58vw);opacity:0;
-       transition:opacity .35s}
-  #foe.on{opacity:1}
+  #foe{top:34px;left:50%;transform:translateX(-50%);width:min(560px,66vw)}
+  body.hud-on #foe{opacity:0}
+  body.hud-on #foe.on{opacity:1}
   #foe .name{text-align:center;font-size:12px;letter-spacing:.34em;text-transform:uppercase;
              color:var(--dim);margin-bottom:7px}
   #foe.stag .name{color:var(--hot)}
@@ -54,15 +62,15 @@
   #foePoise{background:linear-gradient(180deg,#d9d2c2,#8e8779);height:100%;display:block}
   #foe.stag #foePoise{background:var(--hot)}
 
-  /* ------------------------------- misc -------------------------------- */
-  #lockPip{top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;letter-spacing:.3em;
-           color:var(--faint);opacity:0;transition:opacity .2s}
-  #lockPip.on{opacity:0}
-
-  #keys{right:26px;bottom:28px;text-align:right;font-size:11px;line-height:1.85;color:var(--faint);
-        letter-spacing:.04em}
+  #keys{right:calc(24px + var(--safe-r));bottom:calc(24px + var(--safe-b));text-align:right;
+        font-size:11px;line-height:1.85;color:var(--faint);letter-spacing:.04em}
   #keys b{color:var(--dim);font-weight:400;display:inline-block;min-width:74px;text-align:right;
-          margin-right:9px;font-variant-numeric:tabular-nums}
+          margin-right:9px}
+  body.is-touch #keys{display:none}
+
+  /* The 3D reticle over the target already says "locked"; this element stays
+     in the DOM only because ui.js writes to it. */
+  #lockPip{display:none}
 
   #flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:4}
 
@@ -73,8 +81,101 @@
   .banner.lose{color:#b33a2a}
   .banner.win{color:#e2c68a}
 
-  /* ------------------------------- debug ------------------------------- */
-  #debug{position:fixed;top:0;right:0;width:308px;max-height:100vh;overflow:auto;z-index:8;
+  /* ============================= MENUS ================================== */
+  .menu-root{position:fixed;inset:0;z-index:20;display:none;
+             background:radial-gradient(ellipse at 50% 42%,rgba(20,14,10,.72),rgba(6,6,7,.94) 72%);
+             backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .menu-root.on{display:block}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+          justify-content:center;padding:clamp(20px,5vw,56px);text-align:center;gap:0}
+  .screen.on{display:flex;animation:fadeUp .45s ease both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  .wordmark{font-size:clamp(52px,13vw,124px);letter-spacing:.26em;margin-left:.26em;
+            color:#e9dcc4;line-height:1;
+            text-shadow:0 0 60px rgba(212,85,42,.42),0 6px 40px rgba(0,0,0,.9)}
+  .tagline{margin-top:20px;font-size:clamp(11px,2.4vw,14px);letter-spacing:.3em;
+           text-transform:uppercase;color:var(--ember)}
+  .flavour{margin-top:30px;max-width:52ch;font-size:clamp(13px,2.6vw,16px);line-height:1.85;
+           color:var(--dim)}
+  .slice-note{margin-top:34px;font-size:11px;letter-spacing:.13em;color:var(--faint);max-width:56ch;
+              line-height:1.7}
+
+  .btn-row{display:flex;gap:14px;margin-top:38px;flex-wrap:wrap;justify-content:center}
+  .btn-col{display:flex;flex-direction:column;gap:12px;margin-top:26px;width:min(320px,86vw)}
+  .btn{padding:14px 30px;border:1px solid var(--edge);background:rgba(0,0,0,.35);
+       letter-spacing:.2em;font-size:12px;text-transform:uppercase;color:var(--dim);
+       transition:.18s;min-height:48px}
+  .btn:hover,.btn:focus-visible{color:var(--ink);border-color:rgba(212,85,42,.7);
+       background:rgba(212,85,42,.12);outline:none}
+  .btn.primary{color:var(--ink);border-color:rgba(212,85,42,.55)}
+  .btn.ghost{border-color:transparent;color:var(--faint);font-size:11px}
+  .btn.ghost:hover{color:var(--dim);background:transparent}
+
+  .panel-title{font-size:13px;letter-spacing:.4em;color:var(--ember);text-transform:uppercase;
+               margin-bottom:8px}
+  .settings-body{width:min(520px,92vw);margin-top:22px;text-align:left;
+                 max-height:56vh;overflow-y:auto;padding-right:4px}
+  .srow{display:flex;align-items:center;justify-content:space-between;gap:18px;
+        padding:13px 0;border-bottom:1px solid rgba(230,220,203,.07)}
+  .slabel{font-size:14px;color:var(--ink)}
+  .shint{font-size:11px;color:var(--faint);margin-top:4px;line-height:1.5;max-width:30ch;
+         font-family:ui-monospace,Consolas,monospace}
+  .sctl{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+  .sctl.seg{gap:6px}
+  .sval{font-size:11px;color:var(--faint);min-width:38px;text-align:right;
+        font-family:ui-monospace,Consolas,monospace}
+  .sep{height:14px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:min(150px,34vw);height:3px;
+       background:rgba(230,220,203,.2);outline:none;border-radius:2px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;
+       border-radius:50%;background:var(--ember);cursor:pointer;box-shadow:0 0 10px rgba(212,85,42,.7)}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;
+       background:var(--ember);cursor:pointer}
+  .toggle{padding:8px 16px;border:1px solid var(--edge);font-size:11px;letter-spacing:.16em;
+          color:var(--faint);min-height:38px;transition:.16s}
+  .toggle.on{color:var(--ink);border-color:rgba(212,85,42,.6);background:rgba(212,85,42,.14)}
+
+  /* =========================== TOUCH ==================================== */
+  .touch-root{position:fixed;inset:0;z-index:12;display:none;pointer-events:none}
+  .touch-root.on{display:block}
+  .stick-zone{position:absolute;left:0;top:0;bottom:0;width:46%;pointer-events:auto}
+  .stick-base{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;border-radius:50%;
+              border:1px solid rgba(230,220,203,.2);background:rgba(0,0,0,.22);
+              opacity:0;transition:opacity .15s;pointer-events:none}
+  .stick-base.on{opacity:1}
+  .stick-knob{position:absolute;left:50%;top:50%;width:48px;height:48px;border-radius:50%;
+              background:rgba(212,85,42,.5);border:1px solid rgba(255,190,120,.6);
+              transform:translate(-50%,-50%)}
+
+  .action-pad{position:absolute;right:calc(20px + var(--safe-r));bottom:calc(24px + var(--safe-b));
+              width:210px;height:210px;pointer-events:none}
+  .tbtn{position:absolute;pointer-events:auto;border-radius:50%;
+        border:1px solid rgba(230,220,203,.22);background:rgba(14,11,9,.55);
+        color:var(--dim);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+        display:grid;place-items:center;backdrop-filter:blur(2px);transition:.08s}
+  .tbtn.down{background:rgba(212,85,42,.42);color:#fff;transform:scale(.94)}
+  .tbtn.light{width:88px;height:88px;right:0;bottom:34px;font-size:11px;
+              border-color:rgba(212,85,42,.5);color:var(--ink)}
+  .tbtn.heavy{width:64px;height:64px;right:88px;bottom:6px}
+  .tbtn.roll {width:64px;height:64px;right:16px;bottom:132px}
+  .tbtn.guard{width:64px;height:64px;right:104px;bottom:88px}
+  .tbtn.lock {position:absolute;width:58px;height:58px;right:calc(20px + var(--safe-r));top:96px}
+  .tbtn.menu {position:absolute;width:44px;height:44px;left:calc(16px + var(--safe-l));top:16px;
+              font-size:17px;border-radius:8px}
+
+  /* Landscape phones are short: pull the pad in so it doesn't eat the arena. */
+  @media (max-height:460px){
+    .action-pad{width:180px;height:180px}
+    .tbtn.light{width:74px;height:74px;bottom:26px}
+    .tbtn.heavy,.tbtn.roll,.tbtn.guard{width:56px;height:56px}
+    .tbtn.roll{bottom:112px}
+    .tbtn.guard{right:90px;bottom:76px}
+    #bars{width:min(220px,32vw)}
+  }
+
+  /* ============================ DEBUG =================================== */
+  #debug{position:fixed;top:0;right:0;width:min(308px,86vw);max-height:100vh;overflow:auto;z-index:8;
          background:var(--panel);border-left:1px solid var(--edge);padding:14px 16px 18px;
          font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11px;
          display:none;line-height:1.55}
@@ -82,7 +183,7 @@
   #debug h1{font-size:10px;letter-spacing:.28em;color:var(--ember);font-weight:400;
             font-family:inherit;margin-bottom:10px}
   .dbg-row{display:flex;justify-content:space-between;gap:10px;color:var(--faint)}
-  .dbg-row b{color:var(--ink);font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
+  .dbg-row b{color:var(--ink);font-weight:500;text-align:right}
   .dbg-head{color:var(--ember);letter-spacing:.2em;margin:2px 0 3px}
   .dbg-sep{height:1px;background:var(--edge);margin:8px 0}
   .tl-label{color:var(--faint);margin:10px 0 4px;letter-spacing:.16em}
@@ -112,7 +213,7 @@
 </div>
 
 <div class="hud" id="bars">
-  <div class="barlbl">Vigour · Stamina</div>
+  <div class="barlbl">Vigour &middot; Stamina</div>
   <div class="bar"><i id="hpChip"></i><i id="hpFill"></i></div>
   <div class="bar" id="stBar"><i id="stFill"></i></div>
 </div>
@@ -121,13 +222,13 @@
 
 <div class="hud" id="keys">
   <div><b>WASD</b>move</div>
-  <div><b>LMB / J</b>light · 3-hit chain</div>
+  <div><b>LMB / J</b>light &middot; 3-hit chain</div>
   <div><b>RMB / K</b>heavy</div>
   <div><b>Shift / F</b>guard</div>
-  <div><b>Space</b>roll · backstep</div>
+  <div><b>Space</b>roll &middot; backstep</div>
   <div><b>Tab / Q</b>lock-on</div>
+  <div><b>Esc</b>menu</div>
   <div><b>F1</b>frame data</div>
-  <div><b>P · .</b>pause · step</div>
   <div><b>R</b>restart</div>
 </div>
 
@@ -137,16 +238,16 @@
   <h1>FRAME DATA</h1>
   <div id="dbgBody"></div>
   <div class="tl-label">PLAYER</div>
-  <div class="timeline" id="pTimeline"><div class="tl-empty">—</div></div>
+  <div class="timeline" id="pTimeline"><div class="tl-empty">&mdash;</div></div>
   <div class="tl-label">SLAGBOUND</div>
-  <div class="timeline" id="eTimeline"><div class="tl-empty">—</div></div>
+  <div class="timeline" id="eTimeline"><div class="tl-empty">&mdash;</div></div>
 </aside>
 
 <div id="boot"><div>
   <div style="letter-spacing:.3em;margin-bottom:14px">SCORIA FAILED TO START</div>
   <div id="bootMsg" style="color:#9a9084;font-family:ui-monospace,Consolas,monospace;font-size:12px"></div>
   <div style="color:#6a6158;margin-top:16px;font-size:12px">
-    Must be served over http:// — file:// blocks ES modules.
+    Must be served over http:// &mdash; file:// blocks ES modules.
   </div>
 </div></div>
 
@@ -161,7 +262,13 @@
   window.addEventListener('error', (e) => {
     if (!window.__SCORIA_BOOTED__) bootFail(e.message + '  —  ' + (e.filename||''));
   });
+  window.addEventListener('unhandledrejection', (e) => {
+    if (!window.__SCORIA_BOOTED__) bootFail('unhandled rejection: ' + (e.reason && e.reason.message || e.reason));
+  });
   setTimeout(() => { if (!window.__SCORIA_BOOTED__) bootFail('module did not finish loading in 4s'); }, 4000);
+  // Block pinch-zoom and double-tap zoom, which otherwise fight the controls.
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
 </script>
 </body>
 </html>
