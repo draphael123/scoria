@@ -6,7 +6,9 @@ An isometric souls-like action roguelike set in a dead forge-city.
 Each weapon levels permanently across every run, so starting a run means walking
 to the rack and choosing which mastery to carry in.
 
-**Play it:** https://scoria.vercel.app
+**Play it:** https://scoria-pi.vercel.app
+
+(`scoria.vercel.app` is an unrelated project — Vercel subdomains are global.)
 
 ## Current state — Slice 0
 
