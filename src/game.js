@@ -3,7 +3,7 @@ import { Foe } from './enemy.js';
 import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
 import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT, RISE,
-         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT } from './config.js';
+         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT, ZONES, INTERACT } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
@@ -26,6 +26,30 @@ export class Game {
   }
 
   get encounter() { return ENCOUNTERS[this.encounterId] || ENCOUNTERS[DEFAULT_ENCOUNTER]; }
+
+  /* ---- zones ------------------------------------------------------------ */
+  enterZone(id) {
+    this.zone = ZONES[id] || null;
+    this.zoneId = this.zone ? id : null;
+    this.previewMode = false;
+    this.reset();
+  }
+  leaveZone() { this.zone = null; this.zoneId = null; }
+
+  /* The prop the player is standing at, if any. Recomputed every step rather
+     than latched, so walking away from something dismisses its prompt without
+     any bookkeeping. */
+  _updateZone() {
+    if (!this.zone) { this.near = null; return; }
+    const p = this.player;
+    let best = null, bestD = Infinity;
+    for (const prop of this.zone.props) {
+      const d = Math.hypot(p.x - prop.x, p.z - prop.z);
+      if (d > INTERACT.hint || d > bestD) continue;
+      bestD = d; best = { prop, dist: d, inRange: d <= prop.r };
+    }
+    this.near = best;
+  }
 
   /* Where in the run you are. Room 0 is whatever the rack was set to; after
      that the chain is fixed, and each room introduces exactly one new idea. */
@@ -77,6 +101,23 @@ export class Game {
       build: this.build,
       weapon: this.build?.weapon,
     });
+
+    // A ZONE is a place, not a fight: nobody spawns, nothing can be won or
+    // lost, and the only things in it are the ones you can walk up to.
+    if (this.zone) {
+      this.enemies = [];
+      this.pending = [];
+      this.blockers = [];
+      this.player.lockTarget = null;
+      this.player.x = this.zone.spawn[0];
+      this.player.z = this.zone.spawn[1];
+      this.player.facing = Math.PI;
+      this.token = null; this.aggroCd = 0; this.shots = [];
+      this.exitOpen = false; this.exitT = 0; this.roomDone = false;
+      this.outcome = null; this.outcomeT = 0;
+      this.near = null;
+      return;
+    }
 
     // In preview the clearing is empty. The creator is not a fight, and a
     // Slagbound walking into frame while you pick a helm is not a feature.
@@ -353,6 +394,17 @@ export class Game {
     // "the tome never lands a hit" when the tome was landing all of them.
     const evStart = this.events.length;
     this.time += dt;
+
+    // A zone runs the player and nothing else — no aggro, no shots, no waves,
+    // no outcome. Everything below this line belongs to a fight.
+    if (this.zone) {
+      this.player.update(dt, { input, basis, events: this.events,
+                               player: this.player, enemies: [], game: this });
+      this._integrate(dt);
+      this._updateZone();
+      return;
+    }
+
     this._validateLock();
     this._releaseWaves(dt);
     this._updateAggro(dt);
@@ -468,10 +520,11 @@ export class Game {
       }
     }
 
+    const bound = this.zone ? this.zone.radius : ARENA.radius;
     for (const a of all) {
       if (a.dead) continue;
       const d = Math.hypot(a.x, a.z);
-      const max = ARENA.radius - a.radius - 0.15;
+      const max = bound - a.radius - 0.15;
       if (d > max) {
         const s = max / d;
         a.x *= s; a.z *= s;
@@ -639,6 +692,14 @@ export class Game {
     const seed = opts.seed ?? this.seed;
     const prevEnc = this.encounterId;
     const prevBuild = this.build;
+    // A sim is always a FIGHT. If the page happened to be standing in a zone,
+    // reset() would take the zone branch, spawn nobody, and every assert would
+    // report the game as broken while the game was fine — the harness lying is
+    // worse than the game being wrong, because you fix the wrong thing.
+    const prevZone = this.zone;
+    const prevZoneId = this.zoneId;
+    const prevPreview = this.previewMode;
+    this.zone = null; this.zoneId = null; this.previewMode = false;
     if (opts.encounter) this.encounterId = opts.encounter;
     if (opts.weapon) this.build = { ...(this.build || {}), weapon: opts.weapon };
     this.reset(seed);
@@ -740,6 +801,9 @@ export class Game {
 
     this.encounterId = prevEnc;
     this.build = prevBuild;
+    this.zone = prevZone;
+    this.zoneId = prevZoneId;
+    this.previewMode = prevPreview;
     return out;
   }
 }

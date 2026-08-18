@@ -9,7 +9,7 @@ export class Input {
     this.held = { guard: false };
     this.buffer = [];               // [{ action, age }]
     this.edges = { lock: false, debug: false, pause: false, stepOne: false, reset: false,
-                   menu: false, cycleNext: false, cyclePrev: false };
+                   menu: false, cycleNext: false, cyclePrev: false, interact: false };
     // Touch fills these; sample() merges them with the keyboard so both input
     // paths land in exactly the same place.
     this.touch = { x: 0, y: 0, guard: false };
@@ -43,7 +43,10 @@ export class Input {
         // Target cycling. Lock-on with no cycle is a trap against a crowd: it
         // holds whatever it grabbed first while something else walks into your
         // back. E steps round; the wheel is the mouse equivalent of a stick flick.
-        case 'KeyE':       this.edges.cycleNext = true; break;
+        // E is CYCLE TARGET in a fight and INTERACT in a zone. There is
+        // nothing to cycle in a town and nothing to interact with in a fight,
+        // so one key covers both without ever being ambiguous.
+        case 'KeyE':       this.edges.cycleNext = true; this.edges.interact = true; break;
         case 'KeyZ':       this.edges.cyclePrev = true; break;
         case 'F1':
         case 'Backquote':  this.edges.debug = true; e.preventDefault(); break;

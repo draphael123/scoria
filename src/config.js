@@ -1172,6 +1172,55 @@ export const ENCOUNTERS = {
             [-4.2, 3.0, null, { atRemaining: 2 }]],
   },
 };
+
+/* -------------------------------------------------------------------------
+   ZONES — places rather than fights.
+
+   A zone has no enemies, no aggro token, no win and no loss. It is somewhere
+   you walk around, and the only thing in it that does anything is whatever
+   you can stand next to and press a key at.
+
+   There are two, and they do different jobs. SCORIA is the hub: barren on
+   purpose, and it holds exactly one thing, because a hub that holds nothing
+   is a corridor and a hub that holds five things is a menu with scenery. The
+   BURN CIRCLE is the mouth of the run — the last quiet ground before the
+   wood, and the place the tutorial wakes you up in.
+
+   The rack lives in the town rather than in a screen. That is the whole point
+   of the hook: walking to it and choosing IS how a run begins.
+   ---------------------------------------------------------------------- */
+export const ZONES = {
+  town: {
+    id: 'town', name: 'Scoria', theme: 'town',
+    sub: 'what the works left behind',
+    radius: 15.0,
+    spawn: [0, 7.5],
+    props: [
+      // The rack, and the reason to walk anywhere.
+      { id: 'rack', kind: 'rack', x: 0, z: -5.0, r: 2.4,
+        prompt: 'TAKE UP A WEAPON', action: 'rack' },
+      // The road out. Locked until you are carrying something.
+      { id: 'gate', kind: 'gate', x: 0, z: 12.4, r: 2.2,
+        prompt: 'INTO THE WOOD', action: 'depart' },
+    ],
+  },
+  circle: {
+    id: 'circle', name: 'The Burn Circle', theme: 'clearing',
+    sub: 'where the wood stops',
+    radius: 13.0,
+    spawn: [0, 6.0],
+    props: [
+      { id: 'road', kind: 'gate', x: 0, z: 11.9, r: 2.2,
+        prompt: 'DOWN THE HAUL ROAD', action: 'begin' },
+    ],
+  },
+};
+
+/* How close you must be for a prompt to appear at all. Deliberately wider
+   than the trigger radius, so the game tells you a thing is interactive
+   before it asks you to interact with it. */
+export const INTERACT = { hint: 4.2 };
+
 export const DEFAULT_ENCOUNTER = 'duel';
 
 /* THE RUN, such as it is: four rooms. The first is whatever the rack was set

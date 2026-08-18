@@ -9,7 +9,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
-import { WEAPONS, WEAPON_ORDER } from './config.js';
+import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT } from './config.js';
 import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
@@ -74,13 +74,10 @@ function applySetting(key, value) {
 const tutorial = new Tutorial(game, {
   onStep: (step, t) => tutUI.show(step, t, isTouch),
   onFinish: () => {
-    // Straight into the duel — no menu, no confirmation.
+    // Down the road and into the town — the opening ends where the game
+    // actually starts, with the rack in front of you.
     tutUI.setVisible(false);
-    game.reset();
-    resetHudSmoothing();
-    started = true;
-    paused = false;
-    cui.flash('THE SLAGBOUND COMES', 'bad');
+    enterZone('town');
   },
 });
 
@@ -139,13 +136,32 @@ function syncWeaponUI() {
 const menu = new Menu(settings, {
   onBegin(build) {
     game.previewMode = false;
+    // Coming out of the rack IN TOWN just re-arms you and puts you back — the
+    // creator is the rack, and the rack does not start the run, the gate does.
+    if (game.zone && game.zoneId === 'town') {
+      if (build) game.build = build;
+      const id = game.zoneId;
+      menu.hide();
+      game.enterZone(id);
+      started = true; paused = false;
+      view.reap(new Set([game.player]));
+      resetHudSmoothing(); syncWeaponUI();
+      cui.flash((build && WEAPONS[build.weapon] ? WEAPONS[build.weapon].name : '').toUpperCase(), 'good');
+      return;
+    }
     if (build) {
       game.build = build;
       if (build.encounter) game.encounterId = build.encounter;
     }
-    tutorial.stop(); tutUI.setVisible(false);
+    // You have chosen what you are carrying; now you wake up holding it.
+    game.leaveZone();
     started = true; paused = false;
-    game.reset(); resetHudSmoothing(); noteFoes();
+    tutorial.start();
+    resetHudSmoothing(); syncWeaponUI();
+  },
+  onTown() {
+    game.leaveZone();
+    enterZone('town');
   },
   onTrain() {
     game.previewMode = false;
@@ -243,6 +259,63 @@ function swapTrainingWeapon(id) {
   cui.flash(WEAPONS[id].name.toUpperCase(), 'good');
 }
 buildTrainSwap();
+
+/* ---------------------------------------------------------------------------
+   ZONES — the town and the burn circle.
+
+   A zone is a place you walk around with one thing in it worth pressing a key
+   at. The prompt appears when you are near, brightens when you are actually
+   in range, and the action it fires is named in config rather than here.
+   ------------------------------------------------------------------------ */
+const promptEl = document.getElementById('prompt');
+const promptText = document.getElementById('promptText');
+const placard = document.getElementById('placard');
+
+function showPlacard(name, sub) {
+  document.getElementById('placardName').textContent = name;
+  document.getElementById('placardSub').textContent = sub || '';
+  placard.classList.remove('on');
+  void placard.offsetWidth;          // restart the animation
+  placard.classList.add('on');
+}
+
+function enterZone(id) {
+  tutorial.stop(); tutUI.setVisible(false);
+  menu.hide();
+  game.enterZone(id);
+  started = true; paused = false;
+  resetHudSmoothing();
+  view.reap(new Set([game.player]));
+  const z = ZONES[id];
+  showPlacard(z.name, z.sub);
+  audio.uiClick();
+}
+
+/* What each prop does. Kept here rather than in config because these are
+   FLOW, not tuning — they decide where the game goes next. */
+function doZoneAction(action) {
+  if (action === 'rack') {
+    // The rack opens the same creator the title screen uses. Walking to it is
+    // the difference between a menu and a place.
+    menu.showCreator();
+  } else if (action === 'depart') {
+    enterZone('circle');
+  } else if (action === 'begin') {
+    game.leaveZone();
+    game.encounterId = (game.build && game.build.encounter) || 'duel';
+    game.roomsCleared = 0;
+    started = true; paused = false;
+    game.reset(); resetHudSmoothing(); noteFoes();
+    showPlacard(game.encounter.name, 'the wood');
+  }
+}
+
+function updateZoneUI() {
+  const near = game.zone && game.near;
+  promptEl.classList.toggle('on', !!near);
+  promptEl.classList.toggle('ready', !!(near && near.inRange));
+  if (near) promptText.textContent = near.prop.prompt;
+}
 
 const pauseBtn = document.getElementById('pauseBtn');
 if (pauseBtn) pauseBtn.onclick = () => { menu.togglePause(); audio.uiClick(); };
@@ -370,7 +443,14 @@ function frame(now) {
   if (input.takeEdge('debug')) { debug.toggle(); view.setDebug(debug.on); settings.frameData = debug.on; }
   if (!menu.open) {
     if (input.takeEdge('lock')) game.toggleLock();
-    if (input.takeEdge('cycleNext')) { game.cycleLock(1); audio.uiClick(); }
+    // In a zone E interacts; in a fight it cycles targets.
+    if (game.zone) {
+      input.takeEdge('cycleNext');
+      if (input.takeEdge('interact') && game.near && game.near.inRange) {
+        doZoneAction(game.near.prop.action);
+      }
+    } else if (input.takeEdge('cycleNext')) { game.cycleLock(1); audio.uiClick(); }
+    input.takeEdge('interact');
     // In training the number keys are the rack rather than ability slots —
     // there is nothing to use an ability on but an effigy, and comparing
     // weapons is the entire point of the room.
@@ -443,8 +523,11 @@ function frame(now) {
   view.setBlockers(started ? (game.blockers || []) : []);
   view.syncShots(started ? game.shots : []);
   view.setReticle(started ? game.player.lockTarget : null);
-  view.setTheme(game.encounter.theme || 'clearing');
-  view.setExit(started && game.exitOpen && !game.outcome, game.exitPos, dtReal);
+  // A zone has its own look. Reading the theme off the ENCOUNTER left the
+  // town standing in the middle of the burn circle, furnace and all.
+  view.setTheme(game.zone ? game.zone.theme : (game.encounter.theme || 'clearing'));
+  view.zoneWide = !!game.zone;
+  view.setExit(started && !game.zone && game.exitOpen && !game.outcome, game.exitPos, dtReal);
   view.updateSparks(dtReal);
   // The enemy list goes in so the camera can widen for a spread-out crowd.
   view.updateCamera(game.player, game.player.lockTarget, dtReal, game.enemies);
@@ -453,7 +536,9 @@ function frame(now) {
 
   tutUI.setVisible(tutorial.active && started && !menu.open);
   document.body.classList.toggle('tutorial', tutorial.active && started);
-  hud.setVisible(started && !menu.open);
+  // A zone has no fight, so it has no fight HUD — only the prompt.
+  updateZoneUI();
+  hud.setVisible(started && !menu.open && !game.zone);
   if (pauseBtn) pauseBtn.style.display = (started && !menu.open) ? '' : 'none';
   hud.update(game, dtReal);
   cui.update(game, dtReal, view.camera, view.w, view.h, started && !menu.open);

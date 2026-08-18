@@ -81,19 +81,21 @@ export class Menu {
       'The rack is still out there, past the burn circle. So is the thing ' +
       'that used to tend the fire.'));
 
-    const beginBtn = el('button', 'btn primary', 'ENTER THE CLEARING');
+    const beginBtn = el('button', 'btn primary', 'AWAKEN');
     const trainBtn = el('button', 'btn', 'TRAINING');
+    const townBtn = el('button', 'btn', 'RETURN TO SCORIA');
+    townBtn.onclick = () => { this.hide(); this.h.onTown?.(); };
     const arcBtn = el('button', 'btn', 'ARCHIVE');
     const setBtn = el('button', 'btn', 'SETTINGS');
     const row = el('div', 'btn-row');
-    row.append(beginBtn, trainBtn, arcBtn, setBtn);
+    row.append(beginBtn, trainBtn, townBtn, arcBtn, setBtn);
     arcBtn.onclick = () => { this._from = 'title'; this.showArchive(); };
     title.appendChild(row);
     trainBtn.onclick = () => { this.hide(); this.h.onTrain?.(); };
 
     title.appendChild(el('div', 'slice-note',
-      'Slice 1 &middot; two weapons on the rack, and a clearing that can hold ' +
-      'three &middot; only one of them is ever allowed to swing at a time'));
+      'AWAKEN takes up a weapon and starts the opening. RETURN TO SCORIA ' +
+      'goes straight to the town, and the rack is standing in it.'));
 
     beginBtn.onclick = () => { this.showCreator(); };
     setBtn.onclick = () => { this._from = 'title'; this.showSettings(); };

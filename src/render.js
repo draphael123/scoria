@@ -203,13 +203,19 @@ export class View {
   /* The room, as a look. Cold and lit from nowhere on the sorting floor;
      warm and lit by the forge in the clearing. */
   setTheme(name) {
+    // Always forwarded — Forest.setTheme is cheap and idempotent now, and the
+    // guard here used to swallow a switch the zone flow depended on.
+    this.forest.setTheme(name);
     if (this._theme === name) return;
     this._theme = name;
-    this.forest.setTheme(name);
     // Four rooms, four skies. The run reads as a descent: warm clearing, two
     // progressively colder and emptier rooms, then the kiln, where the heat is
     // back on and the moon barely matters.
     const LOOK = {
+      // The town is the only place with a sky worth looking at: colder, wider
+      // and higher-key than anywhere in the wood, because arriving somewhere
+      // safe should look like a different time of night.
+      town:     { fog: 0x1a2130, bg: 0x0d121b, moon: 0xdbeaff, lit: 3.1, exp: 1.34 },
       clearing: { fog: 0x0b0e13, bg: 0x06080b, moon: 0xbdd2ea, lit: 1.90, exp: 1.15 },
       ossuary:  { fog: 0x0c1016, bg: 0x05070a, moon: 0xcfe0f2, lit: 2.35, exp: 1.05 },
       yard:     { fog: 0x0a0d12, bg: 0x04060a, moon: 0xdae8fa, lit: 2.60, exp: 1.00 },
@@ -763,6 +769,10 @@ export class View {
   updateCamera(player, lockTarget, dt, enemies) {
     if (this.preview) { this._applyPreviewCamera(player); this.setPreview(true, dt); return; }
     let fx = player.x, fz = player.z, wantZoom = 1;
+    // A hub is read at a distance and a fight is read up close. Keeping the
+    // duel's framing in the town put the player's shoulders against both edges
+    // of a place that is supposed to feel empty.
+    if (this.zoneWide) wantZoom = 1.85;
     if (lockTarget && !lockTarget.dead) {
       fx = lerp(player.x, lockTarget.x, CAMERA.lockBias);
       fz = lerp(player.z, lockTarget.z, CAMERA.lockBias);

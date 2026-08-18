@@ -282,6 +282,33 @@
   .kitslot.empty{opacity:.32}
   body.is-touch #kit{display:none}
 
+  #prompt{position:absolute;left:50%;bottom:calc(21vh + var(--safe-b));
+       transform:translateX(-50%);display:none;align-items:center;gap:11px;
+       padding:9px 18px;border:1px solid rgba(212,85,42,.5);
+       background:linear-gradient(180deg,rgba(16,12,10,.9),rgba(10,8,7,.86));
+       box-shadow:0 4px 20px rgba(0,0,0,.7);z-index:8;white-space:nowrap}
+  #prompt.on{display:flex;animation:promptIn .22s ease both}
+  @keyframes promptIn{from{opacity:0;transform:translateX(-50%) translateY(7px)}
+                      to{opacity:1;transform:translateX(-50%)}}
+  #prompt b{display:grid;place-items:center;width:23px;height:23px;
+       border:1px solid rgba(230,220,203,.45);font-size:11px;color:var(--ink);font-weight:400}
+  #prompt span{font-size:12px;letter-spacing:.26em;color:var(--dim);text-transform:uppercase}
+  #prompt.ready span{color:var(--hot)}
+  #prompt.ready{border-color:rgba(255,179,71,.75)}
+
+  /* The place-name card, on arriving somewhere. */
+  #placard{position:absolute;left:50%;top:38%;transform:translateX(-50%);
+       text-align:center;pointer-events:none;opacity:0;z-index:8}
+  #placard.on{animation:placard 3.6s ease both}
+  #placard b{display:block;font-family:Cormorant Garamond,Georgia,serif;
+       font-size:clamp(30px,5vw,50px);color:#e9dcc4;font-weight:400;letter-spacing:.1em;
+       text-shadow:0 0 40px rgba(0,0,0,.95)}
+  #placard span{display:block;margin-top:8px;font-size:10px;letter-spacing:.42em;
+       color:var(--ember);text-transform:uppercase}
+  @keyframes placard{0%{opacity:0;transform:translateX(-50%) translateY(10px)}
+                     18%{opacity:1;transform:translateX(-50%)}
+                     72%{opacity:1}100%{opacity:0}}
+
   #trainSwap{position:absolute;right:calc(24px + var(--safe-r));top:calc(24px + var(--safe-t));
        display:none;text-align:right;z-index:7}
   body.tutorial #trainSwap{display:block}
@@ -606,6 +633,10 @@
   <div class="ts-row" id="trainSwapRow"></div>
 </div>
 
+<!-- The zone prompt. One line, centred low, and it only exists when there is
+     something in front of you worth pressing a key at. -->
+<div id="prompt"><b id="promptKey">E</b><span id="promptText"></span></div>
+
 <div class="hud" id="kit">
   <div class="kitslot" id="kitWeapon"><b>—</b><span>right</span></div>
   <div class="kitslot" id="kitOff"><b>—</b><span>left</span></div>
@@ -636,6 +667,8 @@
 </button>
 
 <div class="hud" id="roomTag"><b id="roomNum"></b><span id="roomName"></span></div>
+
+<div id="placard"><b id="placardName"></b><span id="placardSub"></span></div>
 
 <div class="banner" id="banner"><span id="bannerText"></span><small id="bannerHint"></small></div>
 

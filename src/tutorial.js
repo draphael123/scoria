@@ -110,6 +110,17 @@ const KEY = (kb, touch) => ({ kb, touch });
 
 export const STEPS = [
   {
+    // You wake up. Nothing is asked of you and nothing is explained, because
+    // the first thing an opening has to establish is WHERE, not HOW.
+    id: 'wake',
+    title: 'You wake in the burn circle',
+    body: 'Ash to the knees and a ring scorched into it, older than the fight ' +
+          'you are about to have.<br><br>The works are down the haul road. So is ' +
+          'everything that came out of them.',
+    keys: KEY('WASD', 'GET UP'),
+    check: (t) => Math.hypot(t.game.player.vx, t.game.player.vz) > 0.6,
+  },
+  {
     id: 'move',
     title: 'Walk',
     body: 'The wood is dead in every direction. Move.',
@@ -184,14 +195,20 @@ export const STEPS = [
     check: (t) => t.staggers >= 1,
   },
   {
+    // It ends by walking somewhere, not by a banner. The last thing the
+    // opening teaches is the thing the whole game is made of: the road out.
     id: 'done',
     title: 'That is the whole vocabulary',
     body: 'Move, lock, strike, spend, roll, guard, break. Nothing else is coming ' +
-          'that these seven will not answer.<br><br>The Slagbound is coming through ' +
-          'the trees.',
-    keys: KEY('', ''),
+          'that these seven will not answer.<br><br>There is a town at the other ' +
+          'end of the road. Walk down to it.',
+    keys: KEY('WASD', 'THE ROAD OUT'),
+    enter: (t) => { t.openRoad(); },
+    check: (t) => {
+      const p = t.game.player;
+      return Math.hypot(p.x - t.roadX, p.z - t.roadZ) < 2.4;
+    },
     terminal: true,
-    hold: 4.5,
   },
 ];
 
@@ -258,6 +275,25 @@ export class Tutorial {
       g.player.facing = keep.facing;
     }
     g.player.lockTarget = eff || null;
+  }
+
+  /* The way out, opened for the last step. The tutorial ends by WALKING
+     somewhere rather than by a banner, so it borrows the same haul road the
+     rooms use — the first road you ever walk is the one you will walk out of
+     every room after this. */
+  openRoad() {
+    const g = this.game;
+    g.exitOpen = true;
+    g.roomDone = true;
+    const e = g.exitPos;
+    this.roadX = e.x;
+    this.roadZ = e.z;
+    // Clear the effigy out of the way: a training post standing in the road
+    // reads as something you still have to deal with.
+    if (this.effigy) {
+      this.effigy.x = -8.5;
+      this.effigy.z = -8.5;
+    }
   }
 
   spawnEffigy() {
