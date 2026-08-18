@@ -56,7 +56,9 @@ export function applyDamage(attacker, target, atk, out) {
   let damage = atk.damage * (attacker.damageMul || 1);
 
   // Stagger amplifies incoming damage — this is the punish window.
-  if (target.state === STATE.STAGGER) damage *= SLAGBOUND.staggerDamageMul;
+  // Off the target's own definition — a Cinderbone is not a Slagbound.
+  const tdef = target.def || SLAGBOUND;
+  if (target.state === STATE.STAGGER) damage *= tdef.staggerDamageMul;
 
   // HYPERARMOUR. A weapon that declares it finishes its swing through a blow
   // instead of being interrupted by one. That is the whole reason a 0.72s
@@ -106,18 +108,20 @@ export function applyDamage(attacker, target, atk, out) {
   // Every clean blow MOVES the thing it hits. A hit that only changes a
   // number does not read as a hit. Impact class is a property of the BLOW
   // (atk.heavy), never of its id, so adding a weapon needs no edit here.
+  // An attack may declare its own shove — the greataxe's HEAVE exists to move
+  // bodies, so its knockback is the point rather than a side effect.
   target.knock(attacker.x, attacker.z,
     target.isPlayer
       ? (armored ? IMPACT.knockArmored : IMPACT.knockTaken)
-      : (atk.heavy ? IMPACT.knockHeavy : IMPACT.knockLight));
+      : (atk.knock ?? (atk.heavy ? IMPACT.knockHeavy : IMPACT.knockLight)));
 
   if (target.poise !== undefined) {
-    const resist = target.staggerResist > 0 ? SLAGBOUND.staggerResistMul : 1;
+    const resist = target.staggerResist > 0 ? tdef.staggerResistMul : 1;
     target.poise -= (atk.poise || 0) * resist;
     target.poiseTimer = 0;
     if (target.poise <= 0) {
       target.poise = target.maxPoise;
-      target.stagger(SLAGBOUND.staggerDuration);
+      target.stagger(tdef.staggerDuration);
       target.knock(attacker.x, attacker.z, IMPACT.knockStagger);
       ev.result = 'stagger';
     }

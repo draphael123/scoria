@@ -70,6 +70,12 @@ export const PLAYER = {
      · ROLL         each weapon rescales the dodge. The i-frame WINDOW is not
                     touched — agility owns that — so a heavy weapon dodges
                     just as safely, it simply cannot travel as far.
+     · OFF HAND     the same button is a different VERB. The sword answers
+                    pressure by ABSORBING it behind a shield; the greataxe
+                    answers it by DISPLACING it — a wide two-handed heave that
+                    deals almost no damage and enormous poise and knockback.
+                    One key, opposite philosophies, and the clearest statement
+                    of weapon=class anywhere in the control scheme.
 
    Reach is a number, but it is the number that inverts the fight. A hit lands
    at (reach + target radius), so against the Slagbound (r 0.55):
@@ -133,9 +139,11 @@ export const WEAPONS = {
     lines: [
       'Reach 2.35 — you fight inside the swipe',
       'Three-hit chain, with stamina left to roll out',
-      'A shield answers pressure. Every hit interrupts you',
-      'Punishes the SWIPE',
+      'Off hand: a SHIELD. Absorbs 72%, chips the rest',
+      'Punishes the SWIPE. Every hit interrupts you',
     ],
+    offhand: 'guard',
+    offhandLabel: 'GUARD',
     armorDamageMul: 1,
     roll: { distance: 1.0, duration: 1.0, stamina: 1.0 },
     // How far the shoulder joint travels through a swing, in radians. The POSE
@@ -175,9 +183,11 @@ export const WEAPONS = {
     lines: [
       'Reach 3.15 — the swipe cannot answer you out here',
       'Two-hit chain, and the second is a full 360 sweep',
-      'Hyperarmour: a blow will not stop your swing (+20% taken)',
-      'Punishes the OVERHEAD',
+      'Off hand: HEAVE. No shield — it makes space instead',
+      'Hyperarmour, and it punishes the OVERHEAD',
     ],
+    offhand: 'shove',
+    offhandLabel: 'HEAVE',
     // The price of hyperarmour. Trading must cost something, or it is free.
     armorDamageMul: 1.20,
     // Wound further back and followed through further. At rest it is carried
@@ -208,6 +218,20 @@ export const WEAPONS = {
                   reach: 3.00, arc: Math.PI * 2, step: 0.5,
                   spin: 1, cancelFrom: null, next: null }),
     ],
+    // HEAVE. The off-hand button, and the axe's whole answer to being
+    // surrounded. Almost no damage — it is not an attack, it is a way of
+    // buying a metre of floor. Huge poise so it interrupts whatever was
+    // winding up, huge knockback so the ring has to re-form, and a wide arc
+    // because the problem it solves is bodies on three sides.
+    shove: axeAttack({
+      id: 'S1', windup: 0.26, active: 0.12, recover: 0.44,
+      stamina: 24, damage: 12, poise: 36,
+      reach: 2.90, arc: 2.90, step: 0.9,
+      pose: 'shove',          // a two-handed push, not a swing
+      knock: 9.5,             // overrides the light/heavy knockback table
+      cancelFrom: null, next: null,
+    }),
+
     // Splitter. 0.72 to contact — fits inside the overhead's 0.95 recovery and
     // nothing else. A circle, so it does not care which way the thing you are
     // punishing has drifted. Poise 48 is the Slagbound's whole bar: one clean
@@ -243,6 +267,7 @@ export const WEAPON_ORDER = ['sword', 'greataxe', 'daggers', 'tome'];
    ---------------------------------------------------------------------- */
 export const SLAGBOUND = {
   name: 'Slagbound',
+  rig: 'slagbound',
   hp: 180,
   radius: 0.55,
   height: 2.0,
@@ -295,6 +320,78 @@ export const SLAGBOUND = {
 };
 
 /* -------------------------------------------------------------------------
+   ENEMY — the Cinderbone. What the sorting floor left behind.
+
+   Deliberately not a weaker Slagbound. The Slagbound punishes bad READS: one
+   heavy body, high poise, two attacks you learn. The Cinderbone punishes bad
+   POSITION — brittle enough that a single axe blow staggers it and two kill
+   it, fast enough that you cannot stroll around it, and there are five. The
+   threat is never the swing in front of you; it is that you have nowhere to
+   roll to.
+
+   That is also the greataxe's second proof. One Sweep clears three of these;
+   a sword has to take them one at a time, and taking them one at a time is
+   exactly how you end up surrounded.
+
+   The aggro token still holds absolutely: five bodies, one windup. Pressure
+   comes from CADENCE — a Cinderbone hesitates for a third as long as a
+   Slagbound, so the token changes hands two or three times as fast.
+   ---------------------------------------------------------------------- */
+export const CINDERBONE = {
+  name: 'Cinderbone',
+  rig: 'cinderbone',
+  hp: 55,
+  radius: 0.34,
+  height: 1.58,
+
+  moveSpeed: 3.6,         // faster than you walk while locked on (3.6) — you
+  turnRate: 5.6,          // cannot simply outpace them, only out-position them
+  preferredRange: 1.95,
+  circleSpeed: 2.4,
+
+  // 16 poise: ONE greataxe Cleave (22) staggers it outright, a sword light (9)
+  // needs two. The weapons feel different against a crowd before any damage
+  // number is involved.
+  poise: 16,
+  poiseRegen: 10,
+  poiseRegenDelay: 1.2,
+  staggerDuration: 0.75,
+  staggerDamageMul: 1.5,
+  staggerResist: 2.0,
+  staggerResistMul: 0.5,
+
+  punishRange: 2.8,
+  punishHesitate: 0.08,
+
+  // A third of the Slagbound's hesitation. This is the crowd's whole pressure
+  // budget: the token cycles fast, so the clearing is never quiet for long.
+  hesitateMin: 0.22,
+  hesitateMax: 0.60,
+  recoverIdle: 0.12,
+
+  attacks: {
+    jab: {
+      id: 'jab', label: 'JAB',
+      windup: 0.30, active: 0.08, recover: 0.42,
+      damage: 9, poise: 0,
+      shape: 'arc', reach: 2.05, arc: 1.30,
+      step: 0.9,
+      weight: 0.66, minRange: 0, maxRange: 2.6,
+    },
+    scythe: {
+      id: 'scythe', label: 'SCYTHE',
+      windup: 0.44, active: 0.11, recover: 0.54,
+      damage: 14, poise: 0,
+      shape: 'arc', reach: 2.25, arc: 2.55,
+      step: 0.5,
+      weight: 0.34, minRange: 0.5, maxRange: 2.9,
+    },
+  },
+};
+
+export const FOES = { slagbound: SLAGBOUND, cinderbone: CINDERBONE };
+
+/* -------------------------------------------------------------------------
    THE AGGRO TOKEN — how a crowd is made fair without being made harmless.
 
    Isometric group combat dies of unreadability, not of difficulty, and
@@ -345,6 +442,7 @@ export const ENCOUNTERS = {
   duel: {
     id: 'duel', name: 'The Slagbound', short: 'ONE',
     blurb: 'The thing that used to tend the fire. One clearing, one duel.',
+    foe: 'slagbound', theme: 'clearing',
     hpMul: 1.0,
     spawn: [[0, -2.5]],
   },
@@ -352,12 +450,36 @@ export const ENCOUNTERS = {
     id: 'trio', name: 'Three of Them', short: 'THREE',
     blurb: 'Three came down off the slag heap. Only one may swing at a time — ' +
            'the other two are working around behind you.',
+    foe: 'slagbound', theme: 'clearing',
     // 3 x 180 is a slog, and this fight is about position, not attrition.
     hpMul: 0.62,
     spawn: [[0, -4.6], [-4.0, -2.0], [4.0, -2.0]],
   },
+  ossuary: {
+    id: 'ossuary', name: 'The Sorting Floor', short: 'BONES',
+    blurb: 'Where they picked the good iron out of the slag, and where the ' +
+           'ones who picked it are still standing. Five, and quick.',
+    foe: 'cinderbone', theme: 'ossuary',
+    hpMul: 1.0,
+    // A ring, so you arrive already surrounded and the first decision of the
+    // fight is which way to break rather than which one to hit.
+    spawn: [[0, -5.2], [-4.6, -2.4], [4.6, -2.4], [-3.4, 2.6], [3.4, 2.6]],
+  },
 };
 export const DEFAULT_ENCOUNTER = 'duel';
+
+/* THE RUN, such as it is: two rooms. The first is whatever the rack was set
+   to, the second is always the sorting floor. Clear a room and the tree line
+   opens; walk into the gap and you carry your health and stamina through.
+   This is not the run structure — it is the smallest thing that makes two
+   fights feel like somewhere you are GOING rather than a fight select. */
+export const ROOM2 = 'ossuary';
+
+export const EXIT = {
+  bearing: 0,             // rad; which way the gap opens, 0 = away from spawn
+  radius: 2.1,            // how close you must get to pass through
+  openDelay: 0.9,         // beat after the last body falls, so the kill lands
+};
 
 /* -------------------------------------------------------------------------
    CAMERA — fixed isometric, subtle drift toward the lock-on target.

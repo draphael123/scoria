@@ -1,9 +1,9 @@
 import { Player } from './player.js';
-import { Slagbound } from './enemy.js';
+import { Foe } from './enemy.js';
 import { resolveActive } from './combat.js';
 import { STATE, PHASE } from './actor.js';
-import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO,
-         ENCOUNTERS, DEFAULT_ENCOUNTER } from './config.js';
+import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES,
+         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM2, EXIT } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
@@ -27,6 +27,30 @@ export class Game {
 
   get encounter() { return ENCOUNTERS[this.encounterId] || ENCOUNTERS[DEFAULT_ENCOUNTER]; }
 
+  /* Which room of the two you are in, and what follows it. The first room is
+     whatever the rack was set to; the second is always the sorting floor. */
+  get roomIndex() { return this.encounterId === ROOM2 ? 1 : 0; }
+  get isLastRoom() { return this.roomIndex >= 1; }
+  get exitPos() {
+    const d = ARENA.radius - 1.15;
+    return { x: Math.sin(EXIT.bearing) * d, z: Math.cos(EXIT.bearing) * d };
+  }
+
+  /* Walk out of a cleared room into the next one, carrying your health and
+     stamina with you. That carry-over is the whole reason two rooms feel like
+     a run rather than like two fights: the first one COSTS you something. */
+  advanceRoom() {
+    if (!this.exitOpen || this.isLastRoom) return false;
+    const p = this.player;
+    const carried = { hp: p.hp, stamina: p.stamina, build: this.build };
+    this.encounterId = ROOM2;
+    this.reset(this.seed + 101);
+    this.player.hp = Math.max(1, carried.hp);
+    this.player.stamina = carried.stamina;
+    this.roomsCleared = (this.roomsCleared || 0) + 1;
+    return true;
+  }
+
   reset(seed) {
     if (seed !== undefined) this.seed = seed;
     this.rng = makeRng(this.seed);
@@ -46,8 +70,10 @@ export class Game {
     });
 
     const enc = this.encounter;
+    const def = FOES[enc.foe] || SLAGBOUND;
     const n = enc.spawn.length;
-    this.enemies = enc.spawn.map(([x, z], i) => new Slagbound({
+    this.enemies = enc.spawn.map(([x, z], i) => new Foe({
+      def,
       x, z,
       facing: Math.atan2(this.player.x - x, this.player.z - z),
       rng: this.rng,
@@ -55,6 +81,13 @@ export class Game {
       slot: i, slotCount: n,
     }));
     this.player.lockTarget = null;
+
+    // --- rooms ----------------------------------------------------------
+    // Cleared but not finished: the tree line opens and you walk out. Held
+    // separately from `outcome` so the win banner still means the run is over.
+    this.exitOpen = false;
+    this.exitT = 0;
+    this.roomDone = false;
 
     // --- the aggro token ------------------------------------------------
     this.token = null;
@@ -230,7 +263,25 @@ export class Game {
     if (this.events.length > before) this._tally(before);
 
     if (this.player.dead && !this.outcome) { this.outcome = 'lose'; this.outcomeT = 0; }
-    else if (!this.livingEnemies.length && !this.outcome) { this.outcome = 'win'; this.outcomeT = 0; }
+    else if (!this.livingEnemies.length) {
+      // A cleared room is only a WIN if it was the last one. Otherwise the
+      // tree line opens and the fight is not over, it has moved.
+      this.roomDone = true;
+      if (this.isLastRoom) {
+        if (!this.outcome) { this.outcome = 'win'; this.outcomeT = 0; }
+      } else {
+        this.exitT += dt;
+        // A beat before it opens, so the killing blow gets to land before the
+        // game starts pointing somewhere else.
+        if (this.exitT >= EXIT.openDelay) this.exitOpen = true;
+        if (this.exitOpen) {
+          const e = this.exitPos;
+          if (Math.hypot(this.player.x - e.x, this.player.z - e.z) <= EXIT.radius) {
+            this.advanceRoom();
+          }
+        }
+      }
+    }
   }
 
   _tally(from) {

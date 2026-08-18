@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import { STATE, PHASE } from './actor.js';
-import { clamp, lerp } from './util.js';
+import { clamp, lerp, damp } from './util.js';
 import { plateColor, heraldryColor, defaultBuild } from './character.js';
 import { WEAPONS, AGGRO, PLAYER } from './config.js';
 
@@ -147,7 +147,113 @@ function buildGreataxe(pivot, mats) {
   return { blade: bit, tipScale: 1.30 };
 }
 
-/* ------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------
+   THE KNIGHT.
+
+   Read at this camera distance comes almost entirely from OUTLINE, and what
+   makes an outline read as a knight is HIERARCHY before it is detail. The
+   first pass at this failed not because pieces were missing but because the
+   helm, the pauldrons and the chest were all roughly the same size, so the
+   whole figure read as three stacked balloons. Armour is a wedge: very wide
+   at the shoulder, pinched at the waist, flared again at the fauld, with a
+   head noticeably narrower than everything under it.
+
+   So the proportions are declared once, in DIM below, as multiples of the
+   actor's collision radius and height. Every mesh reads from that table, and
+   the ratios that matter are:
+
+       shoulder span : chest width : waist : head        ~ 3.0 : 2.0 : 1.3 : 1
+       head taller than it is wide                       always
+
+   The pieces that do the actual work, in order of contribution:
+     1. a WAIST — a uniform torso is a snowman
+     2. the FAULD, the flared skirt of plates over the hips
+     3. pauldrons as flat DOMES capping the shoulders, not balls beside them
+     4. legs that articulate, with a knee and a pointed sabaton
+     5. a helm with a raised medial ridge and a dark occularium
+   --------------------------------------------------------------------- */
+
+/* One articulated leg: cuisse, poleyn, greave, sabaton. Returned as a pivot
+   that rotates about the hip, so animateRig can swing it as one limb. */
+function buildLeg(D, h, steel, steelD) {
+  const pivot = new THREE.Group();
+
+  const cuisse = new THREE.Mesh(new THREE.CapsuleGeometry(D.thigh, h * 0.145, 3, 8), steelD);
+  cuisse.position.y = -h * 0.11;
+  cuisse.castShadow = true;
+  pivot.add(cuisse);
+
+  // The knee. A visible joint is most of what separates a leg from a peg.
+  const poleyn = new THREE.Mesh(new THREE.SphereGeometry(D.thigh * 1.06, 9, 7), steelD);
+  poleyn.position.set(0, -h * 0.20, D.thigh * 0.22);
+  poleyn.scale.set(1, 0.82, 1.12);
+  poleyn.castShadow = true;
+  pivot.add(poleyn);
+
+  const greave = new THREE.Mesh(new THREE.CapsuleGeometry(D.shin, h * 0.125, 3, 8), steelD);
+  greave.position.y = -h * 0.295;
+  greave.castShadow = true;
+  pivot.add(greave);
+
+  // Sabaton, pointed and reaching forward — the one part of the silhouette
+  // that says which way the feet are facing.
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(D.shin * 1.7, h * 0.035, D.shin * 2.5), steelD);
+  foot.position.set(0, -h * 0.405, D.shin * 0.7);
+  foot.castShadow = true;
+  pivot.add(foot);
+  const toe = new THREE.Mesh(new THREE.ConeGeometry(D.shin * 0.8, D.shin * 1.5, 4), steelD);
+  toe.rotation.set(Math.PI / 2, Math.PI / 4, 0);
+  toe.position.set(0, -h * 0.405, D.shin * 2.4);
+  pivot.add(toe);
+
+  return pivot;
+}
+
+/* One arm: rerebrace, couter, vambrace, gauntlet. Pivots at the shoulder. */
+function buildArm(D, h, steel, steelD) {
+  const pivot = new THREE.Group();
+
+  const upper = new THREE.Mesh(new THREE.CapsuleGeometry(D.arm, h * 0.095, 3, 7), steelD);
+  upper.position.y = -h * 0.082;
+  upper.castShadow = true;
+  pivot.add(upper);
+
+  const couter = new THREE.Mesh(new THREE.SphereGeometry(D.arm * 1.14, 8, 6), steel);
+  couter.position.y = -h * 0.148;
+  couter.scale.set(1.1, 0.82, 1.1);
+  pivot.add(couter);
+
+  const lower = new THREE.Mesh(new THREE.CapsuleGeometry(D.arm * 0.88, h * 0.085, 3, 7), steel);
+  lower.position.y = -h * 0.212;
+  lower.castShadow = true;
+  pivot.add(lower);
+
+  const gauntlet = new THREE.Mesh(
+    new THREE.BoxGeometry(D.arm * 1.9, D.arm * 1.8, D.arm * 1.9), steelD);
+  gauntlet.position.y = -h * 0.277;
+  gauntlet.castShadow = true;
+  pivot.add(gauntlet);
+
+  return pivot;
+}
+
+/* A heater shield, drawn as an actual heater rather than as a rectangle. */
+function heaterGeometry() {
+  const sh = new THREE.Shape();
+  sh.moveTo(-0.31, 0.42);
+  sh.lineTo(0.31, 0.42);
+  sh.lineTo(0.31, 0.04);
+  sh.quadraticCurveTo(0.28, -0.28, 0, -0.48);
+  sh.quadraticCurveTo(-0.28, -0.28, -0.31, 0.04);
+  sh.closePath();
+  const geo = new THREE.ExtrudeGeometry(sh, {
+    depth: 0.05, bevelEnabled: true, bevelSize: 0.013,
+    bevelThickness: 0.013, bevelSegments: 1, curveSegments: 6,
+  });
+  geo.translate(0, 0, -0.025);
+  return geo;
+}
+
 export function buildKnight(actor, build, weapon) {
   const g = new THREE.Group();
   const r = actor.radius, h = actor.height;
@@ -155,27 +261,51 @@ export function buildKnight(actor, build, weapon) {
   const w = weapon || actor.weapon || WEAPONS.sword;
   const twoHand = !!w.twoHand;
 
+  /* The proportion table. Widths are half-extents in world units. */
+  const D = {
+    head:     r * 0.36,   // helm radius — deliberately the smallest mass here
+    headH:    r * 0.80,
+    neckR:    r * 0.30,
+    // Pauldrons dominate from a near-overhead camera because they are the
+    // highest thing catching the moon. Held down and pulled in so the helm and
+    // the chest are not buried between two chrome domes.
+    shoulderX: r * (twoHand ? 0.70 : 0.63),
+    pauldron: r * (twoHand ? 0.52 : 0.44),
+    chest:    r * 0.80,   // widest point of the cuirass
+    waist:    r * 0.52,
+    fauld:    r * 0.84,   // the flare, wider than the chest
+    legX:     r * 0.36,
+    thigh:    r * 0.235,
+    shin:     r * 0.185,
+    arm:      r * 0.175,
+  };
+
   const plate = plateColor(b);
   const herald = heraldryColor(b);
   // Darken the plate slightly for the secondary pieces so the armour still
   // has internal contrast whatever colour the player picked.
-  const dark = new THREE.Color(plate).multiplyScalar(0.68).getHex();
+  const dark = new THREE.Color(plate).multiplyScalar(0.62).getHex();
+  const bright = new THREE.Color(plate).lerp(new THREE.Color(0xffffff), 0.20).getHex();
 
-  const steel = new THREE.MeshStandardMaterial({ color: plate, roughness: 0.5, metalness: 0.62 });
-  const steelD = new THREE.MeshStandardMaterial({ color: dark, roughness: 0.5, metalness: 0.65 });
+  const steel = new THREE.MeshStandardMaterial({ color: plate, roughness: 0.44, metalness: 0.66 });
+  const steelD = new THREE.MeshStandardMaterial({ color: dark, roughness: 0.54, metalness: 0.60 });
+  // Highlight steel, for ridges and rims only. Kept well under a mirror
+  // finish: at 0.9 metalness a rim on the crown caught the moon and bloomed
+  // into a halo, which read as a status effect rather than as polish.
+  const steelB = new THREE.MeshStandardMaterial({ color: bright, roughness: 0.40, metalness: 0.70 });
   const cloth = new THREE.MeshStandardMaterial({ color: herald, roughness: 0.95 });
   const leather = new THREE.MeshStandardMaterial({ color: PAL.leather, roughness: 0.9 });
+  const shadowMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 1 });
 
   // Hips carry the legs so the whole lower body can dip and sway as one.
   const hips = new THREE.Group();
   hips.position.y = h * 0.44;
   g.add(hips);
 
-  const legGeo = new THREE.CapsuleGeometry(r * 0.28, h * 0.26, 3, 8);
-  const legL = limb(legGeo, steelD, 0);
-  const legR = limb(legGeo, steelD, 0);
-  legL.position.x = -r * 0.4;
-  legR.position.x = r * 0.4;
+  const legL = buildLeg(D, h, steel, steelD);
+  const legR = buildLeg(D, h, steel, steelD);
+  legL.position.x = -D.legX;
+  legR.position.x = D.legX;
   hips.add(legL, legR);
 
   // Chest carries torso, arms and head, so a lean tilts everything above the
@@ -184,97 +314,253 @@ export function buildKnight(actor, build, weapon) {
   chest.position.y = h * 0.44;
   g.add(chest);
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.84, h * 0.3, 4, 12), steel);
-  torso.position.y = h * 0.16;
+  // The cuirass. A lathe gives the breastplate its actual profile — wide over
+  // the chest, drawn in hard at the waist — and flattening z turns a barrel
+  // into a breastplate, which is a body and not a cylinder.
+  const prof = [
+    [0.03, 0.00], [D.waist, 0.02], [D.waist * 1.16, h * 0.06],
+    [D.chest, h * 0.20], [D.chest * 0.97, h * 0.275],
+    [D.chest * 0.72, h * 0.34], [D.neckR * 1.2, h * 0.372], [0.03, h * 0.376],
+  ].map(([x, y]) => new THREE.Vector2(x, y));
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(prof, 16), steel);
+  torso.scale.z = 0.74;
   torso.castShadow = true;
   chest.add(torso);
 
-  const tabard = new THREE.Mesh(new THREE.BoxGeometry(r * 0.78, h * 0.4, 0.06), cloth);
-  tabard.position.set(0, h * 0.02, r * 0.62);
-  chest.add(tabard);
+  // The medial ridge down the breastplate. One thin box, and it is the
+  // difference between armour and a grey vase.
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(D.chest * 0.22, h * 0.27, D.chest * 0.3), steelB);
+  ridge.position.set(0, h * 0.165, D.chest * 0.56);
+  chest.add(ridge);
 
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.82, r * 0.82, 0.12, 12), leather);
-  belt.position.y = 0;
+  // Gorget: the collar the helm sits into, and the reason the head reads as
+  // sitting ON something rather than floating above it.
+  const gorget = new THREE.Mesh(
+    new THREE.CylinderGeometry(D.neckR * 1.02, D.neckR * 1.5, h * 0.05, 12), steelD);
+  gorget.position.y = h * 0.382;
+  gorget.scale.z = 0.88;
+  gorget.castShadow = true;
+  chest.add(gorget);
+
+  const belt = new THREE.Mesh(
+    new THREE.CylinderGeometry(D.waist * 1.14, D.waist * 1.14, h * 0.035, 14), leather);
+  belt.scale.z = 0.82;
   chest.add(belt);
+  const buckle = new THREE.Mesh(
+    new THREE.BoxGeometry(D.waist * 0.44, h * 0.038, D.waist * 0.16), steelB);
+  buckle.position.z = D.waist * 0.95;
+  chest.add(buckle);
 
-  // A two-hander is carried in heavier harness. Pure silhouette, but it is the
-  // silhouette that tells you which knight you are looking at while both are
-  // standing still.
-  const pauldronR = r * (twoHand ? 0.58 : 0.46);
-  for (const s of [-1, 1]) {
-    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(pauldronR, 10, 8), steel);
-    pauldron.position.set(s * r * (twoHand ? 0.94 : 0.88), h * 0.31, 0);
-    pauldron.scale.y = 0.72;
-    pauldron.castShadow = true;
-    chest.add(pauldron);
+  // FAULD — the flared skirt of plates over the hips. Of everything here this
+  // is the single strongest "knight" signal in outline, so it gets three
+  // visible lames rather than one cone.
+  const fauld = new THREE.Group();
+  fauld.position.y = -h * 0.014;
+  chest.add(fauld);
+  for (let i = 0; i < 3; i++) {
+    const top = D.waist * 1.14 + (D.fauld - D.waist * 1.14) * (i / 3);
+    const bot = D.waist * 1.14 + (D.fauld - D.waist * 1.14) * ((i + 1) / 3);
+    // Closed, not open-ended: an open cylinder is a single-sided wall and this
+    // camera looks DOWN at it, so an open skirt disappears from the exact
+    // angle the game is played at.
+    const lame = new THREE.Mesh(new THREE.CylinderGeometry(top, bot, h * 0.040, 14), steelD);
+    lame.position.y = -h * 0.030 * i;
+    lame.scale.z = 0.84;
+    lame.castShadow = true;
+    fauld.add(lame);
+  }
+  // Tassets: the two plates that hang past the fauld over the thighs.
+  for (const sx of [-1, 1]) {
+    const tasset = new THREE.Mesh(
+      new THREE.BoxGeometry(D.fauld * 0.52, h * 0.095, D.fauld * 0.30), steel);
+    tasset.position.set(sx * D.fauld * 0.60, -h * 0.115, D.fauld * 0.20);
+    tasset.rotation.z = sx * 0.10;
+    tasset.castShadow = true;
+    fauld.add(tasset);
+  }
+
+  // Surcoat. Drawn as a RING over the fauld rather than as front and back
+  // panels: this camera looks down at the figure, and a flat panel seen from
+  // above is edge-on and effectively invisible, which is where the heraldry
+  // colour kept disappearing to. A cone always presents a face. The lowest
+  // fauld lame and the tassets still show beneath it, so both read.
+  const surcoat = new THREE.Mesh(
+    new THREE.CylinderGeometry(D.waist * 1.06, D.fauld * 0.99, h * 0.15, 16), cloth);
+  surcoat.position.y = -h * 0.048;
+  surcoat.scale.z = 0.86;
+  surcoat.castShadow = true;
+  chest.add(surcoat);
+  // A slit up the front, so it reads as cloth that a man can walk in.
+  const slitDark = new THREE.Mesh(
+    new THREE.BoxGeometry(D.waist * 0.20, h * 0.15, D.fauld * 0.5),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(herald).multiplyScalar(0.45).getHex(),
+      roughness: 1 }));
+  slitDark.position.set(0, -h * 0.048, D.fauld * 0.62);
+  chest.add(slitDark);
+
+  // PAULDRONS. Flat DOMES capping the shoulder, not balls beside it — this is
+  // the single change that stopped the figure reading as stacked spheres.
+  // A two-hander is carried in heavier harness: pure silhouette, but it is the
+  // silhouette that tells you which knight you are looking at while both of
+  // them are standing still.
+  for (const sx of [-1, 1]) {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(sx * D.shoulderX, h * 0.252, 0);
+    chest.add(shoulder);
+
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(D.pauldron, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.56), steel);
+    cap.scale.set(1.06, 0.62, 1.12);
+    cap.castShadow = true;
+    shoulder.add(cap);
+
+    // Two lames below the cap. Stacked rings read as articulation from above,
+    // which one smooth sphere never does.
+    for (let i = 0; i < 2; i++) {
+      const lame = new THREE.Mesh(new THREE.CylinderGeometry(
+        D.pauldron * (0.98 - i * 0.16), D.pauldron * (0.86 - i * 0.20), h * 0.026, 12), steelD);
+      lame.position.y = -D.pauldron * (0.16 + i * 0.30);
+      lame.scale.set(1.06, 1, 1.12);
+      lame.castShadow = true;
+      shoulder.add(lame);
+    }
+    if (twoHand) {
+      // A standing haute-piece on the outside of each pauldron — the flange a
+      // two-hander wears because nothing is guarding his neck.
+      const flange = new THREE.Mesh(
+        new THREE.BoxGeometry(D.pauldron * 0.16, D.pauldron * 0.82, D.pauldron * 1.55), steelB);
+      flange.position.set(sx * D.pauldron * 0.94, D.pauldron * 0.26, 0);
+      flange.rotation.z = -sx * 0.26;
+      shoulder.add(flange);
+    }
   }
 
   // Neck group so the head can bob and turn independently of the chest.
   const neck = new THREE.Group();
-  neck.position.y = h * 0.44;
+  neck.position.y = h * 0.398;
   chest.add(neck);
 
-  // Helm shape is the clearest read on a character at this camera distance,
-  // so it is the appearance option that actually changes the silhouette.
+  // HELM. The clearest read on a character at this distance, so it is the
+  // appearance option that actually changes the silhouette. Every variant is
+  // TALLER THAN IT IS WIDE — a helm as wide as it is tall is a bucket, and a
+  // bucket is what made the first pass read as a snowman.
   let helm;
   if (b.helm === 'barbute') {
-    helm = new THREE.Mesh(new THREE.SphereGeometry(r * 0.6, 12, 10,
+    // Rounded skull drawn down over the cheeks, with a T-shaped opening.
+    helm = new THREE.Mesh(new THREE.SphereGeometry(D.head, 14, 12,
       0, Math.PI * 2, 0, Math.PI * 0.62), steel);
-    helm.scale.set(1, 1.25, 1.05);
+    helm.scale.set(1, 1.55, 1.06);
+    helm.position.y = D.head * 0.62;
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(D.head * 0.28, D.head * 0.72, D.head * 0.34), shadowMat);
+    bar.position.set(0, -D.head * 0.16, D.head * 0.86);
+    helm.add(bar);
+    const slit = new THREE.Mesh(
+      new THREE.BoxGeometry(D.head * 1.5, D.head * 0.2, D.head * 0.28), shadowMat);
+    slit.position.set(0, D.head * 0.10, D.head * 0.80);
+    helm.add(slit);
   } else if (b.helm === 'sallet') {
-    helm = new THREE.Mesh(new THREE.BoxGeometry(r * 0.98, r * 0.84, r * 1.06), steel);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(r * 0.9, r * 0.16, r * 0.7), steel);
-    tail.position.set(0, -r * 0.16, -r * 0.68);
-    tail.rotation.x = 0.42;
+    // Rounded skull, long tail, and a bevor covering the chin.
+    helm = new THREE.Mesh(new THREE.SphereGeometry(D.head, 14, 12,
+      0, Math.PI * 2, 0, Math.PI * 0.55), steel);
+    helm.scale.set(1.04, 1.24, 1.24);
+    helm.position.y = D.head * 0.56;
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(D.head * 0.8, D.head * 1.9, 8), steel);
+    tail.rotation.x = -Math.PI * 0.60;
+    tail.scale.set(1.3, 1, 0.38);
+    tail.position.set(0, -D.head * 0.12, -D.head * 1.05);
     tail.castShadow = true;
     helm.add(tail);
+    const slit = new THREE.Mesh(
+      new THREE.BoxGeometry(D.head * 1.7, D.head * 0.18, D.head * 0.3), shadowMat);
+    slit.position.set(0, -D.head * 0.02, D.head * 0.74);
+    helm.add(slit);
+    const bevor = new THREE.Mesh(new THREE.SphereGeometry(D.head * 0.86, 12, 8,
+      0, Math.PI * 2, Math.PI * 0.40, Math.PI * 0.38), steelD);
+    bevor.scale.set(1.04, 1.7, 1.16);
+    bevor.position.set(0, D.head * 0.32, D.head * 0.10);
+    neck.add(bevor);
   } else {
-    helm = new THREE.Mesh(new THREE.BoxGeometry(r * 1.02, r * 1.02, r * 1.1), steel);
+    // Great helm: a flat-topped drum, tapered toward the crown, with a
+    // reinforcing cross on the face.
+    helm = new THREE.Mesh(
+      new THREE.CylinderGeometry(D.head * 0.92, D.head * 1.06, D.headH, 12), steel);
+    helm.position.y = D.headH * 0.52;
+    helm.scale.z = 0.96;
+    const crossV = new THREE.Mesh(
+      new THREE.BoxGeometry(D.head * 0.28, D.headH * 0.94, D.head * 0.22), steelB);
+    crossV.position.z = D.head * 0.90;
+    helm.add(crossV);
+    const crossH = new THREE.Mesh(
+      new THREE.BoxGeometry(D.head * 1.9, D.headH * 0.13, D.head * 0.2), steelB);
+    crossH.position.set(0, D.headH * 0.10, D.head * 0.86);
+    crossH.scale.z = 0.9;
+    helm.add(crossH);
+    const crown = new THREE.Mesh(
+      new THREE.CylinderGeometry(D.head * 0.56, D.head * 0.92, D.headH * 0.20, 12), steelD);
+    crown.position.y = D.headH * 0.56;
+    crown.scale.z = 0.96;
+    helm.add(crown);
   }
   helm.castShadow = true;
   neck.add(helm);
 
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(r * 1.04, r * 0.16, r * 0.1),
-    new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 1 }));
-  visor.position.set(0, r * 0.02, r * 0.56);
+  // The occularium. Dark, wide, and slightly proud of the face, so from above
+  // the head still has a FRONT.
+  const visor = new THREE.Mesh(
+    new THREE.BoxGeometry(D.head * 1.74, D.head * 0.24, D.head * 0.26), shadowMat);
+  visor.position.set(0, D.headH * 0.62, D.head * 0.84);
   neck.add(visor);
 
   if (b.crest !== 'no') {
-    const crest = new THREE.Mesh(new THREE.BoxGeometry(0.05, r * 0.34, r * 0.78), cloth);
-    crest.position.y = r * 0.6;
+    // A comb rather than a slab: three fins of falling height read as a crest
+    // from directly above, which is the angle that matters here.
+    const crest = new THREE.Group();
+    crest.position.y = D.headH * 1.02;
     neck.add(crest);
+    for (let i = 0; i < 3; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(
+        0.042, D.head * (1.0 - i * 0.24), D.head * (0.86 - i * 0.12)), cloth);
+      fin.position.set(0, D.head * (0.34 - i * 0.12), -D.head * (0.05 + i * 0.82));
+      fin.rotation.x = -i * 0.18;
+      crest.add(fin);
+    }
+    const socket = new THREE.Mesh(
+      new THREE.BoxGeometry(D.head * 0.32, D.head * 0.22, D.head * 2.3), steelD);
+    crest.add(socket);
   }
 
   // Sword arm. The pivot IS the shoulder joint, and the swing rotates it.
   const pivot = new THREE.Group();
-  pivot.position.set(r * 0.9, h * 0.28, 0);
+  pivot.position.set(D.shoulderX * 1.02, h * 0.272, 0);
   chest.add(pivot);
+  pivot.add(buildArm(D, h, steel, steelD));
+  const swordArm = pivot.children[0];
 
-  const armGeo = new THREE.CapsuleGeometry(r * 0.2, h * 0.16, 3, 7);
-  const swordArm = limb(armGeo, steelD, 0);
-  pivot.add(swordArm);
-
-  const mats = { steel, steelD, leather, cloth, dark };
+  const mats = { steel, steelD, steelB, leather, cloth, dark };
   const built = twoHand ? buildGreataxe(pivot, mats) : buildSword(pivot, mats);
   const blade = built.blade;
 
   // Off arm, which carries the shield and counter-swings when walking.
   const offArm = new THREE.Group();
-  offArm.position.set(-r * 0.9, h * 0.28, 0);
+  offArm.position.set(-D.shoulderX * 1.02, h * 0.272, 0);
   chest.add(offArm);
-  offArm.add(limb(armGeo, steelD, 0));
+  offArm.add(buildArm(D, h, steel, steelD));
 
   const shield = new THREE.Group();
-  shield.add(new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.95, 0.07),
-    new THREE.MeshStandardMaterial({ color: dark, roughness: 0.6, metalness: 0.55 })));
-  const device = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.02), cloth);
-  device.position.z = 0.05;
+  const face = new THREE.Mesh(heaterGeometry(),
+    new THREE.MeshStandardMaterial({ color: dark, roughness: 0.55, metalness: 0.6 }));
+  face.castShadow = true;
+  shield.add(face);
+  const device = new THREE.Mesh(heaterGeometry(), cloth);
+  device.scale.set(0.76, 0.76, 0.6);
+  device.position.z = 0.042;
   shield.add(device);
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), steel);
-  boss.position.z = 0.07;
-  boss.scale.z = 0.6;
+  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 9), steelB);
+  boss.position.set(0, 0.04, 0.05);
+  boss.scale.z = 0.7;
   shield.add(boss);
-  shield.position.set(0, -h * 0.06, r * 0.72);
+  shield.position.set(0, -h * 0.10, r * 0.66);
   shield.visible = false;
   // A two-hander has no off hand to put a shield in. It is not hidden, it is
   // not built — the guard stance poses both arms on the haft instead.
@@ -385,6 +671,161 @@ export function buildSlagbound(actor) {
   };
 }
 
+/* ------------------------------------------------------------------------
+   THE CINDERBONE. What the sorting floor left behind.
+
+   Its whole job in the silhouette is to be UNMISTAKABLE from the other two at
+   a glance, because five of them share a clearing with a knight and there is
+   no time to look twice. The Slagbound is a hunched slab, the knight is a
+   wedge of plate — so this one is a GAP. Thin, tall for its mass, and built
+   around a ribcage you can see straight through, which no other shape in the
+   game has.
+
+   Nothing about it glows except the sockets, so a crowd of them stays dark
+   until the aggro token lights one up.
+   --------------------------------------------------------------------- */
+export function buildCinderbone(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  const bone = new THREE.MeshStandardMaterial({
+    color: 0xb9b2a0, roughness: 0.92, metalness: 0.05 });
+  const boneD = new THREE.MeshStandardMaterial({
+    color: 0x8a8272, roughness: 0.95, metalness: 0.04 });
+  const soot = new THREE.MeshStandardMaterial({ color: 0x241f1b, roughness: 1 });
+  const rust = new THREE.MeshStandardMaterial({
+    color: 0x6b3a22, roughness: 0.85, metalness: 0.35 });
+  const socket = new THREE.MeshStandardMaterial({
+    color: 0x120904, emissive: PAL.crack, emissiveIntensity: 2.2, roughness: 1 });
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.46;
+  g.add(hips);
+
+  // Pelvis: a flat ring, so from above it reads as a hollow socket rather
+  // than as a solid hip.
+  const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.52, r * 0.13, 5, 10), boneD);
+  pelvis.rotation.x = Math.PI / 2;
+  pelvis.scale.z = 0.7;
+  pelvis.castShadow = true;
+  hips.add(pelvis);
+
+  const legGeo = new THREE.CapsuleGeometry(r * 0.115, h * 0.30, 3, 6);
+  const legL = limb(legGeo, bone, 0);
+  const legR = limb(legGeo, bone, 0);
+  legL.position.x = -r * 0.34;
+  legR.position.x = r * 0.34;
+  for (const leg of [legL, legR]) {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.28, r * 0.12, r * 0.5), boneD);
+    foot.position.set(0, -h * 0.42, r * 0.12);
+    leg.add(foot);
+  }
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.46;
+  g.add(chest);
+
+  // Spine.
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.09, r * 0.11, h * 0.30, 6), boneD);
+  spine.position.y = h * 0.15;
+  chest.add(spine);
+
+  // RIBCAGE. Five open hoops of falling size — the read that says skeleton
+  // from any angle, and the one shape in the game you can see through.
+  const ribs = new THREE.Group();
+  chest.add(ribs);
+  for (let i = 0; i < 5; i++) {
+    const k = 1 - Math.abs(i - 1.4) * 0.16;
+    const hoop = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.58 * k, r * 0.055, 4, 9, Math.PI * 1.25), bone);
+    hoop.rotation.set(Math.PI / 2, 0, -Math.PI * 0.63);
+    hoop.position.y = h * (0.055 + i * 0.055);
+    hoop.scale.z = 0.66;
+    hoop.castShadow = true;
+    ribs.add(hoop);
+  }
+  // A sternum plate closing the front, so it is not a stack of loose rings.
+  const sternum = new THREE.Mesh(new THREE.BoxGeometry(r * 0.16, h * 0.20, r * 0.09), boneD);
+  sternum.position.set(0, h * 0.135, r * 0.36);
+  chest.add(sternum);
+
+  // Collarbones and a soot-stained apron of hide — what is left of the kit
+  // they were sorting slag in.
+  const clav = new THREE.Mesh(new THREE.BoxGeometry(r * 1.05, r * 0.10, r * 0.12), bone);
+  clav.position.y = h * 0.275;
+  chest.add(clav);
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(r * 0.72, h * 0.20, 0.022), soot);
+  apron.position.set(0, h * 0.055, r * 0.40);
+  chest.add(apron);
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.315;
+  chest.add(neck);
+
+  // Skull: cranium, brow, jaw, and two lit sockets. The sockets are the only
+  // thing on the whole body that emits, which is what lets the aggro token
+  // dim it to nearly nothing.
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 12, 10), bone);
+  skull.scale.set(1, 1.05, 1.16);
+  skull.position.y = r * 0.32;
+  skull.castShadow = true;
+  neck.add(skull);
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(r * 0.68, r * 0.14, r * 0.18), boneD);
+  brow.position.set(0, r * 0.42, r * 0.36);
+  neck.add(brow);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.50, r * 0.16, r * 0.42), boneD);
+  jaw.position.set(0, r * 0.08, r * 0.20);
+  jaw.rotation.x = 0.18;
+  neck.add(jaw);
+  const eyes = [];
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.11, 8, 6), socket);
+    eye.position.set(sx * r * 0.17, r * 0.30, r * 0.36);
+    eye.scale.z = 0.6;
+    neck.add(eye);
+    eyes.push(eye);
+  }
+
+  // Arms. The weapon arm carries a sorting hook — a long rusted pick, which
+  // is why it out-reaches its own body by so much.
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.62, h * 0.255, 0);
+  chest.add(pivot);
+  const armGeo = new THREE.CapsuleGeometry(r * 0.10, h * 0.20, 3, 6);
+  pivot.add(limb(armGeo, bone, 0));
+
+  const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 1.15, 5), soot);
+  haft.rotation.x = Math.PI / 2;
+  haft.position.z = 0.52;
+  pivot.add(haft);
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 4, 8, Math.PI * 1.1), rust);
+  hook.rotation.set(0, Math.PI / 2, Math.PI * 0.15);
+  hook.position.z = 1.10;
+  hook.castShadow = true;
+  pivot.add(hook);
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.34, 5), rust);
+  spike.rotation.x = Math.PI / 2;
+  spike.position.z = 1.30;
+  pivot.add(spike);
+
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.62, h * 0.255, 0);
+  chest.add(offArm);
+  offArm.add(limb(armGeo, bone, 0));
+
+  g.add(makeNose(r, 0xd8c9a8));
+
+  return {
+    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    body: spine, head: skull, blade: hook, shield: null,
+    mat: bone, core: eyes[0], eyes,
+    tipScale: 1.22,
+    swingArc: { rest: -0.30, wind: -2.55, end: 1.55 },
+    baseLean: 0.10, stride: 0, flash: 0, spin: 0, isPlayer: false,
+  };
+}
+
 /* A wicker training effigy on a post. Deliberately nothing like the
    Slagbound in outline — the tutorial should never teach you to read a shape
    that will not be there in the real fight. */
@@ -486,7 +927,31 @@ export function animateRig(rig, actor, dt, clock) {
 
   const rollDur = actor.rollDuration || 0.6;
 
-  if (actor.state === STATE.ATTACK && actor.atk) {
+  if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'shove') {
+    // HEAVE. Not a swing — a two-handed push. Coil back, drive forward from
+    // the hips, and hold the follow-through. Posing this with the swing curve
+    // read as a clumsy overhead and made the button feel like a bad attack
+    // rather than like a way of buying floor.
+    const a = actor.atk, p = actor.phase;
+    if (p === PHASE.WINDUP) {
+      const t = actor.windupProgress;
+      swing = lerp(A.rest, A.rest - 0.55, t);
+      lean = lerp(0, -0.28, t);
+      crouch = lerp(0, 0.16, t);
+    } else if (p === PHASE.ACTIVE) {
+      const t = (actor.atkT - a.windup) / a.active;
+      swing = lerp(A.rest - 0.55, 0.95, t);
+      lean = lerp(-0.28, 0.34, t);
+      crouch = 0.12;
+    } else {
+      const t = clamp((actor.atkT - a.windup - a.active) / Math.max(0.001, a.recover), 0, 1);
+      swing = lerp(0.95, A.rest, t * t);
+      lean = lerp(0.34, 0, t);
+      crouch = lerp(0.12, 0, t);
+    }
+    legAmp = 0.5;
+    legPhase = Math.PI * 0.5;
+  } else if (actor.state === STATE.ATTACK && actor.atk) {
     const a = actor.atk;
     const p = actor.phase;
     if (p === PHASE.WINDUP) {
@@ -571,6 +1036,19 @@ export function animateRig(rig, actor, dt, clock) {
   if (rig.twoHand) {
     rig.offArm.rotation.x = swing * 0.86 - 0.18;
     rig.offArm.rotation.z = 0.34;
+  } else if (rig.shield) {
+    // The shield is carried at rest and BROUGHT UP to guard, damped so the
+    // transition is a movement rather than a snap. It stays on the arm either
+    // way — kit that appears only while a button is held reads as UI.
+    const up = actor.state === STATE.GUARD ? 1 : 0;
+    rig.shieldT = damp(rig.shieldT || 0, up, 16, dt);
+    const t = rig.shieldT;
+    rig.offArm.rotation.x = lerp(0.30, -0.62, t)
+      + (1 - t) * (-Math.sin(legPhase) * armCounter - crouch * 0.6);
+    rig.offArm.rotation.z = lerp(0.34, 0.06, t);
+    rig.shield.rotation.x = lerp(-0.46, 0.30, t);
+    rig.shield.rotation.z = lerp(0.26, 0.02, t);
+    rig.shield.position.z = lerp(actor.radius * 0.44, actor.radius * 0.80, t);
   }
 
   // Head counter-rotates a little against the chest, which keeps the helm

@@ -18,11 +18,18 @@ import { damp, lerp, clamp, TAU } from './util.js';
               rather than to the world, turning to deal with the holder walks
               the circlers around behind you — which is the entire reason the
               greataxe's 360 sweep exists. */
-export class Slagbound extends Actor {
+export class Foe extends Actor {
   constructor(opts = {}) {
-    super(SLAGBOUND, opts);
-    this.maxPoise = SLAGBOUND.poise;
-    this.poise = SLAGBOUND.poise;
+    const def = opts.def || SLAGBOUND;
+    super(def, opts);
+    // Every tuning number this body reads comes off its own definition rather
+    // than off a module constant, so a second enemy is a config entry and not
+    // a second class. The behaviour — token holder closes and commits,
+    // circlers hold a slot and posture — is deliberately shared: a crowd of
+    // anything should obey the one-telegraph rule.
+    this.def = def;
+    this.maxPoise = def.poise;
+    this.poise = def.poise;
     this.poiseTimer = 0;
     this.staggerT = 0;
     this.staggerResist = 0;
@@ -30,7 +37,7 @@ export class Slagbound extends Actor {
     // A crowd is about position, not attrition, so the encounter thins each
     // body rather than making the fight three times as long.
     if (opts.hpMul && opts.hpMul !== 1) {
-      this.maxHp = SLAGBOUND.hp * opts.hpMul;
+      this.maxHp = def.hp * opts.hpMul;
       this.hp = this.maxHp;
     }
 
@@ -75,8 +82,8 @@ export class Slagbound extends Actor {
 
     // Poise only comes back once you stop hitting it.
     this.poiseTimer += dt;
-    if (this.poiseTimer > SLAGBOUND.poiseRegenDelay) {
-      this.poise = Math.min(this.maxPoise, this.poise + SLAGBOUND.poiseRegen * dt);
+    if (this.poiseTimer > this.def.poiseRegenDelay) {
+      this.poise = Math.min(this.maxPoise, this.poise + this.def.poiseRegen * dt);
     }
 
     // ================= STAGGER ==========================================
@@ -87,7 +94,7 @@ export class Slagbound extends Actor {
       if (this.staggerT <= 0) {
         this.state = STATE.IDLE;
         this.poise = this.maxPoise;
-        this.staggerResist = SLAGBOUND.staggerResist;
+        this.staggerResist = this.def.staggerResist;
         this.hesitate = this._rollHesitate() + 0.3;  // brief opening after recovery
         this.intent = 'wait';
       }
@@ -97,7 +104,7 @@ export class Slagbound extends Actor {
     // ================= ATTACK ===========================================
     if (this.state === STATE.ATTACK) {
       const finished = this.tickAttack(dt);
-      const rate = this.turnBudget(SLAGBOUND.turnRate);
+      const rate = this.turnBudget(this.def.turnRate);
       if (rate > 0 && target && !target.dead) {
         this.faceToward(target.x, target.z, rate, dt);
       }
@@ -108,7 +115,7 @@ export class Slagbound extends Actor {
       if (finished) {
         this.state = STATE.IDLE;
         this.atk = null;
-        this.hesitate = this._rollHesitate() + SLAGBOUND.recoverIdle;
+        this.hesitate = this._rollHesitate() + this.def.recoverIdle;
         this.intent = 'wait';
       }
       return;
@@ -122,7 +129,7 @@ export class Slagbound extends Actor {
     }
 
     // ================= APPROACH / CIRCLE / COMMIT ========================
-    this.faceToward(target.x, target.z, SLAGBOUND.turnRate, dt);
+    this.faceToward(target.x, target.z, this.def.turnRate, dt);
 
     const gap = this.gapTo(target);
 
@@ -137,22 +144,22 @@ export class Slagbound extends Actor {
     const nx = toX / len, nz = toZ / len;
     const px = -nz * this.circleDir, pz = nx * this.circleDir;  // tangent
 
-    let mx = 0, mz = 0, speed = SLAGBOUND.moveSpeed;
+    let mx = 0, mz = 0, speed = this.def.moveSpeed;
 
     if (this.hasToken) {
       // The one body allowed to fight you. Unchanged from the duel — this is
       // the behaviour that was playtested, and a crowd must not alter it.
-      const pref = SLAGBOUND.preferredRange;
+      const pref = this.def.preferredRange;
       if (gap > pref + 0.35) {
         mx = nx; mz = nz;
         this.intent = 'approach';
       } else if (gap < pref - 0.9) {
         mx = -nx * 0.8 + px * 0.6; mz = -nz * 0.8 + pz * 0.6;
-        speed = SLAGBOUND.circleSpeed;
+        speed = this.def.circleSpeed;
         this.intent = 'reposition';
       } else {
         mx = px; mz = pz;
-        speed = SLAGBOUND.circleSpeed;
+        speed = this.def.circleSpeed;
         this.intent = 'circle';
       }
     } else {
@@ -201,8 +208,8 @@ export class Slagbound extends Actor {
     // Punish: if the player is rooted in attack recovery and close enough,
     // stop waiting. This is what makes trading blows a losing plan.
     if (target.state === STATE.ATTACK && target.phase === PHASE.RECOVER &&
-        gap < SLAGBOUND.punishRange && this.hesitate > SLAGBOUND.punishHesitate) {
-      this.hesitate = SLAGBOUND.punishHesitate;
+        gap < this.def.punishRange && this.hesitate > this.def.punishHesitate) {
+      this.hesitate = this.def.punishHesitate;
       this.intent = 'punish';
     }
 
@@ -219,7 +226,7 @@ export class Slagbound extends Actor {
   }
 
   _chooseAttack(gap) {
-    const list = Object.values(SLAGBOUND.attacks)
+    const list = Object.values(this.def.attacks)
       .filter((a) => gap >= a.minRange && gap <= a.maxRange);
     if (!list.length) return null;
     const total = list.reduce((s, a) => s + a.weight, 0);
@@ -227,4 +234,10 @@ export class Slagbound extends Actor {
     for (const a of list) { r -= a.weight; if (r <= 0) return a; }
     return list[list.length - 1];
   }
+}
+
+/* The Slagbound is just the default Foe. Kept as a name because the rest of
+   the codebase, the HUD and the writing all talk about Slagbounds. */
+export class Slagbound extends Foe {
+  constructor(opts = {}) { super({ ...opts, def: opts.def || SLAGBOUND }); }
 }

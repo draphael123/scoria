@@ -23,6 +23,10 @@ export class Input {
       if (e.repeat) { return; }
       const k = e.code;
       this._keys.add(k);
+      // The off-hand button is BOTH a hold and a press: the sword reads the
+      // hold (a guard is a stance), the greataxe reads the press (a heave is
+      // an action). One key, two shapes, decided by the weapon.
+      if (k === 'ShiftLeft' || k === 'ShiftRight' || k === 'KeyF') press('offhand');
       switch (k) {
         case 'Space':      press('roll'); e.preventDefault(); break;
         case 'KeyJ':       press('light'); break;

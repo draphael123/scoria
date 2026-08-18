@@ -74,7 +74,17 @@ const tutorial = new Tutorial(game, {
   },
 });
 
-function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); }
+function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); syncWeaponUI(); }
+
+/* The off-hand key is one binding with a different verb per weapon, so the
+   control hint has to follow the rack rather than being written once. */
+const keyOffhand = document.getElementById('keyOffhand');
+function syncWeaponUI() {
+  const w = game.player.weapon;
+  if (keyOffhand) keyOffhand.textContent = (w.offhandLabel || 'guard').toLowerCase();
+  const tb = touch && touch.btnGuard;
+  if (tb) tb.textContent = w.offhandLabel || 'GUARD';
+}
 
 /* -------------------------------------------------------------------------
    Menus
@@ -229,6 +239,8 @@ function audioFromState() {
 let last = performance.now();
 let lastFrameAt = last;
 let lastRefusal = -1;
+let exitAnnounced = false;
+let lastRoom = 0;
 
 function frame(now) {
   const dtReal = Math.min((now - last) / 1000, 0.25);
@@ -253,6 +265,14 @@ function frame(now) {
     if (game.punch > 0) { view.addPunch(game.punch); game.punch = 0; }
     stepOnce = false;
     audioFromState();
+    // Walking through the gap rebuilds the world, so the HUD smoothing and
+    // the rigs have to be told rather than left showing the last room's state.
+    if (game.roomIndex !== lastRoom) {
+      lastRoom = game.roomIndex;
+      resetHudSmoothing();
+      view.reap(new Set([game.player, ...game.enemies]));
+      cui.flash(game.encounter.name.toUpperCase(), 'bad');
+    }
     if (tutorial.active) {
       tutorial.update(dtReal);
       tutUI.show(tutorial.step, tutorial, isTouch);
@@ -270,6 +290,8 @@ function frame(now) {
     view.syncDebugHitbox(e);
   }
   view.setReticle(started ? game.player.lockTarget : null);
+  view.setTheme(game.encounter.theme || 'clearing');
+  view.setExit(started && game.exitOpen && !game.outcome, game.exitPos, dtReal);
   view.updateSparks(dtReal);
   // The enemy list goes in so the camera can widen for a spread-out crowd.
   view.updateCamera(game.player, game.player.lockTarget, dtReal, game.enemies);
@@ -281,6 +303,16 @@ function frame(now) {
   hud.setVisible(started && !menu.open);
   hud.update(game, dtReal);
   cui.update(game, dtReal, view.camera, view.w, view.h, started && !menu.open);
+
+  // The way on. Announced once when it opens, because a column of light at
+  // the tree line is easy to miss while you are still watching the last body
+  // fall.
+  if (game.exitOpen && !game.outcome && !exitAnnounced) {
+    exitAnnounced = true;
+    cui.flash('THE WOOD OPENS', 'good');
+    audio.victory();
+  }
+  if (!game.exitOpen) exitAnnounced = false;
 
   // Tell the player WHY an input did nothing. Silence reads as a dropped
   // input; naming the reason reads as a rule.
@@ -308,6 +340,7 @@ setInterval(() => {
 }, 250);
 
 for (const k of Object.keys(settings)) applySetting(k, settings[k]);
+syncWeaponUI();
 requestAnimationFrame(frame);
 
 // Headless handle for tuning and smoke tests.
@@ -327,6 +360,7 @@ window.SCORIA = {
     menu.build.weapon = id; menu.creator.refresh();
     game.reset(); view.reap(new Set()); resetHudSmoothing();
   },
+  syncWeaponUI,
   setEncounter: (id) => {
     game.encounterId = id;
     game.build = { ...(game.build || loadBuild()), encounter: id };
@@ -345,7 +379,7 @@ window.SCORIA = {
      whose Slice 1 additions are almost entirely positional. */
   smoke(n = 5) {
     const rows = [];
-    for (const encounter of ['duel', 'trio']) {
+    for (const encounter of ['duel', 'trio', 'ossuary']) {
       for (const weapon of ['sword', 'greataxe']) {
         for (const policy of ['trade', 'heavy']) {
           const acc = { FIGHT_HAPPENED: 0, IFRAMES_WORKED: 0, STAGGER_REACHABLE: 0,

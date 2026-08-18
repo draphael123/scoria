@@ -44,6 +44,13 @@ export class Player extends Actor {
 
   get invulnerable() { return this.iframeActive || this.invuln > 0; }
 
+  /* What the off-hand button does with THIS weapon. 'guard' is a stance you
+     hold; 'shove' is an action you press. The button is the same key either
+     way, which is the point — picking a weapon rebinds what your left hand is
+     for. */
+  get offhand() { return this.weapon.offhand || 'guard'; }
+  get canGuard() { return this.offhand === 'guard'; }
+
   get guard() {
     return this.state === STATE.GUARD ? this.weapon.guard : null;
   }
@@ -179,9 +186,27 @@ export class Player extends Actor {
     }
 
     // ================= FREE STATES (idle / move / guard) =================
+    // A guard weapon never queues an off-hand press — it reads the hold — so
+    // drop it rather than let it sit in the buffer and fire on a weapon swap.
+    if (this.offhand === 'guard') input.take('offhand');
+
     if (input.take('roll') && this.canSpend(this.rollStamina)) {
       this._beginRoll(wantX, wantZ, hasInput, locked);
       return;
+    }
+
+    // Off hand as an ACTION — the greataxe's HEAVE. Buys a metre of floor by
+    // shoving everything in front of you, and it is armoured, so it can be
+    // thrown out while a body is already committed to you.
+    if (this.offhand === 'shove' && input.take('offhand')) {
+      const a = this.weapon.shove;
+      if (a && this.canSpend(a.stamina)) {
+        this.spendStamina(a.stamina);
+        this.startAttack(a, a.id);
+        this.lastAction = a.id;
+        return;
+      }
+      this.lastAction = 'no stam';
     }
 
     if (input.take('light')) {
@@ -206,7 +231,7 @@ export class Player extends Actor {
       this.lastAction = 'no stam';
     }
 
-    const guarding = input.held.guard && this.staminaLock <= 0;
+    const guarding = this.canGuard && input.held.guard && this.staminaLock <= 0;
     this.state = guarding ? STATE.GUARD : (hasInput ? STATE.MOVE : STATE.IDLE);
 
     // --- facing ----------------------------------------------------------

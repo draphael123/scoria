@@ -239,6 +239,7 @@ export class Forest {
     pool.rotation.x = -Math.PI / 2;
     pool.position.y = 0.006;
     this.scene.add(pool);
+    this.pool = pool;
 
     // A ring burned into the ash. Older than this fight.
     const circle = new THREE.Mesh(
@@ -386,6 +387,100 @@ export class Forest {
       this.scene.add(g);
       this.fires.push({ group: g, coals, light, phase: this.rng() * 10 });
     }
+  }
+
+  /* ---------------------------------------------------------------------
+     THEMES. The second room is the same clearing seen colder — not a second
+     world. Rebuilding the wood per room would cost a second of hitch and buy
+     nothing, because the trees are not what tells you where you are: the
+     LIGHT is, and what is lying on the ground is.
+
+     So a theme is three things — the colour of the light pool, whether the
+     forge is still burning behind you, and which pile of debris is switched
+     on. Everything is built once, lazily, and toggled after that.
+     ------------------------------------------------------------------ */
+  setTheme(name) {
+    if (this.theme === name) return;
+    this.theme = name;
+    const ossuary = name === 'ossuary';
+
+    // The forge is the heart of the clearing. On the sorting floor it is
+    // somewhere behind you, so its light goes out and the room goes cold.
+    if (this.forgeMouth) this.forgeMouth.visible = !ossuary;
+    if (this.forgeLight) this.forgeLight.intensity = ossuary ? 0 : 13;
+    for (const f of this.fires) f.group.visible = !ossuary;
+
+    if (this.pool) {
+      this.pool.material.color.setHex(ossuary ? 0x7f95b4 : 0xffffff);
+      this.pool.material.opacity = ossuary ? 0.34 : 0.5;
+    }
+    if (this.embers) this.embers.points.visible = !ossuary;
+
+    if (ossuary && !this.bones) this._buildBones();
+    if (this.bones) this.bones.visible = ossuary;
+  }
+
+  /* What the sorting floor is covered in. Deliberately LOW and pushed to the
+     edge — anything tall in the fighting area is another thing the camera has
+     to fade out, and the clearing already has enough of those. */
+  _buildBones() {
+    const rng = makeRng(7717);
+    const g = new THREE.Group();
+    const bone = new THREE.MeshStandardMaterial({ color: 0x9d9787, roughness: 0.95 });
+    const boneD = new THREE.MeshStandardMaterial({ color: 0x6f6a5d, roughness: 0.97 });
+    const iron = new THREE.MeshStandardMaterial({ color: 0x2e2723, roughness: 0.9, metalness: 0.4 });
+
+    // Heaps of picked-over bone, ringing the fighting circle.
+    for (let i = 0; i < 16; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.80 + rng() * 5.5;
+      const heap = new THREE.Group();
+      heap.position.set(Math.sin(a) * rad, 0, Math.cos(a) * rad);
+      for (let j = 0; j < 5 + (rng() * 4 | 0); j++) {
+        const long = rng() < 0.6;
+        const m = long
+          ? new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.30 + rng() * 0.3, 2, 5), bone)
+          : new THREE.Mesh(new THREE.SphereGeometry(0.14 + rng() * 0.07, 7, 5), boneD);
+        m.position.set((rng() - 0.5) * 1.5, 0.08 + rng() * 0.3, (rng() - 0.5) * 1.5);
+        m.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+        m.castShadow = true;
+        heap.add(m);
+      }
+      g.add(heap);
+    }
+
+    // Standing rib arches. Three, at the tree line, so the skyline changes
+    // even though the trees behind them have not.
+    for (const a of [0.9, 2.7, 4.6]) {
+      const rad = ARENA.radius + 0.4;
+      const arch = new THREE.Group();
+      arch.position.set(Math.sin(a) * rad, 0, Math.cos(a) * rad);
+      arch.rotation.y = -a;
+      for (let k = 0; k < 4; k++) {
+        const rib = new THREE.Mesh(
+          new THREE.TorusGeometry(1.5 - k * 0.16, 0.09, 5, 12, Math.PI * 0.86), bone);
+        rib.position.set(0, 0.1, -k * 0.5);
+        rib.rotation.z = Math.PI * 0.07;
+        rib.castShadow = true;
+        arch.add(rib);
+      }
+      g.add(arch);
+    }
+
+    // The sorting tables the picking was done on, tipped and rusting.
+    for (let i = 0; i < 5; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.86 + rng() * 4;
+      const t = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.12, 0.9), iron);
+      t.position.set(Math.sin(a) * rad, 0.42, Math.cos(a) * rad);
+      t.rotation.set((rng() - 0.5) * 0.7, rng() * Math.PI, (rng() - 0.5) * 0.5);
+      t.castShadow = true;
+      g.add(t);
+    }
+
+    g.visible = false;
+    this.bones = g;
+    this.scene.add(g);
   }
 
   /* Mist, as billboards standing among the trees rather than as horizontal

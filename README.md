@@ -66,6 +66,53 @@ Everything else follows from that:
   widens with the spread of the crowd; enemy-vs-enemy collision is weighted
   evenly instead of by array order
 
+### The off-hand button
+
+One binding, a different verb per weapon — the clearest expression of
+weapon=class anywhere in the control scheme.
+
+- **Sword — GUARD.** A heater shield, carried on the off arm at all times and
+  brought up when you hold the button. Absorbs 72%, chips the rest, and breaks
+  if you hold it with no stamina. It answers pressure by *absorbing* it.
+- **Greataxe — HEAVE.** No shield; both hands are on the haft. A press throws a
+  wide two-handed shove: almost no damage, enormous poise and knockback, 166°
+  of arc. It answers pressure by *displacing* it — it is not an attack, it is a
+  way of buying a metre of floor when the ring closes.
+
+`weapon.offhand` decides which, so the daggers' parry and the tome's vent slot
+into the same button later without touching input, HUD or touch controls.
+
+### Room two — the sorting floor
+
+Clear the clearing and the tree line opens: a column of light at the edge, and
+walking into it carries your health and stamina into the next room. That
+carry-over is the whole reason two rooms feel like somewhere you are *going*
+rather than a fight select — the first room has to cost you something.
+
+Waiting there are five **Cinderbones**. Deliberately not weaker Slagbounds:
+
+|  | Slagbound | Cinderbone |
+|---|---|---|
+| punishes | bad **reads** | bad **position** |
+| hp / poise | 180 / 48 | 55 / 16 |
+| hesitation | 0.45–1.15s | 0.22–0.60s |
+| the threat | the swing in front of you | having nowhere to roll to |
+
+16 poise means one greataxe Cleave staggers a Cinderbone outright while a sword
+light needs two, so the weapons feel different against the crowd before any
+damage number is involved. One Sweep clears three; a sword takes them one at a
+time, and taking them one at a time is how you end up surrounded.
+
+**The token still holds absolutely — five bodies, one windup.** Pressure comes
+from *cadence*: a Cinderbone hesitates for a third as long, so the token changes
+hands two or three times as fast. Measured over 30s with five bodies:
+`maxConcurrentWindup` 1, and all five take turns.
+
+The room is the same clearing re-dressed rather than a second world — the forge
+goes out, the light pool goes cold, and the floor fills with picked-over bone
+and tipped sorting tables. Rebuilding the wood per room would cost a hitch and
+buy nothing: the trees are not what tells you where you are, the light is.
+
 ### The rack
 
 Weapon choice now happens in the character creator, above the attributes,
@@ -146,10 +193,10 @@ Then open http://localhost:5810
 | WASD | Move (strafe when locked on) |
 | LMB / J | Light attack — chain (3 links on the sword, 2 on the axe) |
 | RMB / K | Heavy attack |
-| Shift / F | Guard |
 | Space | Roll (backstep with no direction held) |
 | Tab / Q | Lock-on |
 | E / wheel | Cycle target |
+| Shift / F | Off hand — GUARD with the sword, HEAVE with the greataxe |
 | Esc | Menu |
 | F1 | Frame-data overlay |
 | P / . | Pause / step one frame |
@@ -192,6 +239,7 @@ bug and not a tuning miss.
 ## Roadmap
 
 - ~~**Slice 1** — three enemies at once, plus the greataxe~~ ✅
+- ~~**Slice 1.5** — a second room, skeletons, and the off-hand verb~~ ✅
 - **Slice 2** — the run: five rooms, a boss, death, back to town. Fire tome (Heat)
 - **Slice 3** — the town and in-run levelling
 - **Slice 4** — weapon trees

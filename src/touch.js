@@ -74,7 +74,8 @@ export class TouchControls {
         e.stopPropagation();
         node.setPointerCapture?.(e.pointerId);
         node.classList.add('down');
-        if (holdKey) this.input.touch[holdKey] = true; else fn();
+        if (holdKey) this.input.touch[holdKey] = true;
+        fn?.();
       });
       const up = (e) => {
         node.classList.remove('down');
@@ -91,7 +92,9 @@ export class TouchControls {
     tap(this.btnLight, () => this.input.inject('light'));
     tap(this.btnHeavy, () => this.input.inject('heavy'));
     tap(this.btnRoll, () => this.input.inject('roll'));
-    tap(this.btnGuard, null, 'guard');
+    // Held for a guard weapon, and the press ALSO queues 'offhand' so a shove
+    // weapon fires from the same button without a second control.
+    tap(this.btnGuard, () => this.input.inject('offhand'), 'guard');
     tap(this.btnLock, () => this.h.onLock?.());
     tap(this.btnMenu, () => this.h.onMenu?.());
 

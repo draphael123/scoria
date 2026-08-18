@@ -1,12 +1,12 @@
 import * as THREE from '../vendor/three.module.js';
-import { CAMERA, AGGRO, LOCK, TELEGRAPH } from './config.js';
+import { CAMERA, AGGRO, LOCK, TELEGRAPH, EXIT } from './config.js';
 import { STATE, PHASE } from './actor.js';
 import { clamp, damp, lerp } from './util.js';
 import { buildTextures } from './textures.js';
 import { Forest } from './props.js';
 import { Fx } from './fx.js';
 import { Post } from './post.js';
-import { buildKnight, buildSlagbound, buildEffigy, animateRig, PAL } from './rigs.js';
+import { buildKnight, buildSlagbound, buildCinderbone, buildEffigy, animateRig, PAL } from './rigs.js';
 
 const C = {
   ember: PAL.ember,
@@ -99,6 +99,9 @@ export class View {
     this.reticle = this._buildReticle();
     this.scene.add(this.reticle);
 
+    this.exit = this._buildExit();
+    this.scene.add(this.exit);
+
     this.debugGroup = new THREE.Group();
     this.debugGroup.visible = false;
     this.scene.add(this.debugGroup);
@@ -150,12 +153,78 @@ export class View {
     return g;
   }
 
+  /* The way out of a cleared room. It has to be findable from anywhere in the
+     clearing without a minimap and without a floating marker, so it is a
+     column of light — the one vertical bright thing in a scene whose every
+     other light source sits on the ground. */
+  _buildExit() {
+    const g = new THREE.Group();
+    g.visible = false;
+
+    const shaftMat = new THREE.MeshBasicMaterial({
+      color: 0xffd9a0, transparent: true, opacity: 0.10, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(EXIT.radius * 0.55, EXIT.radius * 1.05, 11, 16, 1, true), shaftMat);
+    shaft.position.y = 5.2;
+    shaft.renderOrder = 5;
+    g.add(shaft);
+
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffd9a0, transparent: true, opacity: 0.5, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(EXIT.radius * 0.82, EXIT.radius, 44), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    g.add(ring);
+
+    const glow = new THREE.PointLight(0xffb066, 0, 14, 2);
+    glow.position.y = 1.4;
+    g.add(glow);
+
+    g.userData = { shaft, ring, glow, shaftMat, ringMat };
+    return g;
+  }
+
+  /* Called every frame with the Game's exit state. Pulses, because a static
+     bright shape at the edge of a dark frame reads as scenery. */
+  setExit(open, pos, dt) {
+    const g = this.exit;
+    g.visible = !!open;
+    if (!open) { g.userData.glow.intensity = 0; return; }
+    g.position.set(pos.x, 0, pos.z);
+    this._exitT = (this._exitT || 0) + dt;
+    const pulse = 0.5 + 0.5 * Math.sin(this._exitT * 2.4);
+    g.userData.shaftMat.opacity = 0.07 + pulse * 0.07;
+    g.userData.ringMat.opacity = 0.35 + pulse * 0.35;
+    g.userData.glow.intensity = 5 + pulse * 4;
+  }
+
+  /* The room, as a look. Cold and lit from nowhere on the sorting floor;
+     warm and lit by the forge in the clearing. */
+  setTheme(name) {
+    if (this._theme === name) return;
+    this._theme = name;
+    const ossuary = name === 'ossuary';
+    this.forest.setTheme(name);
+    this.scene.fog.color.setHex(ossuary ? 0x0c1016 : 0x0b0e13);
+    this.scene.background.setHex(ossuary ? 0x05070a : 0x06080b);
+    this.moon.color.setHex(ossuary ? 0xcfe0f2 : 0xbdd2ea);
+    this.moon.intensity = ossuary ? 2.35 : 1.9;
+    this.renderer.toneMappingExposure = ossuary ? 1.05 : 1.15;
+  }
+
   /* -------------------------------------------------------------------- */
   ensureRig(actor, isPlayer) {
     let rig = this.rigs.get(actor);
     if (!rig) {
+      // Which body to build comes off the foe's own definition, so a new
+      // enemy is a config entry plus a builder and nothing else.
       rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
-          : (actor.isEffigy ? buildEffigy(actor) : buildSlagbound(actor));
+          : actor.isEffigy ? buildEffigy(actor)
+          : (actor.def && actor.def.rig === 'cinderbone') ? buildCinderbone(actor)
+          : buildSlagbound(actor);
       this.rigs.set(actor, rig);
       this.scene.add(rig.group);
       const tg = buildTelegraph();
@@ -214,7 +283,10 @@ export class View {
     rig.flash = Math.max(0, (rig.flash || 0) - dt * 7);
 
     if (isPlayer) {
-      rig.shield.visible = actor.state === STATE.GUARD;
+      // The shield is CARRIED, not conjured. It hangs on the off arm at all
+      // times and the guard stance brings it up — a weapon that appears only
+      // while a button is held reads as a UI element, not as kit.
+      if (rig.shield) rig.shield.visible = true;
       const inv = actor.invulnerable;
       rig.mat.emissive.setHex(inv ? 0x6fa8d8 : 0x000000);
       rig.mat.emissiveIntensity = inv ? 0.7 : 0;
@@ -243,7 +315,8 @@ export class View {
       if (rig.core) {
         const w = actor.state === STATE.ATTACK ? 1 + actor.windupProgress * 2.6 : 1;
         const banked = actor.posturing ? AGGRO.postureDim : 1;
-        rig.core.material.emissiveIntensity = 2.6 * w * banked;
+        const base = rig.eyes ? 2.2 : 2.6;
+        rig.core.material.emissiveIntensity = base * w * banked;
       }
       if (rig.flash > 0) {
         rig.mat.emissive.setHex(0xffffff);

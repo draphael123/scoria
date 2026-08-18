@@ -179,7 +179,8 @@ export class CombatUI {
 
     // --- alerts -----------------------------------------------------------
     if (p.staminaLock > 0) this.flash('EXHAUSTED', 'bad');
-    else if (p.state === STATE.GUARD && p.stamina < p.weapon.guard.staminaPerHit * 1.6) {
+    else if (p.state === STATE.GUARD && p.guard &&
+             p.stamina < p.weapon.guard.staminaPerHit * 1.6) {
       this.flash('GUARD FAILING', 'warn');
     }
     if (this._alertT > 0) {

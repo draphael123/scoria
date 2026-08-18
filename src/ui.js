@@ -82,10 +82,10 @@ export class Hud {
     } else if (e && !e.dead) {
       this.foe.classList.add('on');
       this.foe.classList.remove('effigy');
-      // With a crowd, which body this bar describes stops being obvious, so
-      // it says how many are still standing.
+      // Whatever it actually is — the sorting floor is not full of Slagbounds.
+      const foeName = e.def ? e.def.name : 'The Slagbound';
       this.foeName.textContent = standing > 1
-        ? `The Slagbound · ${standing} standing` : 'The Slagbound';
+        ? `${foeName} · ${standing} standing` : foeName;
       const eh = clamp(e.hp / e.maxHp, 0, 1);
       this.foeFill.style.width = (eh * 100) + '%';
       this._foeChip += (eh - this._foeChip) * Math.min(1, dt * 3.2);
@@ -104,9 +104,9 @@ export class Hud {
     }
 
     if (game.outcome) {
-      this.bannerText.textContent = game.outcome === 'win' ? 'SLAGBOUND FELLED' : 'YOU DIED';
+      this.bannerText.textContent = game.outcome === 'win' ? 'THE FLOOR IS CLEAR' : 'YOU DIED';
       this.bannerHint.textContent = game.outcome === 'win'
-        ? 'the rack is yours — R to duel again'
+        ? 'the rack is yours — R to begin again'
         : 'press R to rise';
       this.banner.className = 'banner on ' + game.outcome;
     } else {
@@ -179,12 +179,13 @@ export class Debug {
       ['i-frames', p.invulnerable ? 'ACTIVE' : (p.state === STATE.ROLL ? 'roll, no i-frames' : 'no')],
       ['weapon', `${p.weapon.id}  (${p.weapon.klass})`],
       ['armour', p.armored ? 'HYPERARMOUR' : '—'],
+      ['off hand', `${p.weapon.offhandLabel || 'GUARD'}  (${p.offhand})`],
       ['stamina', p.stamina.toFixed(0) + '/' + p.maxStamina + (p.staminaLock > 0 ? '  LOCKED' : '')],
       ['hp', p.hp.toFixed(0) + '/' + p.maxHp],
       ['lock', p.lockTarget && !p.lockTarget.dead ? 'on' : 'off'],
       ['last in', p.lastAction],
       ['—', ''],
-      [`SLAGBOUND  (${game.livingEnemies.length} up)`, ''],
+      [`${(e && e.def ? e.def.name : 'ENEMY').toUpperCase()}  (${game.livingEnemies.length} up)`, ''],
       ['token', game.token ? (game.token === e ? 'this one' : 'another') : `none, ${game.aggroCd.toFixed(2)}s`],
       ['winding up', game.windupEnemy ? '1' : '0'],
       ['state', e ? e.state + (e.dead ? ' (dead)' : '') : '—'],
