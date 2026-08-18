@@ -920,8 +920,51 @@ export class Forest {
     this.townFire = { coals, light, phase: 2.2 };
     g.add(rack);
 
+    this.townLamps = this.townLamps || [];
+    /* --- THE ROLL -------------------------------------------------------
+       The shift book, cut into stone: a long low wall covered edge to edge in
+       ruled lines and tally strokes. No legible text, because a wall you can
+       actually read stops being fourteen thousand names and becomes six.
+       Density is the point — it has to look like a quantity. */
+    const roll = new THREE.Group();
+    roll.position.set(-4.6, 0, 0);
+    roll.rotation.y = Math.PI / 2;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.9, 0.5), stone);
+    slab.position.y = 0.95;
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    roll.add(slab);
+    this._registerOccluder(slab, stone, 1.9);
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.26, 0.9), stoneD);
+    plinth.position.y = 0.13;
+    roll.add(plinth);
+    // The names, as incised lines. Nine rows of short dark strokes.
+    for (let row = 0; row < 9; row++) {
+      for (let c = 0; c < 26; c++) {
+        if (rng() < 0.12) continue;              // a chipped-out patch
+        const nick = new THREE.Mesh(
+          new THREE.BoxGeometry(0.11 + rng() * 0.05, 0.045, 0.03), burnt);
+        nick.position.set(-2.42 + c * 0.19, 0.34 + row * 0.18, 0.26);
+        roll.add(nick);
+      }
+    }
+    // A cap course, and a single lamp so it is findable at night.
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.2, 0.7), stoneD);
+    cap.position.y = 1.98;
+    cap.castShadow = true;
+    roll.add(cap);
+    const rlampMat = new THREE.MeshStandardMaterial({
+      color: 0x1b1510, emissive: 0xffb060, emissiveIntensity: 1.1, roughness: 1 });
+    const rlamp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.22), rlampMat);
+    rlamp.position.set(2.5, 2.3, 0);
+    roll.add(rlamp);
+    const rlight = new THREE.PointLight(0xffb878, 5.5, 8, 2);
+    rlight.position.set(2.5, 2.2, 0.5);
+    roll.add(rlight);
+    this.townLamps.push({ mat: rlampMat, light: rlight, phase: 4.1 });
+    g.add(roll);
+
     /* --- lamp posts down the street, all but one of them dead ----------- */
-    this.townLamps = [];
     for (const [lz, lit] of [[-1.0, false], [3.6, true], [8.4, false], [-8.0, false]]) {
       for (const sx of [-1, 1]) {
         const lp = new THREE.Group();

@@ -404,6 +404,13 @@
   .cr-weap-lines li::before{content:'';position:absolute;left:0;top:.62em;
        width:4px;height:1px;background:var(--ember);opacity:.75}
   .cr-weap.on .cr-weap-lines li{color:var(--dim)}
+  /* Whose weapon it was. Set in the body serif rather than the UI mono, so it
+     reads as a sentence about a person and not as another stat line. */
+  .cr-weap-whose{font-size:11px;line-height:1.55;color:#9c8f7d;font-style:italic;
+       margin:2px 0 4px;padding-left:9px;border-left:1px solid rgba(212,85,42,.4)}
+  .cr-weap.on .cr-weap-whose{color:#c3b49c}
+  .ar-bwhy{font-size:11px;line-height:1.6;color:#9c8f7d;font-style:italic;
+       margin-top:7px;padding-left:10px;border-left:1px solid rgba(212,85,42,.4)}
   .cr-weap-lock{margin-top:6px;font-size:9px;letter-spacing:.28em;color:var(--ember)}
 
   .cr-encrow{width:min(940px,94vw);margin-top:6px;border-bottom:0}

@@ -76,10 +76,11 @@ export class Menu {
     title.appendChild(el('div', 'wordmark', 'SCORIA'));
     title.appendChild(el('div', 'tagline', 'the armoury rack is your character sheet'));
     title.appendChild(el('div', 'flavour',
-      'The works at Scoria burned for four hundred years. What ran out of them ' +
-      'went into the ground, and the wood died standing.<br><br>' +
-      'The rack is still out there, past the burn circle. So is the thing ' +
-      'that used to tend the fire.'));
+      'Scoria made the finest weapons that ever existed. It could do that ' +
+      'because it had learned how to fold a life into iron, and it never ran ' +
+      'short of lives.<br><br>' +
+      'The works have been cold four hundred years. The rack is still ' +
+      'standing. So is everyone who went into it.'));
 
     const beginBtn = el('button', 'btn primary', 'AWAKEN');
     const trainBtn = el('button', 'btn', 'TRAINING');
@@ -94,8 +95,9 @@ export class Menu {
     trainBtn.onclick = () => { this.hide(); this.h.onTrain?.(); };
 
     title.appendChild(el('div', 'slice-note',
-      'AWAKEN takes up a weapon and starts the opening. RETURN TO SCORIA ' +
-      'goes straight to the town, and the rack is standing in it.'));
+      'A weapon remembers what you do with it. That is the only reason to ' +
+      'come back for one. &middot; AWAKEN starts the opening &middot; ' +
+      'RETURN TO SCORIA goes straight to the town'));
 
     beginBtn.onclick = () => { this.showCreator(); };
     setBtn.onclick = () => { this._from = 'title'; this.showSettings(); };

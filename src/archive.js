@@ -52,10 +52,16 @@ export function markSeen(ids) {
    Kept next to nothing else, because it is the part that can be WRONG — the
    numbers cannot. Each entry says what the enemy takes from you and what
    takes it back. */
+/* Each entry answers three separate questions, and they are separate on
+   purpose: `line` is what it IS, `asks` is what the fight demands of you, and
+   `why` is the thing the setting is actually about — every one of these was a
+   person with a job, and the works never let any of them clock off. The
+   counter is craft; the why is why you should feel anything about it. */
 const LORE = {
   slagbound: {
     line: 'A foreman’s skeleton, grown over with cooled slag. The melt is still burning in its ribcage.',
     asks: 'TIME THE SWING.',
+    why: 'Foremen went into the biggest pieces. There was more of him to use.',
     counter: 'Two attacks and nothing else, so it can be learned outright. Roll ' +
              'through the swipe and punish its 0.62s recovery. The overhead is ' +
              'slower and hurts more — that is the one worth a heavy.',
@@ -63,6 +69,8 @@ const LORE = {
   cinderbone: {
     line: 'A picker off the sorting floor. Brittle, quick, and never alone.',
     asks: 'OUT-POSITION THEM.',
+    why: 'Pickers were cheap and there were hundreds. Almost none of them ended ' +
+         'up in anything you would want to carry.',
     counter: 'One greataxe Cleave staggers one outright; a sword light needs ' +
              'two. The danger is never the swing in front of you, it is having ' +
              'nowhere left to roll. Keep an edge of the circle behind you.',
@@ -70,6 +78,8 @@ const LORE = {
   boltbone: {
     line: 'A picker who found a crossbow. It holds at seven metres and backs away as you come.',
     asks: 'BREAK THE LINE.',
+    why: 'The yard crossbows were for stopping theft. It is still doing that, ' +
+         'and you are still carrying their iron.',
     counter: 'The aim line is drawn on the floor for most of a second before ' +
              'the bolt leaves — step out of it, do not roll along it. It is ' +
              'made of paper once you arrive, which is the whole deal.',
@@ -77,6 +87,8 @@ const LORE = {
   kilnwarden: {
     line: 'It tended the kiln. Now it calls the kiln down.',
     asks: 'LEAVE THE GROUND.',
+    why: 'Wardens fed the kiln that did the folding. Whatever they put in went ' +
+         'through them first.',
     counter: 'It aims at a PLACE, not at you, and it leads where you are ' +
              'already going. Rolling through does nothing because there is ' +
              'nothing to roll through. Change direction after it commits.',
@@ -84,6 +96,8 @@ const LORE = {
   skimmer: {
     line: 'It pulled slag off the melt with a plate the size of a door. It still has the plate.',
     asks: 'GET BEHIND IT.',
+    why: 'It skimmed the waste off a melt that had a man in it, every day, for ' +
+         'as long as it could stand up.',
     counter: 'Frontally immune — a tenth damage and no poise at all. It turns ' +
              'slower than anything else in the game, so going round is real. ' +
              'SHIELD BASH and HEAVE throw the plate wide; so does its own SKIM, ' +
@@ -92,6 +106,8 @@ const LORE = {
   blackdamp: {
     line: 'The bad air that took the lower galleries, and whatever it was wearing.',
     asks: 'DO NOT LET IT TOUCH YOU.',
+    why: 'A whole shift, and no way to tell where one of them stops. They were ' +
+         'never brought up.',
     counter: 'It barely damages you. It takes your STAMINA — a third of the bar ' +
              'a hit — and then something else kills you. Guarding does not help, ' +
              'because guarding costs stamina too. It is slow: give it the floor.',
@@ -99,6 +115,8 @@ const LORE = {
   gaffer: {
     line: 'The foreman. Never touched a tool. Still keeping time.',
     asks: 'KILL IT FIRST.',
+    why: 'He signed the shift book. Every name in it went into a rack, and ' +
+         'his did not.',
     counter: 'It does not attack. While it lives everything else commits far ' +
              'sooner, so the room is not hitting harder, it is never stopping. ' +
              'It stands at the back and retreats — reaching it costs you a walk ' +
@@ -291,6 +309,9 @@ export class Archive {
 
       card.appendChild(el('div', 'ar-asks', lore.asks || ''));
       card.appendChild(el('div', 'ar-blore', lore.line || ''));
+      // What it was, before. The counter tells you how to win; this is the
+      // only place the game says what you are actually killing.
+      if (lore.why) card.appendChild(el('div', 'ar-bwhy', lore.why));
 
       const st = el('div', 'ar-bstats');
       const put = (k, v) => {

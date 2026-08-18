@@ -298,6 +298,12 @@ function doZoneAction(action) {
     // The rack opens the same creator the title screen uses. Walking to it is
     // the difference between a menu and a place.
     menu.showCreator();
+  } else if (action === 'read') {
+    // A placard rather than a dialogue box: it is one sentence and it should
+    // land like an inscription, not like a conversation.
+    const prop = game.near && game.near.prop;
+    showPlacard('THE ROLL', prop && prop.text ? prop.text : '');
+    audio.uiClick();
   } else if (action === 'depart') {
     enterZone('circle');
   } else if (action === 'begin') {

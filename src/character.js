@@ -306,6 +306,9 @@ export class Creator {
       card.appendChild(el('div', 'cr-weap-class', w.klass));
       card.appendChild(el('div', 'cr-weap-name', w.name));
       card.appendChild(el('div', 'cr-weap-tag', w.tagline || ''));
+      // Whose it was. The rack is the character sheet, and a character sheet
+      // made only of numbers is a shop.
+      if (w.whose) card.appendChild(el('div', 'cr-weap-whose', w.whose));
       const ul = el('ul', 'cr-weap-lines');
       for (const line of (w.lines || [])) ul.appendChild(el('li', null, line));
       card.appendChild(ul);

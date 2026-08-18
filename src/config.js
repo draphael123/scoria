@@ -1,5 +1,23 @@
 /* ============================================================================
-   SCORIA — tuning tables.
+   SCORIA.
+
+   THE PREMISE, because every name and number below is downstream of it:
+
+     The works at Scoria made the finest weapons that ever existed. It could do
+     that because it had learned how to fold a LIFE into iron, and it never ran
+     short of lives. Everyone who worked there went into a rack eventually.
+
+     That is why the dead are still at their stations — part of them never got
+     to leave. It is why the weapons are worth walking into a dead town for.
+     And it is why a weapon REMEMBERS what you do with it, which is the hook
+     the whole game is built on: mastery persists because the iron is holding
+     on to somebody.
+
+   Taking one off the rack is not shopping. It is picking up a person and
+   deciding what they are going to be used for.
+
+   ----------------------------------------------------------------------
+   Tuning tables.
    Everything that decides how combat FEELS lives in this file and nowhere else.
    All durations are in seconds. All distances are in world units (1u ~ 1m).
    ==========================================================================*/
@@ -192,6 +210,9 @@ export const WEAPONS = {
     // Rack copy. The rack IS the character sheet, so this says what the weapon
     // DOES rather than what its numbers are.
     tagline: 'Fast, safe, and always inside its reach.',
+    // Whose life is in it. The rack IS the character sheet, and a character
+    // sheet that is only numbers is a menu.
+    whose: 'The yard-warden\u2019s. He carried it for thirty years and drew it once.',
     lines: [
       'Reach 2.35 — you fight inside the swipe',
       'Three-hit chain, with stamina left to roll out',
@@ -265,6 +286,7 @@ export const WEAPONS = {
     moveScale: 0.88,
     twoHand: true,          // no shield — both hands are on the haft
     tagline: 'Out-reaches the swipe. Finishes the swing regardless.',
+    whose: 'Cut from a cupola\u2019s own casing. Two men hung it. One went into it.',
     lines: [
       'Reach 3.15 — the swipe cannot answer you out here',
       'Two-hit chain, and the second is a full 360 sweep',
@@ -371,6 +393,7 @@ export const WEAPONS = {
     twoHand: false,
     dual: true,
     tagline: 'No safe distance. Bleed it out before it lands one.',
+    whose: 'A skinner\u2019s pair, and she is still in the left one. It is the quicker.',
     lines: [
       'Reach 1.75 — you live inside everything it does',
       'Four-hit chain, and every hit stacks BLEED',
@@ -454,6 +477,7 @@ export const WEAPONS = {
     twoHand: false,
     resource: 'heat',
     tagline: 'Range, paid for in heat you have to get rid of.',
+    whose: 'Not a book. The bellows-master, pressed flat and bound in his own apron.',
     lines: [
       'No stamina — every cast adds HEAT, and 100 roots you',
       'Outranges every melee attack \u2014 but not an archer',
@@ -1089,15 +1113,17 @@ export const AGGRO = {
 export const ENCOUNTERS = {
   duel: {
     id: 'duel', name: 'The Slagbound', short: 'ONE',
-    blurb: 'The thing that used to tend the fire. One clearing, one duel.',
+    blurb: 'A foreman, still walking his floor four hundred years after ' +
+           'the fire went out. Nobody ever told him he could stop.',
     foe: 'slagbound', theme: 'clearing',
     hpMul: 1.0,
     spawn: [[0, -2.5]],
   },
   trio: {
     id: 'trio', name: 'Three of Them', short: 'THREE',
-    blurb: 'Three came down off the slag heap. Only one may swing at a time — ' +
-           'the other two are working around behind you.',
+    blurb: 'Three of them came down off the heap. They still work a shift ' +
+           'pattern: one swings, the others move up. Nobody told them ' +
+           'either.',
     foe: 'slagbound', theme: 'clearing',
     // 3 x 180 is a slog, and this fight is about position, not attrition.
     hpMul: 0.62,
@@ -1108,8 +1134,9 @@ export const ENCOUNTERS = {
     // Two come up out of the floor once the first three are engaged, so the
     // room escalates rather than arriving all at once.
     rocks: 5,
-    blurb: 'Where they picked the good iron out of the slag, and where the ' +
-           'ones who picked it are still standing. Five, and quick.',
+    blurb: 'Where the good iron was picked out of the slag by hand. The ' +
+           'pickers are still at it, and there is nothing left down here ' +
+           'to pick but you.',
     foe: 'cinderbone', theme: 'ossuary',
     hpMul: 1.0,
     // A ring, so you arrive already surrounded and the first decision of the
@@ -1119,9 +1146,9 @@ export const ENCOUNTERS = {
   },
   yard: {
     id: 'yard', name: 'The Long Yard', short: 'BOLTS',
-    blurb: 'The hauling yard, and the sightlines they built it for. Three ' +
-           'pickers close, and two on the far side who would rather you did ' +
-           'not stand anywhere at all.',
+    blurb: 'The hauling yard. They cut the sightlines long so a bolt could ' +
+           'reach anything leaving with iron it had not earned. You are ' +
+           'carrying iron.',
     foe: 'cinderbone', theme: 'yard',
     hpMul: 1.0,
     // Boulders on the yard, which is the room where cover MATTERS — the two
@@ -1137,9 +1164,9 @@ export const ENCOUNTERS = {
   },
   gallery: {
     id: 'gallery', name: 'The Lower Gallery', short: 'DAMP',
-    blurb: 'The air went bad down here first. Something is still crawling in ' +
-           'it, and it does not want to kill you \u2014 it wants you unable to ' +
-           'do anything about the rest.',
+    blurb: 'The air went bad in the lower gallery first, and took the ' +
+           'shift that was down there. What is left of them does not want ' +
+           'you dead. It wants you too tired to be difficult.',
     foe: 'cinderbone', theme: 'ossuary',
     hpMul: 1.0,
     rocks: 7,
@@ -1149,9 +1176,9 @@ export const ENCOUNTERS = {
   },
   kiln: {
     id: 'kiln', name: 'The Kiln Mouth', short: 'KILN',
-    blurb: 'The heat is back on down here. A foreman still standing, two ' +
-           'pickers, and a pair of wardens who will burn the ground you are ' +
-           'on rather than come and find you.',
+    blurb: 'The kiln is lit. Nobody lit it. The wardens who fed it will ' +
+           'burn the ground you stand on rather than walk over and do it ' +
+           'properly. They were never paid to hurry.',
     foe: 'cinderbone', theme: 'kiln',
     hpMul: 1.0,
     spawn: [[0, -4.4, 'slagbound'],
@@ -1160,9 +1187,9 @@ export const ENCOUNTERS = {
   },
   casting: {
     id: 'casting', name: 'The Casting Hall', short: 'PLATE',
-    blurb: 'Where the melt was poured. A skimmer still standing over the ' +
-           'channel with its plate up, a gaffer keeping time behind it, and ' +
-           'the damp coming up through the floor.',
+    blurb: 'The casting hall, where a life went into the iron and a ' +
+           'weapon came out. The last shift is still on it: a skimmer ' +
+           'over the channel, a gaffer keeping time, and the damp.',
     foe: 'cinderbone', theme: 'kiln',
     hpMul: 1.0,
     rocks: 6,
@@ -1192,7 +1219,7 @@ export const ENCOUNTERS = {
 export const ZONES = {
   town: {
     id: 'town', name: 'Scoria', theme: 'town',
-    sub: 'what the works left behind',
+    sub: 'nobody left. they went into the iron',
     radius: 15.0,
     spawn: [0, 7.5],
     // Solids: every wall of every building, plus the standing furniture.
@@ -1203,6 +1230,13 @@ export const ZONES = {
       // The rack, and the reason to walk anywhere.
       { id: 'rack', kind: 'rack', x: 0, z: -5.0, r: 2.4,
         prompt: 'TAKE UP A WEAPON', action: 'rack' },
+      // THE ROLL. The shift book, cut into stone. It is the only place the
+      // premise is stated as a fact rather than as atmosphere, and it is
+      // deliberately something you have to walk over and choose to read.
+      { id: 'roll', kind: 'roll', x: -4.6, z: 0.0, r: 2.6,
+        prompt: 'READ THE ROLL', action: 'read',
+        text: 'FOURTEEN THOUSAND SIX HUNDRED AND ELEVEN NAMES. ' +
+              'THE LAST COLUMN IS WHAT EACH ONE WAS MADE INTO.' },
       // The road out. Locked until you are carrying something.
       { id: 'gate', kind: 'gate', x: 0, z: 12.4, r: 2.2,
         prompt: 'INTO THE WOOD', action: 'depart' },
@@ -1210,7 +1244,7 @@ export const ZONES = {
   },
   circle: {
     id: 'circle', name: 'The Burn Circle', theme: 'clearing',
-    sub: 'where the wood stops',
+    sub: 'where the wood stops and the works begin',
     radius: 13.0,
     spawn: [0, 6.0],
     props: [
@@ -1279,6 +1313,7 @@ function wallSolids(b) {
 
 ZONES.town.solids = [
   ...TOWN_BUILDINGS.flatMap(wallSolids),
+  { x: -4.6, z: 0.0, hw: 0.36, hd: 2.6, rot: 0.0 },     // the roll
   { x: -4.4, z: 4.6, r: 1.15 },         // the well
   { x: 5.0, z: 5.4, r: 0.55 },          // the dead tree
   { x: 3.2, z: -2.0, r: 1.05 },         // the cart
