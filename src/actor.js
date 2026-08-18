@@ -33,6 +33,7 @@ export class Actor {
     this.atkLabel = '';
 
     this.vx = 0; this.vz = 0;   // desired velocity this step
+    this.kx = 0; this.kz = 0;   // knockback impulse, decayed by the game
     this.invuln = 0;            // seconds of remaining i-frames
     this.lastDamageAt = 0;
   }
@@ -112,6 +113,15 @@ export class Actor {
   angleTo(o) { return Math.atan2(o.x - this.x, o.z - this.z); }
 
   get invulnerable() { return this.invuln > 0; }
+
+  /* Shove this actor away from a point. Applied on top of its own movement,
+     so being hit interrupts where you were going. */
+  knock(fromX, fromZ, power) {
+    const dx = this.x - fromX, dz = this.z - fromZ;
+    const d = Math.hypot(dx, dz) || 1;
+    this.kx += (dx / d) * power;
+    this.kz += (dz / d) * power;
+  }
 
   kill() {
     this.dead = true;

@@ -14,6 +14,7 @@ export class Hud {
     this.foeFill = $('foeFill');
     this.foeChip = $('foeChip');
     this.foePoise = $('foePoise');
+    this.foeName = this.foe.querySelector('.name');
     this.lockPip = $('lockPip');
     this.banner = $('banner');
     this.bannerText = $('bannerText');
@@ -64,8 +65,20 @@ export class Hud {
       this.stGhost.style.width = (rollCost * 100) + '%';
     }
 
-    if (e && !e.dead) {
+    // The training effigy has no meaningful health, so it gets a poise bar
+    // and a name only — a full boss bar there would teach the wrong thing.
+    if (e && !e.dead && e.isEffigy) {
+      this.foe.classList.add('on', 'effigy');
+      this.foe.classList.add('effigy');
+      this.foeName.textContent = 'Training Effigy';
+      this.foeFill.style.width = '0%';
+      this.foeChip.style.width = '0%';
+      this.foePoise.style.width = (clamp(e.poise / e.maxPoise, 0, 1) * 100) + '%';
+      this.foe.classList.toggle('stag', e.state === STATE.STAGGER);
+    } else if (e && !e.dead) {
       this.foe.classList.add('on');
+      this.foe.classList.remove('effigy');
+      this.foeName.textContent = 'The Slagbound';
       const eh = clamp(e.hp / e.maxHp, 0, 1);
       this.foeFill.style.width = (eh * 100) + '%';
       this._foeChip += (eh - this._foeChip) * Math.min(1, dt * 3.2);

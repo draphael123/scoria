@@ -44,6 +44,8 @@ export class CombatUI {
     document.body.appendChild(this.alert);
     this._alertT = 0;
     this._alertKey = '';
+    this.showNumbers = true;
+    this.showThreat = true;
 
   }
 
@@ -60,6 +62,7 @@ export class CombatUI {
 
   /* ---- floating damage ------------------------------------------------- */
   number(text, kind, x, y, z) {
+    if (!this.showNumbers) return;
     let n = this._pool.pop();
     if (!n) {
       n = el('div', 'cui-num');
@@ -152,7 +155,7 @@ export class CombatUI {
     // --- incoming-attack warning -----------------------------------------
     // On a fixed isometric camera the enemy can wind up from a bearing where
     // its own body hides the floor decal. This arc points at the threat.
-    const incoming = e && !e.dead && e.state === STATE.ATTACK && e.phase === PHASE.WINDUP;
+    const incoming = this.showThreat && e && !e.dead && e.state === STATE.ATTACK && e.phase === PHASE.WINDUP;
     if (incoming) {
       // Convert a world bearing into a screen angle for this fixed camera.
       _v.set(e.x, 1.0, e.z).project(camera);

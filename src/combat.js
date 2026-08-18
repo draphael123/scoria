@@ -1,6 +1,6 @@
 import { angleDelta, clamp } from './util.js';
 import { STATE, PHASE } from './actor.js';
-import { PLAYER, SLAGBOUND } from './config.js';
+import { PLAYER, SLAGBOUND, IMPACT } from './config.js';
 
 export const GUARD_ARC = 2.44;   // ~140 degrees of frontal coverage
 
@@ -53,7 +53,7 @@ export function applyDamage(attacker, target, atk, out) {
     return ev;
   }
 
-  let damage = atk.damage;
+  let damage = atk.damage * (attacker.damageMul || 1);
 
   // Stagger amplifies incoming damage — this is the punish window.
   if (target.state === STATE.STAGGER) damage *= SLAGBOUND.staggerDamageMul;
@@ -73,6 +73,7 @@ export function applyDamage(attacker, target, atk, out) {
         ev.result = 'guarded';
         ev.damage = through;
         target.guardFlash = 0.16;
+        target.knock(attacker.x, attacker.z, IMPACT.knockGuard);
         out.push(ev);
         if (target.hp <= 0) target.kill();
         return ev;
@@ -80,6 +81,7 @@ export function applyDamage(attacker, target, atk, out) {
       // Not enough stamina to hold it — guard break. Full damage + long stagger.
       target.spendStamina(target.stamina);
       target.stagger(PLAYER.hitStagger * 2.2);
+      target.knock(attacker.x, attacker.z, IMPACT.knockHeavy);
       target.hp -= damage;
       ev.result = 'guardbreak';
       ev.damage = damage;
@@ -93,6 +95,12 @@ export function applyDamage(attacker, target, atk, out) {
   target.hp -= damage;
   ev.damage = damage;
 
+  // Every clean blow MOVES the thing it hits. A hit that only changes a
+  // number does not read as a hit.
+  const heavy = atk.id === 'H1' || atk.id === 'L3';
+  target.knock(attacker.x, attacker.z,
+    target.isPlayer ? IMPACT.knockTaken : (heavy ? IMPACT.knockHeavy : IMPACT.knockLight));
+
   if (target.poise !== undefined) {
     const resist = target.staggerResist > 0 ? SLAGBOUND.staggerResistMul : 1;
     target.poise -= (atk.poise || 0) * resist;
@@ -100,6 +108,7 @@ export function applyDamage(attacker, target, atk, out) {
     if (target.poise <= 0) {
       target.poise = target.maxPoise;
       target.stagger(SLAGBOUND.staggerDuration);
+      target.knock(attacker.x, attacker.z, IMPACT.knockStagger);
       ev.result = 'stagger';
     }
   } else {

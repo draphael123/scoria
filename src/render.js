@@ -5,184 +5,13 @@ import { clamp, damp, lerp } from './util.js';
 import { buildTextures } from './textures.js';
 import { Forest } from './props.js';
 import { Fx } from './fx.js';
+import { Post } from './post.js';
+import { buildKnight, buildSlagbound, buildEffigy, animateRig, PAL } from './rigs.js';
 
 const C = {
-  steel:  0xc6ced6,
-  steelD: 0x8a939b,
-  tabard: 0x7a2320,
-  leather:0x3d2a1c,
-  blade:  0xd8dce0,
-  slag:   0x453833,
-  crack:  0xff5a18,
-  ember:  0xd4552a,
-  hot:    0xffd9a0,
+  ember: PAL.ember,
+  hot:   0xffd9a0,
 };
-
-/* --------------------------------------------------------------------------
-   Rigs. Still primitives, but shaped for SILHOUETTE — from a fixed isometric
-   angle you read a fight by outline long before you read detail, so the knight
-   and the Slagbound are built to be unmistakable from one another at a glance.
-   ----------------------------------------------------------------------- */
-function makeNose(r, color) {
-  const nose = new THREE.Mesh(
-    new THREE.CircleGeometry(r * 2.0, 3, Math.PI / 2 - 0.26, 0.52),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28,
-      side: THREE.DoubleSide, depthWrite: false }));
-  nose.rotation.x = Math.PI / 2;
-  nose.position.y = 0.016;
-  return nose;
-}
-
-function buildKnight(actor) {
-  const g = new THREE.Group();
-  const r = actor.radius, h = actor.height;
-
-  const steel = new THREE.MeshStandardMaterial({ color: C.steel, roughness: 0.38, metalness: 0.72 });
-  const steelD = new THREE.MeshStandardMaterial({ color: C.steelD, roughness: 0.5, metalness: 0.65 });
-  const cloth = new THREE.MeshStandardMaterial({ color: C.tabard, roughness: 0.95 });
-  const leather = new THREE.MeshStandardMaterial({ color: C.leather, roughness: 0.9 });
-
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.84, h * 0.34, 4, 12), steel);
-  torso.position.y = h * 0.60;
-  torso.castShadow = true;
-  g.add(torso);
-
-  const tabard = new THREE.Mesh(new THREE.BoxGeometry(r * 0.78, h * 0.38, 0.06), cloth);
-  tabard.position.set(0, h * 0.47, r * 0.62);
-  g.add(tabard);
-
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.82, r * 0.82, 0.12, 12), leather);
-  belt.position.y = h * 0.44;
-  g.add(belt);
-
-  for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.3, h * 0.26, 3, 8), steelD);
-    leg.position.set(s * r * 0.4, h * 0.22, 0);
-    leg.castShadow = true;
-    g.add(leg);
-    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(r * 0.46, 10, 8), steel);
-    pauldron.position.set(s * r * 0.88, h * 0.75, 0);
-    pauldron.scale.y = 0.72;
-    pauldron.castShadow = true;
-    g.add(pauldron);
-  }
-
-  // Great helm: a box with a dark visor slit, which reads far better from
-  // above than a sphere does.
-  const helm = new THREE.Mesh(new THREE.BoxGeometry(r * 1.02, r * 1.02, r * 1.1), steel);
-  helm.position.y = h - r * 0.44;
-  helm.castShadow = true;
-  g.add(helm);
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(r * 1.04, r * 0.16, r * 0.1),
-    new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 1 }));
-  visor.position.set(0, h - r * 0.42, r * 0.56);
-  g.add(visor);
-  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.05, r * 0.3, r * 0.72), cloth);
-  crest.position.set(0, h + r * 0.14, 0);
-  g.add(crest);
-
-  // Weapon pivot at the right shoulder.
-  const pivot = new THREE.Group();
-  pivot.position.set(r * 0.9, h * 0.72, 0);
-  g.add(pivot);
-
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 6), leather);
-  grip.rotation.x = Math.PI / 2;
-  grip.position.z = 0.12;
-  pivot.add(grip);
-  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.09), steelD);
-  cross.position.z = 0.3;
-  pivot.add(cross);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.032, 1.35),
-    new THREE.MeshStandardMaterial({ color: C.blade, roughness: 0.22, metalness: 0.95 }));
-  blade.position.z = 1.0;
-  blade.castShadow = true;
-  pivot.add(blade);
-
-  // Kite shield, shown only while guarding.
-  const shield = new THREE.Group();
-  shield.add(new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.95, 0.07),
-    new THREE.MeshStandardMaterial({ color: 0x4a5560, roughness: 0.6, metalness: 0.55 })));
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), steel);
-  boss.position.z = 0.07;
-  boss.scale.z = 0.6;
-  shield.add(boss);
-  shield.position.set(-r * 0.55, h * 0.6, r * 0.72);
-  shield.visible = false;
-  g.add(shield);
-
-  const nose = makeNose(r, 0xdfe6ea);
-  g.add(nose);
-
-  return { group: g, body: torso, head: helm, pivot, blade, nose,
-           shield, mat: steel, crest, baseLean: 0 };
-}
-
-function buildSlagbound(actor) {
-  const g = new THREE.Group();
-  const r = actor.radius, h = actor.height;
-
-  const hide = new THREE.MeshStandardMaterial({
-    color: C.slag, roughness: 0.98, metalness: 0.1,
-    emissive: 0x3a1004, emissiveIntensity: 0.8 });
-  const crust = new THREE.MeshStandardMaterial({ color: 0x2a221e, roughness: 1 });
-  const molten = new THREE.MeshStandardMaterial({
-    color: 0x1a0a04, emissive: C.crack, emissiveIntensity: 2.6, roughness: 1 });
-
-  // Hunched and top-heavy — reads as a threat from directly above.
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(r * 1.02, h * 0.30, 4, 12), hide);
-  torso.position.y = h * 0.56;
-  torso.castShadow = true;
-  g.add(torso);
-
-  const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 10, 8), molten);
-  core.position.set(0, h * 0.58, r * 0.62);
-  core.scale.set(1, 1.5, 0.4);
-  g.add(core);
-
-  const headMass = new THREE.Mesh(new THREE.BoxGeometry(r * 0.95, r * 0.7, r * 1.0), crust);
-  headMass.position.set(0, h * 0.86, r * 0.28);
-  headMass.rotation.x = 0.3;
-  headMass.castShadow = true;
-  g.add(headMass);
-
-  // Slag growths, asymmetric so its facing reads at a glance.
-  for (const [sx, sc] of [[-1, 1.0], [1, 0.72]]) {
-    const lump = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.52 * sc, 0), crust);
-    lump.position.set(sx * r * 0.95, h * 0.78, -r * 0.1);
-    lump.castShadow = true;
-    g.add(lump);
-  }
-
-  for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.34, h * 0.2, 3, 8), hide);
-    leg.position.set(s * r * 0.5, h * 0.2, 0);
-    leg.castShadow = true;
-    g.add(leg);
-  }
-
-  const pivot = new THREE.Group();
-  pivot.position.set(r * 1.0, h * 0.66, 0);
-  g.add(pivot);
-
-  // A slab of half-worked iron, still hot at the tip.
-  const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 1.0, 6), crust);
-  haft.rotation.x = Math.PI / 2;
-  haft.position.z = 0.5;
-  pivot.add(haft);
-  const headSlab = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.4, 0.85), hide);
-  headSlab.position.z = 1.35;
-  headSlab.castShadow = true;
-  pivot.add(headSlab);
-  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.16), molten);
-  tip.position.z = 1.76;
-  pivot.add(tip);
-
-  g.add(makeNose(r, C.ember));
-
-  return { group: g, body: torso, head: headMass, pivot, blade: headSlab,
-           shield: null, mat: hide, core, tip, baseLean: 0.22 };
-}
 
 function wedgeGeometry(reach, arc) {
   return new THREE.CircleGeometry(reach, 44, Math.PI / 2 - arc / 2, arc);
@@ -244,8 +73,10 @@ export class View {
     this.focus = new THREE.Vector3();
     this.shake = 0;
     this.shakeScale = 1;
+    this.punch = 0;      // momentary zoom-in on impact
     this.zoom = 1;
     this.zoomBias = 1;
+    this._clock = 0;
 
     this._buildLights();
     this.tex = buildTextures();
@@ -254,7 +85,7 @@ export class View {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     pmrem.compileEquirectangularShader();
     this.scene.environment = pmrem.fromEquirectangular(this.tex.env).texture;
-    this.scene.environmentIntensity = 0.75;
+    this.scene.environmentIntensity = 0.5;
     pmrem.dispose();
     this.tex.env.dispose();
     this.forest = new Forest(this.scene, this.tex, this.quality);
@@ -272,6 +103,12 @@ export class View {
     this.debugGroup.visible = false;
     this.scene.add(this.debugGroup);
     this._debugMeshes = new Map();
+
+    this.post = new Post(this.renderer, {
+      enabled: opts.post !== false,
+      bloom: hi ? 0.9 : 0.6,
+      width: window.innerWidth, height: window.innerHeight,
+    });
 
     this.resize();
   }
@@ -317,7 +154,8 @@ export class View {
   ensureRig(actor, isPlayer) {
     let rig = this.rigs.get(actor);
     if (!rig) {
-      rig = isPlayer ? buildKnight(actor) : buildSlagbound(actor);
+      rig = isPlayer ? buildKnight(actor, actor.build)
+          : (actor.isEffigy ? buildEffigy(actor) : buildSlagbound(actor));
       this.rigs.set(actor, rig);
       this.scene.add(rig.group);
       const tg = buildTelegraph();
@@ -358,41 +196,11 @@ export class View {
     }
   }
 
-  syncActor(actor, isPlayer) {
+  syncActor(actor, isPlayer, dt = 0.016) {
     const rig = this.ensureRig(actor, isPlayer);
-    const g = rig.group;
-    g.position.set(actor.x, 0, actor.z);
-    g.rotation.y = actor.facing;
-    g.rotation.z = 0;
 
-    // --- swing animation, driven straight off the frame data --------------
-    let swing = 0, lean = 0;
-    if (actor.state === STATE.ATTACK && actor.atk) {
-      const a = actor.atk;
-      const p = actor.phase;
-      if (p === PHASE.WINDUP) {
-        const t = actor.windupProgress;
-        swing = lerp(-0.25, -2.35, t * t);
-        lean = lerp(0, -0.15, t);
-      } else if (p === PHASE.ACTIVE) {
-        const t = (actor.atkT - a.windup) / a.active;
-        swing = lerp(-2.35, 1.35, t);
-        lean = 0.18;
-      } else {
-        const t = clamp((actor.atkT - a.windup - a.active) / Math.max(0.001, a.recover), 0, 1);
-        swing = lerp(1.35, 0, t * t);
-        lean = lerp(0.18, 0, t);
-      }
-    } else if (actor.state === STATE.ROLL) {
-      lean = -1.05 * Math.sin(Math.PI * clamp(actor.stateT / 0.6, 0, 1));
-    } else if (actor.state === STATE.STAGGER) {
-      lean = -0.4;
-      swing = 0.45;
-    } else if (Math.hypot(actor.vx, actor.vz) > 0.4) {
-      lean = Math.sin(performance.now() * 0.011) * 0.04;   // walking bob
-    }
-    rig.pivot.rotation.x = swing;
-    rig.body.rotation.x = rig.baseLean + lean;
+    // All posing lives in rigs.js and is driven off frame data.
+    animateRig(rig, actor, dt, this._clock);
 
     // Contact shadow + weapon trail. The trail is not decoration: it is the
     // only record of where the blade actually travelled during 90ms of active
@@ -401,13 +209,9 @@ export class View {
     this.fx.syncTrail(actor, rig,
       actor.state === STATE.ATTACK && actor.atk && actor.phase === PHASE.ACTIVE);
 
-    const rollDip = actor.state === STATE.ROLL
-      ? Math.sin(Math.PI * clamp(actor.stateT / 0.6, 0, 1)) * 0.46 : 0;
-    g.position.y = -rollDip;
-
     // A white pop on the frame a blow lands. Without it a hit on a dark body
     // is invisible unless you happen to be watching the health bar.
-    rig.flash = Math.max(0, (rig.flash || 0) - 0.09);
+    rig.flash = Math.max(0, (rig.flash || 0) - dt * 7);
 
     if (isPlayer) {
       rig.shield.visible = actor.state === STATE.GUARD;
@@ -424,8 +228,10 @@ export class View {
       }
     } else {
       const st = actor.state === STATE.STAGGER;
-      rig.mat.emissive.setHex(st ? 0xffb060 : 0x3a1004);
-      rig.mat.emissiveIntensity = st ? 2.4 : 0.8;
+      if (!rig.isEffigy) {
+        rig.mat.emissive.setHex(st ? 0xffb060 : 0x3a1004);
+        rig.mat.emissiveIntensity = st ? 2.4 : 0.8;
+      }
       // The molten core brightens through the windup — a second, body-level
       // tell for players watching the enemy rather than the floor.
       if (rig.core) {
@@ -436,11 +242,6 @@ export class View {
         rig.mat.emissive.setHex(0xffffff);
         rig.mat.emissiveIntensity = 0.8 + rig.flash * 4.5;
       }
-    }
-
-    if (actor.dead) {
-      g.rotation.z = Math.PI * 0.44;
-      g.position.y = -0.4;
     }
   }
 
@@ -522,6 +323,10 @@ export class View {
 
   addShake(v) { this.shake = Math.min(1.2, this.shake + v * this.shakeScale); }
 
+  /* A short shove of the camera toward the fight. Reads as the blow having
+     mass, and unlike shake it does not make the target harder to track. */
+  addPunch(v) { this.punch = Math.min(0.16, this.punch + v * (this.punchScale ?? 1)); }
+
   /* ---- debug hitbox wireframes ----------------------------------------- */
   setDebug(on) { this.debugGroup.visible = on; }
 
@@ -568,6 +373,7 @@ export class View {
 
   /* ---- world tick (set dressing only) ---------------------------------- */
   update(dt) {
+    this._clock += dt;
     this.forest.update(dt);
     this.forest.fadeOccluders(this.camera, this.focus, dt);
     this.fx.update(dt);
@@ -583,7 +389,8 @@ export class View {
     }
     this.focus.x = damp(this.focus.x, fx, CAMERA.follow, dt);
     this.focus.z = damp(this.focus.z, fz, CAMERA.follow, dt);
-    this.zoom = damp(this.zoom, wantZoom * this.zoomBias, 4, dt);
+    this.punch = Math.max(0, this.punch - dt * 0.55);
+    this.zoom = damp(this.zoom, wantZoom * this.zoomBias, 4, dt) - this.punch;
 
     this.shake = Math.max(0, this.shake - dt * 4.2);
     const sh = this.shake * this.shake;
@@ -619,11 +426,17 @@ export class View {
     this.w = Math.max(1, window.innerWidth);
     this.h = Math.max(1, window.innerHeight);
     this.renderer.setSize(this.w, this.h, false);
+    if (this.post) {
+      const px = this.renderer.getPixelRatio();
+      this.post.setSize(this.w * px, this.h * px);
+    }
     // Portrait phones see far less width; without pulling back, the two
     // fighters fill the screen and all spatial read is lost.
     this.zoomBias = this.w / this.h < 0.85 ? 1.5 : 1;
     this._applyFrustum();
   }
 
-  render() { this.renderer.render(this.scene, this.camera); }
+  render(dt) { this.post.render(this.scene, this.camera, dt); }
+
+  setPost(on) { this.post.enabled = on; }
 }

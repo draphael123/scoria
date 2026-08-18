@@ -35,7 +35,13 @@ Around the fight:
   is one instance of a single cylinder, so it all costs one draw call
 - Ambient life: drifting ash and embers, guttering fires on layered sines, the
   ruined furnace still burning
+- A hand-rolled post chain: bloom, vignette, colour grade, grain. Bloom earns
+  its place because nearly every readable signal here is emissive
+- Jointed, animated rigs — stride driven by distance travelled so feet never
+  skate, shoulder twist through the swing, idle breathing, roll tuck
 - Weapon trails, contact shadows, hit flashes and scorch decals
+- Knockback, camera punch, hitstop, and a beat of slow motion the instant you
+  break poise
 - Floating damage typed by kind, a threat arc pointing at whatever is winding
   up at you, combo pips, and a roll-cost ghost on the stamina bar
 - Tall props fade out when they come between the camera and the duel, because
@@ -47,6 +53,21 @@ Around the fight:
   when the floor decal is hidden behind your own body
 - Touch controls with a floating movement stick, so strafing round a locked
   target works with a thumb that never lands twice in the same place
+
+### Character creation
+
+Four attributes on a six-point buy — Vigour, Endurance, Strength, Agility —
+plus plate colour, heraldry, helm shape and crest. The spread is deliberately
+narrow: class comes from the weapon in this game, so attributes shape a run
+without deciding it. A default 2/2/2/2 build derives exactly the tuned
+baseline (100 vigour, 100 stamina, 0.35s i-frames).
+
+### Tutorial
+
+A nine-step sequence against a wicker effigy, every step gated on the player
+actually performing the action rather than on a timer or a "next" button:
+move, lock on, chain, heavy, run stamina dry, roll through a telegraph, guard,
+break poise. Then it hands straight off to the real fight.
 
 ## Running it
 

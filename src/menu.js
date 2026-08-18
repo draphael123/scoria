@@ -1,15 +1,30 @@
 /* Title screen, pause menu and settings. The DOM is built here rather than in
    index.html so the markup and the behaviour that drives it stay together. */
 
+import { Creator, loadBuild } from './character.js';
+
 const KEY = 'scoria.settings.v1';
 
 export const DEFAULTS = {
+  // audio
   master: 0.8,
   sfx: 0.9,
   music: 0.5,
+  // feel
   shake: 1.0,
+  punch: 1.0,
+  hitstop: true,
+  slowMo: true,
+  // presentation
+  bloom: 1.0,
+  vignette: 1.0,
+  grain: 1.0,
   quality: 'high',
+  // interface
+  damageNumbers: true,
+  threatArc: true,
   frameData: false,
+  showKeys: true,
 };
 
 export function loadSettings() {
@@ -59,16 +74,18 @@ export class Menu {
       'that used to tend the fire.'));
 
     const beginBtn = el('button', 'btn primary', 'ENTER THE CLEARING');
+    const trainBtn = el('button', 'btn', 'TRAINING');
     const setBtn = el('button', 'btn', 'SETTINGS');
     const row = el('div', 'btn-row');
-    row.append(beginBtn, setBtn);
+    row.append(beginBtn, trainBtn, setBtn);
     title.appendChild(row);
+    trainBtn.onclick = () => { this.hide(); this.h.onTrain?.(); };
 
     title.appendChild(el('div', 'slice-note',
       'Slice 0 &middot; one clearing, one blade, one Slagbound &middot; ' +
       'this build exists to answer whether the duel feels right'));
 
-    beginBtn.onclick = () => { this.hide(); this.h.onBegin?.(); };
+    beginBtn.onclick = () => { this.showCreator(); };
     setBtn.onclick = () => { this._from = 'title'; this.showSettings(); };
 
     /* ---------------------------- pause -------------------------------- */
@@ -93,27 +110,66 @@ export class Menu {
     const body = el('div', 'settings-body');
     settings.appendChild(body);
 
-    this._slider(body, 'Master volume', 'master');
-    this._slider(body, 'Effects', 'sfx');
-    this._slider(body, 'Music &amp; ambience', 'music');
-    body.appendChild(el('div', 'sep'));
-    this._slider(body, 'Screen shake', 'shake');
-    this._toggle(body, 'Frame-data overlay', 'frameData', 'the tuning instrument — also bound to F1');
-    this._choice(body, 'Quality', 'quality',
+    this._rebuildSettings = (b) => {
+      b.innerHTML = '';
+      b.appendChild(el('div', 'set-group', 'SOUND'));
+      this._slider(body, 'Master volume', 'master');
+      this._slider(body, 'Effects', 'sfx');
+      this._slider(body, 'Music &amp; ambience', 'music');
+
+      b.appendChild(el('div', 'set-group', 'IMPACT'));
+      this._slider(body, 'Screen shake', 'shake');
+      this._slider(body, 'Camera punch', 'punch');
+      this._toggle(body, 'Hit stop', 'hitstop',
+      'freezes a few frames on impact so a blow reads as weight');
+      this._toggle(body, 'Stagger slow motion', 'slowMo',
+      'a brief hold the instant you break poise');
+
+      b.appendChild(el('div', 'set-group', 'PRESENTATION'));
+      this._slider(body, 'Bloom', 'bloom');
+      this._slider(body, 'Vignette', 'vignette');
+      this._slider(body, 'Film grain', 'grain');
+      this._choice(body, 'Quality', 'quality',
       [['high', 'High'], ['low', 'Low']],
-      'Low disables shadows and thins the embers. Takes effect on reload.');
+      'Low drops shadows and thins the wood. Takes effect on reload.');
+
+      b.appendChild(el('div', 'set-group', 'INTERFACE'));
+      this._toggle(body, 'Damage numbers', 'damageNumbers');
+      this._toggle(body, 'Threat indicator', 'threatArc',
+      'the arc pointing at whatever is winding up at you');
+      this._toggle(body, 'Control hints', 'showKeys');
+      this._toggle(body, 'Frame-data overlay', 'frameData', 'the tuning instrument — also bound to F1');
+
+    };
+    this._rebuildSettings(body);
 
     const backBtn = el('button', 'btn primary', 'BACK');
+    const resetBtn = el('button', 'btn ghost', 'RESET TO DEFAULTS');
     const backRow = el('div', 'btn-row');
-    backRow.appendChild(backBtn);
+    backRow.append(backBtn, resetBtn);
     settings.appendChild(backRow);
+
+    resetBtn.onclick = () => {
+      Object.assign(this.s, DEFAULTS);
+      saveSettings(this.s);
+      for (const k of Object.keys(DEFAULTS)) this.h.onChange?.(k, this.s[k]);
+      this.showSettings();   // rebuild the controls against the new values
+    };
     backBtn.onclick = () => {
       if (this._from === 'pause') this.showPause(); else this.showTitle();
     };
 
-    root.append(title, pause, settings);
+    /* --------------------------- creator ------------------------------- */
+    this.build = loadBuild();
+    this.creator = new Creator(this.build, {
+      onBack: () => this.showTitle(),
+      onConfirm: (b) => { this.hide(); this.h.onBegin?.(b); },
+      onPreview: (b) => this.h.onPreview?.(b),
+    });
+
+    root.append(title, pause, settings, this.creator.node);
     document.body.appendChild(root);
-    this.screens = { title, pause, settings };
+    this.screens = { title, pause, settings, creator: this.creator.node };
   }
 
   _row(parent, label, hint) {
@@ -185,8 +241,14 @@ export class Menu {
   }
 
   showTitle() { this._show('title'); }
+  showCreator() { this.creator.refresh(); this._show('creator'); }
   showPause() { this._show('pause'); }
-  showSettings() { this._show('settings'); }
+  showSettings() {
+    // Rebuilt on entry so a defaults-reset shows the new values immediately.
+    const body = this.screens.settings.querySelector('.settings-body');
+    if (body && this._rebuildSettings) this._rebuildSettings(body);
+    this._show('settings');
+  }
 
   hide() {
     this.screen = null;

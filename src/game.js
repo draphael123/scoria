@@ -2,16 +2,20 @@ import { Player } from './player.js';
 import { Slagbound } from './enemy.js';
 import { resolveActive } from './combat.js';
 import { STATE, PHASE } from './actor.js';
-import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND } from './config.js';
+import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT } from './config.js';
 import { makeRng, clamp } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
    The world freezes for a few frames on impact so the hit reads as weight. */
-const HITSTOP = { clean: 0.055, heavy: 0.085, stagger: 0.12, guarded: 0.04, taken: 0.07 };
+const HITSTOP = {
+  clean: IMPACT.hitstopLight, heavy: IMPACT.hitstopHeavy, stagger: IMPACT.hitstopStagger,
+  guarded: IMPACT.hitstopGuard, taken: IMPACT.hitstopTaken,
+};
 
 export class Game {
   constructor(opts = {}) {
     this.seed = opts.seed ?? 1337;
+    this.build = opts.build || null;
     this.reset();
   }
 
@@ -20,10 +24,14 @@ export class Game {
     this.rng = makeRng(this.seed);
     this.time = 0;
     this.hitstop = 0;
+    this.slowMo = 0;          // seconds of remaining slow motion
+    if (this.allowHitstop === undefined) this.allowHitstop = true;
+    if (this.allowSlowMo === undefined) this.allowSlowMo = true;
+    this.punch = 0;           // camera punch requested this frame
     this.events = [];
     this.log = [];
 
-    this.player = new Player({ x: 0, z: 5.5, facing: Math.PI });
+    this.player = new Player({ x: 0, z: 5.5, facing: Math.PI, build: this.build });
     this.enemies = [new Slagbound({ x: 0, z: -2.5, facing: 0, rng: this.rng })];
     this.player.lockTarget = null;
 
@@ -95,10 +103,15 @@ export class Game {
      XZ plane — no physics engine, because an ARPG wants authored contact. */
   _integrate(dt) {
     const all = this.actors;
+    const decay = Math.exp(-IMPACT.knockDecay * dt);
     for (const a of all) {
       if (a.dead) continue;
-      a.x += a.vx * dt;
-      a.z += a.vz * dt;
+      // Knockback rides on top of whatever the actor wanted to do, so being
+      // hit interrupts your movement instead of being cancelled by it.
+      a.x += (a.vx + a.kx) * dt;
+      a.z += (a.vz + a.kz) * dt;
+      a.kx *= decay;
+      a.kz *= decay;
     }
 
     for (let i = 0; i < all.length; i++) {
@@ -140,6 +153,13 @@ export class Game {
       return;   // world frozen; the renderer still draws
     }
 
+    // Slow motion scales the SIM clock only. The renderer keeps running at
+    // full rate, so the camera and effects stay smooth through it.
+    if (this.slowMo > 0) {
+      this.slowMo -= dt;
+      dt *= IMPACT.staggerSlowMo;
+    }
+
     this._acc = (this._acc || 0) + dt;
     let guard = 0;
     while (this._acc >= SIM.step && guard++ < 12) {
@@ -154,16 +174,28 @@ export class Game {
   }
 
   _applyHitstop(events) {
-    let stop = 0;
+    let stop = 0, punch = 0;
     for (const ev of events) {
       if (ev.result === 'iframe') continue;
-      if (ev.result === 'stagger') stop = Math.max(stop, HITSTOP.stagger);
-      else if (ev.result === 'guarded') stop = Math.max(stop, HITSTOP.guarded);
-      else if (ev.attacker === this.player) {
-        stop = Math.max(stop, ev.atk.id === 'H1' || ev.atk.id === 'L3' ? HITSTOP.heavy : HITSTOP.clean);
-      } else stop = Math.max(stop, HITSTOP.taken);
+      if (ev.result === 'stagger') {
+        stop = Math.max(stop, HITSTOP.stagger);
+        punch = Math.max(punch, IMPACT.punchStagger);
+        // The one moment in the fight the player earned. Hold on it.
+        if (this.allowSlowMo) this.slowMo = IMPACT.staggerSlowMoTime;
+      } else if (ev.result === 'guarded') {
+        stop = Math.max(stop, HITSTOP.guarded);
+        punch = Math.max(punch, IMPACT.punchLight);
+      } else if (ev.attacker === this.player) {
+        const heavy = ev.atk.id === 'H1' || ev.atk.id === 'L3';
+        stop = Math.max(stop, heavy ? HITSTOP.heavy : HITSTOP.clean);
+        punch = Math.max(punch, heavy ? IMPACT.punchHeavy : IMPACT.punchLight);
+      } else {
+        stop = Math.max(stop, HITSTOP.taken);
+        punch = Math.max(punch, IMPACT.punchHeavy);
+      }
     }
-    this.hitstop = Math.max(this.hitstop, stop);
+    if (this.allowHitstop) this.hitstop = Math.max(this.hitstop, stop);
+    this.punch = Math.max(this.punch, punch);
   }
 
   /* ---- headless smoke test ---------------------------------------------

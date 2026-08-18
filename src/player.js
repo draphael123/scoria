@@ -1,5 +1,6 @@
 import { Actor, STATE, PHASE } from './actor.js';
 import { PLAYER, WEAPONS } from './config.js';
+import { derive, defaultBuild } from './character.js';
 import { clamp, damp, turnToward, angleDelta } from './util.js';
 
 export class Player extends Actor {
@@ -7,8 +8,16 @@ export class Player extends Actor {
     super({ ...PLAYER, reach: WEAPONS.sword.reach }, { ...opts, isPlayer: true });
     this.weapon = WEAPONS[opts.weapon || 'sword'];
 
-    this.stamina = PLAYER.stamina;
-    this.maxStamina = PLAYER.stamina;
+    // Attributes resolve to numbers exactly once, here. Everything downstream
+    // reads the derived values rather than the stats themselves.
+    this.build = opts.build || defaultBuild();
+    this.derived = derive(this.build);
+    this.maxHp = this.derived.hp;
+    this.hp = this.derived.hp;
+    this.damageMul = this.derived.damageMul;
+
+    this.stamina = this.derived.stamina;
+    this.maxStamina = this.derived.stamina;
     this.staminaDelay = 0;
     this.staminaLock = 0;
 
@@ -57,7 +66,7 @@ export class Player extends Actor {
 
     const regenBlocked = this.state === STATE.GUARD || this.staminaDelay > 0;
     if (!regenBlocked) {
-      this.stamina = Math.min(this.maxStamina, this.stamina + PLAYER.staminaRegen * dt);
+      this.stamina = Math.min(this.maxStamina, this.stamina + this.derived.staminaRegen * dt);
     }
 
     // --- desired movement vector in world space -------------------------
@@ -80,7 +89,8 @@ export class Player extends Actor {
       const R = PLAYER.roll;
       this.stateT += dt;
       const t = this.stateT / R.duration;
-      this.iframeActive = this.stateT >= R.iframeStart && this.stateT <= R.iframeEnd;
+      this.iframeActive = this.stateT >= R.iframeStart &&
+                          this.stateT <= R.iframeStart + this.derived.iframeWindow;
 
       // Speed curve: fast out of the gate, dead stop at the end.
       const speed = (this.rollDistance / R.duration) * 2.1 * Math.max(0, 1 - t) ** 0.7;
@@ -173,7 +183,7 @@ export class Player extends Actor {
 
     // --- speed -----------------------------------------------------------
     let speed = locked ? PLAYER.lockSpeed : PLAYER.moveSpeed;
-    speed *= this.weapon.moveScale;
+    speed *= this.weapon.moveScale * this.derived.moveScale;
     if (guarding) speed *= this.weapon.guard.moveScale;
     if (this.staminaLock > 0) speed *= 0.55;   // exhausted shuffle
 
@@ -192,7 +202,7 @@ export class Player extends Actor {
     this.comboIndex = 0;
     if (hasInput) {
       this.rollDir = Math.atan2(wantX, wantZ);
-      this.rollDistance = R.distance;
+      this.rollDistance = this.derived.rollDistance;
     } else {
       // No direction held: backstep. Away from the target if locked on.
       this.rollDir = locked ? this.angleTo(this.lockTarget) + Math.PI : this.facing + Math.PI;

@@ -194,7 +194,7 @@ export class Forest {
     this._buildMist(tex, hi);
 
     this.ash = new Motes(hi ? 340 : 130, this.ashDot,
-      { rise: [0.05, 0.3], size: 0.09, opacity: 0.34, color: 0xb9bcc0, top: 12, seed: 11 });
+      { rise: [0.05, 0.3], size: 0.09, opacity: 0.24, color: 0xb9bcc0, top: 12, seed: 11 });
     this.embers = new Motes(hi ? 130 : 50, this.emberDot,
       { rise: [0.3, 0.95], size: 0.10, opacity: 0.85, color: 0xffa348, top: 11, additive: true, seed: 23 });
     scene.add(this.ash.points, this.embers.points);
@@ -398,7 +398,7 @@ export class Forest {
       const rad = ARENA.radius + 2 + this.rng() * 16;
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
         map: tex.mist, transparent: true, depthWrite: false,
-        opacity: 0.10 + this.rng() * 0.10, color: 0xb9c2cc }));
+        opacity: 0.06 + this.rng() * 0.07, color: 0xb9c2cc }));
       const sc = 10 + this.rng() * 13;
       sp.scale.set(sc, sc * 0.5, 1);
       sp.position.set(Math.sin(a) * rad, 0.9 + this.rng() * 1.4, Math.cos(a) * rad);

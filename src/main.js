@@ -7,16 +7,20 @@ import { Audio } from './audio.js';
 import { Menu, loadSettings } from './menu.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
+import { Tutorial, TutorialUI } from './tutorial.js';
+import { loadBuild } from './character.js';
+import { isTouchDevice as _isTouch } from './touch.js';
 
 const canvas = document.getElementById('c');
 const settings = loadSettings();
 
-const game = new Game({ seed: 1337 });
+const game = new Game({ seed: 1337, build: loadBuild() });
 const view = new View(canvas, { quality: settings.quality });
 const input = new Input(window);
 const hud = new Hud();
 const debug = new Debug();
 const cui = new CombatUI();
+const tutUI = new TutorialUI();
 const audio = new Audio(settings);
 
 view.shakeScale = settings.shake;
@@ -34,6 +38,41 @@ let paused = false;
 let stepOnce = false;
 let started = false;
 let touch = null;
+const isTouch = _isTouch();
+
+/* Applies every setting to the live systems. Called on change and on boot so
+   there is exactly one place where a setting becomes behaviour. */
+function applySetting(key, value) {
+  switch (key) {
+    case 'master': case 'sfx': case 'music': audio.setVolume(key, value); break;
+    case 'shake': view.shakeScale = value; break;
+    case 'punch': view.punchScale = value; break;
+    case 'hitstop': game.allowHitstop = value; break;
+    case 'slowMo': game.allowSlowMo = value; break;
+    case 'bloom': view.post.setBloom((view.quality === 'high' ? 0.9 : 0.6) * value); break;
+    case 'vignette': view.post.setVignette(0.46 * value); break;
+    case 'grain': view.post.matComposite.uniforms.uGrain.value = 0.016 * value; break;
+    case 'damageNumbers': cui.showNumbers = value; break;
+    case 'threatArc': cui.showThreat = value; break;
+    case 'showKeys': document.body.classList.toggle('no-keys', !value); break;
+    case 'frameData':
+      if (debug.on !== value) { debug.toggle(); view.setDebug(debug.on); }
+      break;
+  }
+}
+
+const tutorial = new Tutorial(game, {
+  onStep: (step, t) => tutUI.show(step, t, isTouch),
+  onFinish: () => {
+    // Straight into the duel — no menu, no confirmation.
+    tutUI.setVisible(false);
+    game.reset();
+    resetHudSmoothing();
+    started = true;
+    paused = false;
+    cui.flash('THE SLAGBOUND COMES', 'bad');
+  },
+});
 
 function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); }
 
@@ -41,22 +80,41 @@ function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); }
    Menus
    ---------------------------------------------------------------------- */
 const menu = new Menu(settings, {
-  onBegin() { started = true; paused = false; game.reset(); resetHudSmoothing(); },
+  onBegin(build) {
+    if (build) game.build = build;
+    tutorial.stop(); tutUI.setVisible(false);
+    started = true; paused = false;
+    game.reset(); resetHudSmoothing();
+  },
+  onTrain() {
+    if (menu.build) game.build = menu.build;
+    started = true; paused = false;
+    tutorial.start(); resetHudSmoothing();
+  },
+  onPreview(build) {
+    // Rebuild the knight so appearance changes are visible behind the menu.
+    game.build = build;
+    game.player.build = build;
+    view.reap(new Set());
+  },
   onResume() { paused = false; },
-  onRestart() { paused = false; game.reset(); resetHudSmoothing(); },
-  onQuit() { started = false; game.reset(); resetHudSmoothing(); },
+  onRestart() {
+    paused = false;
+    if (tutorial.active) tutorial.start(); else game.reset();
+    resetHudSmoothing();
+  },
+  onQuit() {
+    started = false;
+    tutorial.stop(); tutUI.setVisible(false);
+    game.reset(); resetHudSmoothing();
+  },
   onScreen(name) {
     paused = name !== null;
     input.releaseAll();
     audio.duck(name !== null);
     if (touch) touch.setEnabled(name === null && started);
   },
-  onChange(key, value) {
-    if (key === 'master' || key === 'sfx' || key === 'music') audio.setVolume(key, value);
-    if (key === 'shake') view.shakeScale = value;
-    if (key === 'frameData' && debug.on !== value) { debug.toggle(); view.setDebug(debug.on); }
-    audio.uiClick();
-  },
+  onChange(key, value) { applySetting(key, value); audio.uiClick(); },
 });
 
 /* -------------------------------------------------------------------------
@@ -79,6 +137,7 @@ window.addEventListener('keydown', unlockAudio, { once: true });
    Feedback
    ---------------------------------------------------------------------- */
 function onEvents(events) {
+  if (tutorial.active) tutorial.noteEvents(events);
   for (const ev of events) {
     const byPlayer = ev.attacker === game.player;
     if (ev.result === 'iframe') {
@@ -169,17 +228,22 @@ function frame(now) {
 
   if (started && (!paused || stepOnce)) {
     game.step(stepOnce ? 1 / 120 : dtReal, input, basis, onEvents);
+    if (game.punch > 0) { view.addPunch(game.punch); game.punch = 0; }
     stepOnce = false;
     audioFromState();
+    if (tutorial.active) {
+      tutorial.update(dtReal);
+      tutUI.show(tutorial.step, tutorial, isTouch);
+    }
   }
 
   // --- draw -------------------------------------------------------------
   view.reap(new Set([game.player, ...game.enemies]));
-  view.syncActor(game.player, true);
+  view.syncActor(game.player, true, dtReal);
   view.syncTelegraph(game.player);
   view.syncDebugHitbox(game.player);
   for (const e of game.enemies) {
-    view.syncActor(e, false);
+    view.syncActor(e, false, dtReal);
     view.syncTelegraph(e);
     view.syncDebugHitbox(e);
   }
@@ -187,8 +251,10 @@ function frame(now) {
   view.updateSparks(dtReal);
   view.updateCamera(game.player, game.player.lockTarget, dtReal);
   view.update(dtReal);            // braziers, embers, chains, occluder fade
-  view.render();
+  view.render(dtReal);
 
+  tutUI.setVisible(tutorial.active && started && !menu.open);
+  document.body.classList.toggle('tutorial', tutorial.active && started);
   hud.setVisible(started && !menu.open);
   hud.update(game, dtReal);
   cui.update(game, dtReal, view.camera, view.w, view.h, started && !menu.open);
@@ -218,12 +284,12 @@ setInterval(() => {
   if (now - lastFrameAt > 400) frame(now);
 }, 250);
 
-if (settings.frameData) { debug.toggle(); view.setDebug(true); }
+for (const k of Object.keys(settings)) applySetting(k, settings[k]);
 requestAnimationFrame(frame);
 
 // Headless handle for tuning and smoke tests.
 window.SCORIA = {
-  game, view, input, hud, debug, audio, menu, settings, cui,
+  game, view, input, hud, debug, audio, menu, settings, cui, tutorial, tutUI,
   get touch() { return touch; },
   sim: (o) => game.sim(o),
   reset: (s) => { game.reset(s); paused = false; resetHudSmoothing(); },

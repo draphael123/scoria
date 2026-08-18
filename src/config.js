@@ -182,6 +182,34 @@ export const LOCK = {
    0 = fully committed to the direction you started in.
    Low values on the enemy are what make flanking a real answer.
    ---------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+   IMPACT. A blow that changes nothing but a number does not feel like a blow.
+   Every entry here exists to make a hit MOVE something.
+   ---------------------------------------------------------------------- */
+export const IMPACT = {
+  knockLight: 3.4,        // units/sec of shove, decayed fast
+  knockHeavy: 6.2,
+  knockStagger: 7.5,
+  knockGuard: 2.2,        // guarding still shoves you back
+  knockTaken: 4.6,
+  knockDecay: 7.5,        // exponential rate
+
+  hitstopLight: 0.075,
+  hitstopHeavy: 0.115,
+  hitstopStagger: 0.16,
+  hitstopGuard: 0.055,
+  hitstopTaken: 0.10,
+
+  punchLight: 0.030,      // camera shoves toward the fight, then eases back
+  punchHeavy: 0.062,
+  punchStagger: 0.085,
+
+  // A short drop into slow motion the instant poise breaks. This is the one
+  // moment in the fight the player earned, so the game holds on it.
+  staggerSlowMo: 0.30,
+  staggerSlowMoTime: 0.32,
+};
+
 export const COMMIT = {
   playerWindupTurn: 3.2,   // rad/s — you can still adjust your aim a little
   playerActiveTurn: 0,

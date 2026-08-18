@@ -56,6 +56,9 @@
   #foe .name{text-align:center;font-size:12px;letter-spacing:.34em;text-transform:uppercase;
              color:var(--dim);margin-bottom:7px}
   #foe.stag .name{color:var(--hot)}
+  /* Effigy: poise only. A health bar on a training post is a lie. */
+  #foe.effigy .bar{display:none}
+  #foe.effigy #poiseBar{margin-top:0}
   #foeChip{background:#5c2a12}
   #foeFill{background:linear-gradient(180deg,#b8552c,#6f2f14)}
   #poiseBar{height:4px;margin-top:4px;background:rgba(0,0,0,.5);border:1px solid rgba(0,0,0,.6)}
@@ -150,7 +153,17 @@
              backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
   .menu-root.on{display:block}
   .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
-          justify-content:center;padding:clamp(20px,5vw,56px);text-align:center;gap:0}
+          justify-content:center;padding:clamp(20px,5vw,56px);text-align:center;gap:0;
+          overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  /* Once the content is taller than the viewport, centring would clip the top
+     and bottom off. Anchor to the start and let it scroll instead. */
+  @media (max-height:900px){
+    .creator-screen{justify-content:flex-start;padding-top:26px;padding-bottom:34px}
+  }
+  @media (max-width:760px){
+    .screen{justify-content:flex-start;padding-top:24px;padding-bottom:32px}
+    .title-screen{justify-content:center}
+  }
   .screen.on{display:flex;animation:fadeUp .45s ease both}
   @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
@@ -198,6 +211,84 @@
   .toggle{padding:8px 16px;border:1px solid var(--edge);font-size:11px;letter-spacing:.16em;
           color:var(--faint);min-height:38px;transition:.16s}
   .toggle.on{color:var(--ink);border-color:rgba(212,85,42,.6);background:rgba(212,85,42,.14)}
+
+  .set-group{font-size:10px;letter-spacing:.32em;color:var(--ember);margin:20px 0 2px;
+       padding-top:12px;border-top:1px solid rgba(230,220,203,.08)}
+  .settings-body > .set-group:first-child{margin-top:0;padding-top:0;border-top:0}
+  body.no-keys #keys{display:none}
+
+  /* ========================= CHARACTER CREATOR ========================== */
+  .cr-cols{display:flex;gap:clamp(18px,4vw,54px);margin-top:20px;text-align:left;
+       width:min(940px,94vw);justify-content:center;flex-wrap:wrap}
+  .cr-col{flex:1 1 340px;min-width:min(320px,92vw);max-width:440px}
+  .cr-head{font-size:10px;letter-spacing:.32em;color:var(--ember);margin-bottom:12px}
+  .cr-points{font-size:12px;color:var(--dim);margin-bottom:14px;letter-spacing:.08em}
+  .cr-points b{color:var(--hot);font-size:15px;font-weight:600}
+  .cr-points .done{color:var(--faint)}
+
+  .cr-stat{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:center;
+       padding:11px 0;border-bottom:1px solid rgba(230,220,203,.07)}
+  .cr-stat-name{font-size:15px}
+  .cr-stat-blurb{font-size:11px;color:var(--faint);margin-top:3px;line-height:1.5}
+  .cr-stat-c{display:flex;align-items:center;gap:9px}
+  .cr-pm{width:30px;height:30px;border:1px solid var(--edge);color:var(--dim);font-size:15px;
+       line-height:1;display:grid;place-items:center;transition:.14s}
+  .cr-pm:hover:not(:disabled){color:var(--ink);border-color:rgba(212,85,42,.7)}
+  .cr-pm:disabled{opacity:.25;cursor:default}
+  .cr-pips{display:flex;gap:4px}
+  .cr-pips i{width:11px;height:11px;border:1px solid rgba(230,220,203,.28);display:block}
+  .cr-pips i.on{background:var(--ember);border-color:var(--ember);
+       box-shadow:0 0 8px rgba(212,85,42,.55)}
+  .cr-eff{grid-column:2;font-size:11px;color:var(--faint);text-align:right;
+       font-family:ui-monospace,Consolas,monospace}
+
+  .cr-row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+       padding:11px 0;border-bottom:1px solid rgba(230,220,203,.07);flex-wrap:wrap}
+  .cr-sub{font-size:13px;color:var(--ink)}
+  .cr-swatches{display:flex;gap:7px;flex-wrap:wrap}
+  .cr-sw{width:32px;height:32px;border:1px solid rgba(230,220,203,.25);transition:.14s}
+  .cr-sw.on{border-color:var(--hot);box-shadow:0 0 0 2px rgba(255,179,71,.35);transform:scale(1.08)}
+  .cr-namerow{display:flex;align-items:center;justify-content:space-between;gap:14px;
+       padding:11px 0;border-bottom:1px solid rgba(230,220,203,.07)}
+  .cr-name{background:rgba(0,0,0,.4);border:1px solid var(--edge);color:var(--ink);
+       font:inherit;font-size:14px;padding:8px 11px;width:min(220px,52vw);outline:none}
+  .cr-name:focus{border-color:rgba(212,85,42,.7)}
+
+  /* ============================ TUTORIAL ================================ */
+  .tut-root{position:fixed;left:calc(26px + var(--safe-l));top:26px;width:min(340px,74vw);
+       z-index:9;pointer-events:none;opacity:0;transition:opacity .3s;
+       background:linear-gradient(180deg,rgba(14,12,10,.93),rgba(10,9,8,.88));
+       border:1px solid var(--edge);border-left:2px solid var(--ember);
+       padding:16px 18px 15px;text-shadow:0 1px 8px rgba(0,0,0,.9)}
+  .tut-root.on{opacity:1}
+  .tut-root.flash{animation:tutIn .45s ease both}
+  @keyframes tutIn{from{opacity:0}to{opacity:1}}
+  .tut-step{font-size:9px;letter-spacing:.3em;color:var(--faint);margin-bottom:7px}
+  .tut-title{font-size:19px;letter-spacing:.05em;margin-bottom:9px;color:var(--ink)}
+  .tut-body{font-size:13px;line-height:1.72;color:var(--dim)}
+  .tut-keys{margin-top:12px;font-size:11px;letter-spacing:.2em;color:var(--hot);
+       text-transform:uppercase;font-family:ui-monospace,Consolas,monospace}
+  .tut-progress{margin-top:9px;font-size:12px;color:var(--faint);
+       font-family:ui-monospace,Consolas,monospace}
+  .tut-done{margin-top:11px;font-size:11px;letter-spacing:.34em;color:#8fc98a;opacity:0;
+       transition:opacity .2s}
+  .tut-root.satisfied{border-left-color:#8fc98a}
+  .tut-root.satisfied .tut-done{opacity:1}
+  /* On a phone the card sits along the top so it never fights the stick. */
+  @media (max-width:760px){
+    .tut-root{left:calc(12px + var(--safe-l));right:calc(12px + var(--safe-r));
+         top:12px;width:auto;padding:12px 14px}
+    .tut-body{font-size:12px;line-height:1.6}
+    .tut-title{font-size:16px}
+    /* Keep the foe bar clear of the card while training. */
+    body.tutorial #foe{top:186px}
+  }
+  @media (max-height:460px){
+    .tut-root{top:8px;right:auto;width:min(330px,48vw);padding:9px 12px}
+    .tut-body{font-size:11px;line-height:1.5}
+    .tut-title{font-size:14px;margin-bottom:5px}
+    .tut-keys{margin-top:7px}
+  }
 
   /* =========================== TOUCH ==================================== */
   .touch-root{position:fixed;inset:0;z-index:12;display:none;pointer-events:none}
