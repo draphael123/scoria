@@ -10,10 +10,12 @@ export const SIM = {
 };
 
 export const ARENA = {
-  // A duel does not need a big room. Tightening this also brings the tree line
-  // inside the camera frustum, so the clearing actually reads as a clearing
-  // rather than as an empty plain with a wood somewhere off screen.
-  radius: 11.5,
+  // Slice 0 ran at 11.5 — the tightest circle a duel could want. Three bodies
+  // need room to actually surround you, and the greataxe needs room to stand
+  // at the edge of its reach. Widened once, for every encounter, so there is
+  // still exactly one number here. The tree line is built from this value, so
+  // the wood follows it out and the clearing still reads as a clearing.
+  radius: 13.0,
   wallHeight: 1.4,
 };
 
@@ -36,7 +38,7 @@ export const PLAYER = {
   staminaRegenDelay: 0.55,  // after ANY spend
   staminaEmptyLock: 0.7,    // hard lockout when you bottom out — punishes mashing
 
-  // Roll
+  // Roll. Every weapon rescales these through weapon.roll — see WEAPONS.
   roll: {
     duration: 0.60,
     iframeStart: 0.09,
@@ -47,24 +49,73 @@ export const PLAYER = {
     backstepDistance: 2.0,
   },
 
-  hitStagger: 0.34,     // no hyperarmor in Slice 0 — every hit interrupts
+  hitStagger: 0.34,     // every UNARMOURED hit interrupts
   hurtInvuln: 0.25,     // brief mercy window after being hit
 };
 
 /* -------------------------------------------------------------------------
    WEAPONS — "class is based on weapon", so this table IS the class table.
-   Slice 0 ships the sword only; the others are stubs proving the shape holds.
+
+   Two weapons are real. What separates them is deliberately NOT a set of
+   numbers, because a weapon that differs only by numbers is a slower sword
+   and the class hook would not hold. The structural differences are:
+
+     · HYPERARMOUR  the greataxe cannot be interrupted during windup+active.
+                    Recovery stays punishable, so commitment still costs.
+     · ARC          the greataxe's second light is a full 360 sweep. Nothing
+                    in the sword's kit can hit anything behind you.
+     · SHAPE        the greataxe's heavy is a CIRCLE on the ground, the same
+                    shape family as the Slagbound's overhead. Every one of the
+                    sword's attacks is a wedge.
+     · ROLL         each weapon rescales the dodge. The i-frame WINDOW is not
+                    touched — agility owns that — so a heavy weapon dodges
+                    just as safely, it simply cannot travel as far.
+
+   Reach is a number, but it is the number that inverts the fight. A hit lands
+   at (reach + target radius), so against the Slagbound (r 0.55):
+
+     sword     2.35 -> 2.90u        Slagbound swipe     2.75 -> 3.17u
+     greataxe  3.15 -> 3.70u        Slagbound overhead          4.02u
+
+   which opens a 0.53u band where the axe connects and the swipe cannot. The
+   sword has no such band; it fights inside the Slagbound's reach at all times.
+
+   And they punish different attacks. Time to first contact against the
+   Slagbound's recovery windows:
+
+     swipe recovers in 0.62   sword L1 0.20 ✓ (and chains)   axe L1 0.34 ✓ (once)
+     overhead recovers in 0.95  sword H1 0.46 ✓ safe         axe H1 0.72 ✓ greedy
+
+   The axe's Splitter only fits inside the overhead — and it is still rooted
+   for 1.02s past the end of that window, which is precisely why it needs
+   hyperarmour to exist at all.
    ---------------------------------------------------------------------- */
 
 // An attack is three phases you cannot cancel out of:
 //   windup  -> the tell. Enemy telegraphs paint the floor during this.
 //   active  -> the hitbox exists. One hit per swing.
 //   recover -> the commitment. This number is what makes it Souls and not Diablo.
+//
+// `heavy` drives impact class everywhere — hitstop, camera punch, spark count,
+// scorch decals, audio. It is a property of the BLOW, never of its id, so a
+// new weapon needs none of those systems edited.
 const swordAttack = (o) => ({
   windup: 0.20, active: 0.09, recover: 0.30,
   stamina: 18, damage: 22, poise: 9,
   reach: 2.35, arc: 1.95,   // ~112 degrees
   step: 0.9,                // forward drift over windup+active
+  heavy: false, armor: false,
+  ...o,
+});
+
+// The axe's baseline. Everything about it is longer, slower and committed.
+const axeAttack = (o) => ({
+  windup: 0.34, active: 0.14, recover: 0.52,
+  stamina: 30, damage: 40, poise: 22,
+  reach: 3.15, arc: 2.10,   // ~120 degrees
+  step: 1.1,
+  heavy: true,
+  armor: true,              // uninterruptible through windup + active
   ...o,
 });
 
@@ -75,6 +126,23 @@ export const WEAPONS = {
     klass: 'Bladebearer',
     reach: 2.35,
     moveScale: 1.0,
+    twoHand: false,
+    // Rack copy. The rack IS the character sheet, so this says what the weapon
+    // DOES rather than what its numbers are.
+    tagline: 'Fast, safe, and always inside its reach.',
+    lines: [
+      'Reach 2.35 — you fight inside the swipe',
+      'Three-hit chain, with stamina left to roll out',
+      'A shield answers pressure. Every hit interrupts you',
+      'Punishes the SWIPE',
+    ],
+    armorDamageMul: 1,
+    roll: { distance: 1.0, duration: 1.0, stamina: 1.0 },
+    // How far the shoulder joint travels through a swing, in radians. The POSE
+    // is driven entirely off frame data — these three numbers are only its
+    // amplitude, and they live here because "make the axe feel heavier" is a
+    // tuning question, not a rendering one.
+    swing: { rest: -0.25, wind: -2.35, end: 1.35 },
     guard: {
       absorb: 0.72,        // fraction of damage negated
       staminaPerHit: 16,
@@ -87,21 +155,88 @@ export const WEAPONS = {
       swordAttack({ id: 'L1', cancelFrom: 0.10, next: 1 }),
       swordAttack({ id: 'L2', windup: 0.17, recover: 0.32, damage: 24, poise: 10, cancelFrom: 0.12, next: 2 }),
       swordAttack({ id: 'L3', windup: 0.26, active: 0.11, recover: 0.48, damage: 34, poise: 26,
-                    stamina: 26, step: 1.5, arc: 2.4, cancelFrom: null, next: null }),
+                    stamina: 26, step: 1.5, arc: 2.4, heavy: true, cancelFrom: null, next: null }),
     ],
     heavy: swordAttack({
       id: 'H1', windup: 0.46, active: 0.12, recover: 0.55,
       stamina: 34, damage: 42, poise: 34, reach: 2.6, arc: 1.3, step: 1.6,
+      heavy: true, cancelFrom: null, next: null,
+    }),
+  },
+
+  greataxe: {
+    id: 'greataxe',
+    name: 'Cupola Splitter',
+    klass: 'Breaker',
+    reach: 3.15,
+    moveScale: 0.88,
+    twoHand: true,          // no shield — both hands are on the haft
+    tagline: 'Out-reaches the swipe. Finishes the swing regardless.',
+    lines: [
+      'Reach 3.15 — the swipe cannot answer you out here',
+      'Two-hit chain, and the second is a full 360 sweep',
+      'Hyperarmour: a blow will not stop your swing (+20% taken)',
+      'Punishes the OVERHEAD',
+    ],
+    // The price of hyperarmour. Trading must cost something, or it is free.
+    armorDamageMul: 1.20,
+    // Wound further back and followed through further. At rest it is carried
+    // shouldered rather than low, which is most of why the two knights read as
+    // different characters before either of them has moved.
+    swing: { rest: -0.95, wind: -3.05, end: 1.78 },
+    // You dodge just as safely, but you land heavy and go nowhere. The chain
+    // costs 62 and the roll 32.5 — of 100, you get the chain OR the escape.
+    roll: { distance: 0.78, duration: 1.15, stamina: 1.30 },
+    // You CAN hold a guard with an axe. You should not want to: three blocked
+    // swipes and it breaks. This weapon's answer to pressure is armour.
+    guard: {
+      absorb: 0.58,
+      staminaPerHit: 28,
+      chip: 0.22,
+      moveScale: 0.30,
+      turnScale: 0.42,
+    },
+    light: [
+      // Cleave. 0.34 windup fits inside the swipe's 0.62 recovery, so the axe
+      // can still punish a whiff — but only once, and it is rooted afterwards.
+      axeAttack({ id: 'L1', cancelFrom: 0.16, next: 1 }),
+      // Sweep. Reach drops a little — a spin sacrifices extension — and the arc
+      // goes the whole way round. This is the crowd answer, and reaching it
+      // costs you the cleave first.
+      axeAttack({ id: 'L2', windup: 0.30, active: 0.16, recover: 0.62,
+                  stamina: 32, damage: 44, poise: 28,
+                  reach: 3.00, arc: Math.PI * 2, step: 0.5,
+                  spin: 1, cancelFrom: null, next: null }),
+    ],
+    // Splitter. 0.72 to contact — fits inside the overhead's 0.95 recovery and
+    // nothing else. A circle, so it does not care which way the thing you are
+    // punishing has drifted. Poise 48 is the Slagbound's whole bar: one clean
+    // Splitter breaks it.
+    heavy: axeAttack({
+      id: 'H1', windup: 0.72, active: 0.16, recover: 0.86,
+      stamina: 46, damage: 64, poise: 48,
+      shape: 'circle', radius: 2.0, offset: 2.3, step: 2.0,
       cancelFrom: null, next: null,
     }),
   },
 
-  // --- Slice 1+ stubs. Present so the data shape is proven, not yet playable.
-  greataxe: { id: 'greataxe', name: 'Cupola Splitter', klass: 'Breaker', stub: true },
-  daggers:  { id: 'daggers',  name: 'Scaling Knives',  klass: 'Skinner', stub: true },
-  tome:     { id: 'tome',     name: 'Bellows Codex',   klass: 'Stoker',  stub: true,
-              resource: 'heat' },   // Heat, not mana — see design notes
+  // --- Slice 2+ stubs. Present so the data shape is proven, not yet playable.
+  daggers: {
+    id: 'daggers', name: 'Scaling Knives', klass: 'Skinner', stub: true,
+    tagline: 'Not yet forged.',
+    lines: ['Reach under two — you live inside its guard',
+            'The roll IS the attack', 'Bleed, where the others take poise'],
+  },
+  tome: {
+    id: 'tome', name: 'Bellows Codex', klass: 'Stoker', stub: true,
+    resource: 'heat',   // Heat, not mana — see design notes
+    tagline: 'Not yet forged.',
+    lines: ['No stamina — the resource is HEAT',
+            'Vent, or overheat', 'Range, at the cost of every dodge'],
+  },
 };
+
+export const WEAPON_ORDER = ['sword', 'greataxe', 'daggers', 'tome'];
 
 /* -------------------------------------------------------------------------
    ENEMY — the Slagbound. Exactly two attacks: one fast, one slow overhead.
@@ -160,6 +295,71 @@ export const SLAGBOUND = {
 };
 
 /* -------------------------------------------------------------------------
+   THE AGGRO TOKEN — how a crowd is made fair without being made harmless.
+
+   Isometric group combat dies of unreadability, not of difficulty, and
+   readability in this game IS the ground telegraph. So the rule is absolute
+   rather than statistical: AT MOST ONE ENEMY MAY BE IN WINDUP AT ANY MOMENT.
+   Two telegraphs can never overlap because two telegraphs can never exist.
+
+   Everyone without the token holds a distinct orbit slot RELATIVE TO YOUR
+   FACING, which means they actively work around behind you rather than queue
+   up in front. That is what gives the greataxe's 360 sweep a reason to exist.
+   ---------------------------------------------------------------------- */
+export const AGGRO = {
+  handoff: 0.35,      // silence between one commit ending and the next beginning
+  maxHold: 2.3,       // a holder that cannot close loses it to one that can
+  frontCone: 1.05,    // rad, half-angle: an attack you can SEE is preferred
+  frontBonus: 3.0,    // score bonus for being inside that cone
+  gapWeight: 1.0,     // score penalty per unit of distance
+
+  // STARVATION, not a fixed fairness penalty. A flat penalty capped at some
+  // number of seconds cannot outweigh being closer AND in front, so a body
+  // parked out on the flank was measured never taking a single turn in 25
+  // seconds. Hunger that keeps growing always wins eventually, which is what
+  // makes the ring rotate instead of two bodies trading the token forever.
+  starve: 1.15,       // score gained per second since this body last held it
+  starveCap: 9.0,     // ceiling, so a long wait does not make position moot
+
+  // Circlers. Held further out than the holder's preferredRange, so the ring
+  // around you is visibly a ring and not a scrum.
+  ringRange: 4.3,
+  ringSpeed: 2.05,
+  // The ring wanders, but around a FIXED share of the circle. Integrating the
+  // drift without a bound looked lively for two seconds and then collapsed —
+  // every slot random-walked until all three bodies were stacked in front of
+  // the player, which is the exact scrum the ring exists to prevent.
+  slotDrift: 0.55,    // rad/s a body slides along the ring
+  slotSwing: 0.52,    // rad, the hard bound either side of its own slot
+  slotArrive: 1.4,    // distance at which a circler eases into its slot
+  separation: 1.9,    // multiples of combined radii before they push apart
+  separationForce: 2.6,
+
+  postureDim: 0.30,   // core emissive multiplier for an enemy without the token
+  postureLift: 0.34,  // how far a circler raises its weapon — a body-level tell
+};
+
+/* Encounters. NOT run structure — just the two fights Slice 1 has to ship, so
+   that a crowd is one config entry rather than a code path. */
+export const ENCOUNTERS = {
+  duel: {
+    id: 'duel', name: 'The Slagbound', short: 'ONE',
+    blurb: 'The thing that used to tend the fire. One clearing, one duel.',
+    hpMul: 1.0,
+    spawn: [[0, -2.5]],
+  },
+  trio: {
+    id: 'trio', name: 'Three of Them', short: 'THREE',
+    blurb: 'Three came down off the slag heap. Only one may swing at a time — ' +
+           'the other two are working around behind you.',
+    // 3 x 180 is a slog, and this fight is about position, not attrition.
+    hpMul: 0.62,
+    spawn: [[0, -4.6], [-4.0, -2.0], [4.0, -2.0]],
+  },
+};
+export const DEFAULT_ENCOUNTER = 'duel';
+
+/* -------------------------------------------------------------------------
    CAMERA — fixed isometric, subtle drift toward the lock-on target.
    ---------------------------------------------------------------------- */
 export const CAMERA = {
@@ -169,6 +369,37 @@ export const CAMERA = {
   follow: 7.5,            // lerp rate toward the focus point
   lockBias: 0.3,          // how far toward the locked target the focus slides
   lockZoomOut: 1.06,
+
+  // With a crowd the focus is no longer the midpoint between two bodies. Pull
+  // back in proportion to how far the engaged group is actually spread, so a
+  // flanker never leaves the frame — and cap it, because a wide frame makes a
+  // fight read as small.
+  crowdFloor: 4.5,        // spread below this changes NOTHING — a duel must
+                          // keep exactly the framing it was playtested with
+  crowdRange: 9.0,        // spread, in units, at which the crowd zoom is full
+  crowdZoom: 0.34,        // extra frustum, as a fraction, at full spread
+  crowdEase: 2.6,         // how fast the zoom follows the spread
+};
+
+/* The ground telegraph is the core readability mechanic, so how loudly each
+   side paints it is a tuning decision and belongs here.
+
+   The enemy's telegraph is the one you must read to survive. Your own is only
+   confirmation of where your blade went. At equal weight that was fine for a
+   sword, whose widest shape is a 137-degree wedge — but the greataxe's sweep
+   is a full disc three metres across, and drawn at enemy weight it dumps a
+   plate of light straight over the tells you actually need. */
+export const TELEGRAPH = {
+  playerAlpha: 0.46,      // multiplier on YOUR telegraph's fill and outline
+
+  // And a different HUE, which matters more than the alpha. Both sides used
+  // to paint the floor the same ember orange; that was survivable when your
+  // widest shape was a 137-degree wedge, and stopped being survivable the
+  // moment a three-metre disc could land on top of an incoming swipe. Orange
+  // is the DANGER channel and belongs to the enemy alone. Yours is cold steel:
+  // same information, a colour you never have to react to.
+  playerColor: 0x86b7dd,
+  playerHot: 0xd8ecff,    // the last 8% of the windup, as the blow resolves
 };
 
 export const LOCK = {
@@ -192,6 +423,7 @@ export const IMPACT = {
   knockStagger: 7.5,
   knockGuard: 2.2,        // guarding still shoves you back
   knockTaken: 4.6,
+  knockArmored: 1.5,      // shrugged off: you rock, you do not travel
   knockDecay: 7.5,        // exponential rate
 
   hitstopLight: 0.075,
@@ -199,6 +431,7 @@ export const IMPACT = {
   hitstopStagger: 0.16,
   hitstopGuard: 0.055,
   hitstopTaken: 0.10,
+  hitstopArmored: 0.095,  // held long enough that shrugging it off READS
 
   punchLight: 0.030,      // camera shoves toward the fight, then eases back
   punchHeavy: 0.062,

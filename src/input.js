@@ -8,7 +8,8 @@ export class Input {
     this.axis = { x: 0, y: 0 };     // raw WASD, camera-plane
     this.held = { guard: false };
     this.buffer = [];               // [{ action, age }]
-    this.edges = { lock: false, debug: false, pause: false, stepOne: false, reset: false, menu: false };
+    this.edges = { lock: false, debug: false, pause: false, stepOne: false, reset: false,
+                   menu: false, cycleNext: false, cyclePrev: false };
     // Touch fills these; sample() merges them with the keyboard so both input
     // paths land in exactly the same place.
     this.touch = { x: 0, y: 0, guard: false };
@@ -28,6 +29,11 @@ export class Input {
         case 'KeyK':       press('heavy'); break;
         case 'Tab':        this.edges.lock = true; e.preventDefault(); break;
         case 'KeyQ':       this.edges.lock = true; break;
+        // Target cycling. Lock-on with no cycle is a trap against a crowd: it
+        // holds whatever it grabbed first while something else walks into your
+        // back. E steps round; the wheel is the mouse equivalent of a stick flick.
+        case 'KeyE':       this.edges.cycleNext = true; break;
+        case 'KeyZ':       this.edges.cyclePrev = true; break;
         case 'F1':
         case 'Backquote':  this.edges.debug = true; e.preventDefault(); break;
         case 'KeyP':       this.edges.pause = true; break;
@@ -44,12 +50,18 @@ export class Input {
       if (e.button === 2) press('heavy');
     };
     this._onContext = (e) => e.preventDefault();
+    this._onWheel = (e) => {
+      if (!this.enabled) return;
+      if (e.deltaY > 0) this.edges.cycleNext = true;
+      else if (e.deltaY < 0) this.edges.cyclePrev = true;
+    };
     this._onBlur = () => { this._keys.clear(); this.buffer.length = 0; };
 
     dom.addEventListener('keydown', this._onKeyDown);
     dom.addEventListener('keyup', this._onKeyUp);
     dom.addEventListener('mousedown', this._onMouseDown);
     dom.addEventListener('contextmenu', this._onContext);
+    dom.addEventListener('wheel', this._onWheel, { passive: true });
     window.addEventListener('blur', this._onBlur);
   }
 

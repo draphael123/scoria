@@ -82,8 +82,8 @@ export class Menu {
     trainBtn.onclick = () => { this.hide(); this.h.onTrain?.(); };
 
     title.appendChild(el('div', 'slice-note',
-      'Slice 0 &middot; one clearing, one blade, one Slagbound &middot; ' +
-      'this build exists to answer whether the duel feels right'));
+      'Slice 1 &middot; two weapons on the rack, and a clearing that can hold ' +
+      'three &middot; only one of them is ever allowed to swing at a time'));
 
     beginBtn.onclick = () => { this.showCreator(); };
     setBtn.onclick = () => { this._from = 'title'; this.showSettings(); };

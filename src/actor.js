@@ -32,6 +32,14 @@ export class Actor {
     this.atkHits = new Set();// one hit per swing, per target
     this.atkLabel = '';
 
+    // Aggro-token bookkeeping. It lives on the base class so that EVERY actor
+    // the Game may hand the token to has the fields — the tutorial effigy is
+    // an enemy too, and a missing lastTokenAt turns the grant score into NaN.
+    this.hasToken = false;
+    this.tokenHold = 0;
+    this.tokenUsed = false;
+    this.lastTokenAt = -99;
+
     this.vx = 0; this.vz = 0;   // desired velocity this step
     this.kx = 0; this.kz = 0;   // knockback impulse, decayed by the game
     this.invuln = 0;            // seconds of remaining i-frames

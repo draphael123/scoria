@@ -240,8 +240,10 @@ export class Fx {
     if (live && rig.blade) {
       rig.blade.getWorldPosition(_wp);
       rig.pivot.getWorldPosition(_wp2);
-      // Extend past the blade's centre to reach the actual tip.
-      _wp.lerpVectors(_wp2, _wp, 1.55);
+      // Extend past the weapon mesh's centre to reach the actual tip. Each
+      // weapon supplies its own factor — a shared constant drew the greataxe's
+      // ribbon half a metre past the head.
+      _wp.lerpVectors(_wp2, _wp, rig.tipScale ?? 1.55);
       t.push(_wp, _wp2);
     }
   }

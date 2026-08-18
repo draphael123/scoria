@@ -6,7 +6,11 @@
    that could trivialise the duel would be a build that answers the question
    Slice 0 exists to ask. */
 
-const KEY = 'scoria.character.v1';
+import { WEAPONS, WEAPON_ORDER, ENCOUNTERS, DEFAULT_ENCOUNTER } from './config.js';
+
+// Bumped from v1: a saved build now carries a weapon and an encounter, and a
+// v1 save that lacks them is merged against the defaults rather than rejected.
+const KEY = 'scoria.character.v2';
 
 export const STATS = [
   { key: 'vigour',    name: 'Vigour',
@@ -49,6 +53,10 @@ export const MAX_STAT = 5;
 export function defaultBuild() {
   return {
     name: 'The Nameless',
+    // The weapon IS the class, so it belongs to the build alongside the stats
+    // rather than being chosen somewhere else afterwards.
+    weapon: 'sword',
+    encounter: DEFAULT_ENCOUNTER,
     stats: { vigour: 2, endurance: 2, strength: 2, agility: 2 },
     plate: 'steel',
     heraldry: 'crimson',
@@ -70,7 +78,12 @@ export function loadBuild() {
     if (!raw) return defaultBuild();
     const d = defaultBuild();
     const p = JSON.parse(raw);
-    return { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) } };
+    const b = { ...d, ...p, stats: { ...d.stats, ...(p.stats || {}) } };
+    // A save pointing at a weapon that is still a stub falls back rather than
+    // starting you with a class that does not exist yet.
+    if (!WEAPONS[b.weapon] || WEAPONS[b.weapon].stub) b.weapon = d.weapon;
+    if (!ENCOUNTERS[b.encounter]) b.encounter = d.encounter;
+    return b;
   } catch { return defaultBuild(); }
 }
 export function saveBuild(b) {
@@ -121,6 +134,12 @@ export class Creator {
 
   _build() {
     this.node.appendChild(el('div', 'panel-title', 'TAKE UP THE BLADE'));
+
+    // The rack comes FIRST and spans the width, because "the armoury rack is
+    // your character sheet" — the weapon decides your class, your reach, your
+    // dodge and which of the Slagbound's attacks you are allowed to punish.
+    // Attributes only shade what the rack has already decided.
+    this._rack();
 
     const cols = el('div', 'cr-cols');
     this.node.appendChild(cols);
@@ -174,6 +193,8 @@ export class Creator {
     this._swatches(right, 'Crest', 'crest', APPEARANCE.crest, false);
     cols.appendChild(right);
 
+    this._encounter();
+
     const row = el('div', 'btn-row');
     const back = el('button', 'btn', 'BACK');
     const rand = el('button', 'btn', 'RANDOM');
@@ -186,6 +207,61 @@ export class Creator {
     go.onclick = () => { this._save(); this.h.onConfirm?.(this.b); };
 
     this.refresh();
+  }
+
+  /* The rack. One card per weapon, locked ones included — seeing what is not
+     yet forged is half of what makes a rack read as a rack. */
+  _rack() {
+    const wrap = el('div', 'cr-rack');
+    wrap.appendChild(el('div', 'cr-head', 'THE RACK'));
+    const row = el('div', 'cr-racks');
+    this.rackCards = [];
+
+    for (const id of WEAPON_ORDER) {
+      const w = WEAPONS[id];
+      const card = el('button', 'cr-weap' + (w.stub ? ' locked' : ''));
+      card.appendChild(el('div', 'cr-weap-class', w.klass));
+      card.appendChild(el('div', 'cr-weap-name', w.name));
+      card.appendChild(el('div', 'cr-weap-tag', w.tagline || ''));
+      const ul = el('ul', 'cr-weap-lines');
+      for (const line of (w.lines || [])) ul.appendChild(el('li', null, line));
+      card.appendChild(ul);
+      if (w.stub) card.appendChild(el('div', 'cr-weap-lock', 'NOT YET FORGED'));
+
+      card.disabled = !!w.stub;
+      card.onclick = () => {
+        if (w.stub) return;
+        this.b.weapon = id;
+        this._save();
+        this.refresh();
+        this.h.onPreview?.(this.b);
+      };
+      row.appendChild(card);
+      this.rackCards.push([id, card]);
+    }
+    wrap.appendChild(row);
+    this.node.appendChild(wrap);
+  }
+
+  /* Which fight you walk into. Not run structure — just the two encounters
+     Slice 1 ships, so the crowd is reachable without a rebuild. */
+  _encounter() {
+    const r = el('div', 'cr-row cr-encrow');
+    r.appendChild(el('div', 'cr-sub', 'What is waiting'));
+    const wrap = el('div', 'cr-swatches seg');
+    this.encNodes = [];
+    for (const id of Object.keys(ENCOUNTERS)) {
+      const enc = ENCOUNTERS[id];
+      const b = el('button', 'toggle', enc.short);
+      b.title = enc.blurb;
+      b.onclick = () => { this.b.encounter = id; this._save(); this.refresh(); };
+      wrap.appendChild(b);
+      this.encNodes.push([id, b]);
+    }
+    r.appendChild(wrap);
+    this.node.appendChild(r);
+    this.encBlurb = el('div', 'cr-encblurb');
+    this.node.appendChild(this.encBlurb);
   }
 
   _swatches(parent, label, key, options, isColor) {
@@ -234,6 +310,8 @@ export class Creator {
       left--;
     }
     const pick = (arr) => arr[(Math.random() * arr.length) | 0][0];
+    const forged = WEAPON_ORDER.filter((id) => !WEAPONS[id].stub);
+    this.b.weapon = forged[(Math.random() * forged.length) | 0];
     this.b.plate = pick(APPEARANCE.plate);
     this.b.heraldry = pick(APPEARANCE.heraldry);
     this.b.helm = pick(APPEARANCE.helm);
@@ -266,6 +344,15 @@ export class Creator {
 
     for (const g of (this._groups || [])) {
       for (const [value, node] of g.nodes) node.classList.toggle('on', this.b[g.key] === value);
+    }
+    for (const [id, card] of (this.rackCards || [])) {
+      card.classList.toggle('on', this.b.weapon === id);
+    }
+    for (const [id, node] of (this.encNodes || [])) {
+      node.classList.toggle('on', this.b.encounter === id);
+    }
+    if (this.encBlurb) {
+      this.encBlurb.textContent = (ENCOUNTERS[this.b.encounter] || {}).blurb || '';
     }
     this.nameInput.value = this.b.name;
   }

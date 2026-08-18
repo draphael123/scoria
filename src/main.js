@@ -81,7 +81,10 @@ function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); }
    ---------------------------------------------------------------------- */
 const menu = new Menu(settings, {
   onBegin(build) {
-    if (build) game.build = build;
+    if (build) {
+      game.build = build;
+      if (build.encounter) game.encounterId = build.encounter;
+    }
     tutorial.stop(); tutUI.setVisible(false);
     started = true; paused = false;
     game.reset(); resetHudSmoothing();
@@ -93,9 +96,14 @@ const menu = new Menu(settings, {
   },
   onPreview(build) {
     // Rebuild the knight so appearance changes are visible behind the menu.
+    // The weapon is resolved in the Player's constructor — reach, roll weight
+    // and moveset all come off it — so picking off the rack has to rebuild the
+    // actor, not just re-skin the rig.
     game.build = build;
-    game.player.build = build;
+    if (build && build.encounter) game.encounterId = build.encounter;
+    game.reset();
     view.reap(new Set());
+    resetHudSmoothing();
   },
   onResume() { paused = false; },
   onRestart() {
@@ -159,8 +167,15 @@ function onEvents(events) {
       view.addShake(0.7);
       hud.hit('taken');
       audio.guardBreak();
+    } else if (ev.result === 'armored') {
+      // You took it and kept swinging. Cold sparks and a small shake, so it
+      // reads as absorbed rather than as a hit that failed to land.
+      view.burst(ev.x, ev.z, 0xffe0a8, 12, 1.0);
+      view.addShake(0.3);
+      hud.hit('taken');
+      audio.guard();
     } else if (byPlayer) {
-      const big = ev.result === 'stagger' || ev.atk.id === 'H1' || ev.atk.id === 'L3';
+      const big = ev.result === 'stagger' || ev.atk.heavy;
       view.burst(ev.x, ev.z, ev.result === 'stagger' ? 0xffd08a : 0xff8a3c, big ? 18 : 10, big ? 1.5 : 1);
       view.addShake(big ? 0.55 : 0.3);
       if (big) view.scorch(ev.x, ev.z, 1.1);
@@ -179,15 +194,20 @@ function onEvents(events) {
 /* Cues that come from state changes rather than from hit events. */
 let lastPlayerAtk = null, lastEnemyAtk = null, lastRoll = false, lastOutcome = null;
 function audioFromState() {
-  const p = game.player, e = game.enemies[0];
+  const p = game.player;
+  const e = game.windupEnemy;
 
-  if (p.atk && p.atk !== lastPlayerAtk) audio.swing(p.atk.id === 'H1' ? 1.5 : 1);
+  if (p.atk && p.atk !== lastPlayerAtk) audio.swing(p.atk.heavy ? 1.5 : 1);
   lastPlayerAtk = p.atk;
 
   // The audio telegraph: pitch rises for exactly the windup duration, so it
   // resolves on the frame the blow lands. In an isometric camera the floor
   // decal can sit behind your own body — this is the backup channel.
-  if (e && e.atk && e.atk !== lastEnemyAtk && e.phase === PHASE.WINDUP) {
+  //
+  // Keyed on the ATTACK OBJECT rather than on a fixed enemy, so a crowd cues
+  // whichever body actually holds the token. The aggro token means there is
+  // never a second windup to talk over it.
+  if (e && e.atk !== lastEnemyAtk) {
     audio.windup(e.atk.windup, e.atk.shape === 'circle');
   }
   lastEnemyAtk = e ? e.atk : null;
@@ -221,6 +241,8 @@ function frame(now) {
   if (input.takeEdge('debug')) { debug.toggle(); view.setDebug(debug.on); settings.frameData = debug.on; }
   if (!menu.open) {
     if (input.takeEdge('lock')) game.toggleLock();
+    if (input.takeEdge('cycleNext')) { game.cycleLock(1); audio.uiClick(); }
+    if (input.takeEdge('cyclePrev')) { game.cycleLock(-1); audio.uiClick(); }
     if (input.takeEdge('pause')) paused = !paused;
     if (input.takeEdge('stepOne')) stepOnce = true;
     if (input.takeEdge('reset')) { game.reset(); resetHudSmoothing(); }
@@ -249,7 +271,8 @@ function frame(now) {
   }
   view.setReticle(started ? game.player.lockTarget : null);
   view.updateSparks(dtReal);
-  view.updateCamera(game.player, game.player.lockTarget, dtReal);
+  // The enemy list goes in so the camera can widen for a spread-out crowd.
+  view.updateCamera(game.player, game.player.lockTarget, dtReal, game.enemies);
   view.update(dtReal);            // braziers, embers, chains, occluder fade
   view.render(dtReal);
 
@@ -297,12 +320,49 @@ window.SCORIA = {
   setPaused: (v) => { paused = !!v; },
   get started() { return started; },
   begin: () => { menu.hide(); started = true; paused = false; game.reset(); resetHudSmoothing(); },
+  /* Headless levers for verification: swap the class or the fight without
+     walking the creator. Both go through the same build the rack writes. */
+  setWeapon: (id) => {
+    game.build = { ...(game.build || loadBuild()), weapon: id };
+    menu.build.weapon = id; menu.creator.refresh();
+    game.reset(); view.reap(new Set()); resetHudSmoothing();
+  },
+  setEncounter: (id) => {
+    game.encounterId = id;
+    game.build = { ...(game.build || loadBuild()), encounter: id };
+    menu.build.encounter = id; menu.creator.refresh();
+    game.reset(); view.reap(new Set()); resetHudSmoothing();
+  },
   frameStep: () => { stepOnce = true; },
   simBatch(n = 9, opts = {}) {
     const out = [];
     for (let i = 0; i < n; i++) out.push(game.sim({ ...opts, seed: 1000 + i * 7 }));
     game.reset(1337);
     return out;
+  },
+  /* The smoke test, run across every weapon x encounter. Reports the ASSERTS
+     only — the winrate of a greedy scripted bot is not evidence about a game
+     whose Slice 1 additions are almost entirely positional. */
+  smoke(n = 5) {
+    const rows = [];
+    for (const encounter of ['duel', 'trio']) {
+      for (const weapon of ['sword', 'greataxe']) {
+        for (const policy of ['trade', 'heavy']) {
+          const acc = { FIGHT_HAPPENED: 0, IFRAMES_WORKED: 0, STAGGER_REACHABLE: 0,
+                        ONE_TELEGRAPH: 0, HYPERARMOUR_FIRED: 0, runs: 0, maxWindup: 0 };
+          for (let i = 0; i < n; i++) {
+            const r = game.sim({ seed: 4000 + i * 13, weapon, encounter, policy, maxTime: 90 });
+            acc.runs++;
+            for (const k of ['FIGHT_HAPPENED', 'IFRAMES_WORKED', 'STAGGER_REACHABLE',
+                             'ONE_TELEGRAPH', 'HYPERARMOUR_FIRED']) if (r[k]) acc[k]++;
+            acc.maxWindup = Math.max(acc.maxWindup, r.maxConcurrentWindup);
+          }
+          rows.push({ encounter, weapon, policy, ...acc });
+        }
+      }
+    }
+    game.reset(1337);
+    return rows;
   },
 };
 window.__SCORIA_BOOTED__ = true;

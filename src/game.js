@@ -2,22 +2,30 @@ import { Player } from './player.js';
 import { Slagbound } from './enemy.js';
 import { resolveActive } from './combat.js';
 import { STATE, PHASE } from './actor.js';
-import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT } from './config.js';
-import { makeRng, clamp } from './util.js';
+import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO,
+         ENCOUNTERS, DEFAULT_ENCOUNTER } from './config.js';
+import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
    The world freezes for a few frames on impact so the hit reads as weight. */
 const HITSTOP = {
   clean: IMPACT.hitstopLight, heavy: IMPACT.hitstopHeavy, stagger: IMPACT.hitstopStagger,
-  guarded: IMPACT.hitstopGuard, taken: IMPACT.hitstopTaken,
+  guarded: IMPACT.hitstopGuard, taken: IMPACT.hitstopTaken, armored: IMPACT.hitstopArmored,
 };
 
 export class Game {
   constructor(opts = {}) {
     this.seed = opts.seed ?? 1337;
     this.build = opts.build || null;
+    // The encounter is part of the saved build, so a reload has to honour what
+    // the rack was left set to. Without the build fallback here, booting always
+    // dropped you into the duel however the creator was configured.
+    const wanted = opts.encounter || opts.build?.encounter;
+    this.encounterId = ENCOUNTERS[wanted] ? wanted : DEFAULT_ENCOUNTER;
     this.reset();
   }
+
+  get encounter() { return ENCOUNTERS[this.encounterId] || ENCOUNTERS[DEFAULT_ENCOUNTER]; }
 
   reset(seed) {
     if (seed !== undefined) this.seed = seed;
@@ -31,17 +39,60 @@ export class Game {
     this.events = [];
     this.log = [];
 
-    this.player = new Player({ x: 0, z: 5.5, facing: Math.PI, build: this.build });
-    this.enemies = [new Slagbound({ x: 0, z: -2.5, facing: 0, rng: this.rng })];
+    this.player = new Player({
+      x: 0, z: 5.5, facing: Math.PI,
+      build: this.build,
+      weapon: this.build?.weapon,
+    });
+
+    const enc = this.encounter;
+    const n = enc.spawn.length;
+    this.enemies = enc.spawn.map(([x, z], i) => new Slagbound({
+      x, z,
+      facing: Math.atan2(this.player.x - x, this.player.z - z),
+      rng: this.rng,
+      hpMul: enc.hpMul,
+      slot: i, slotCount: n,
+    }));
     this.player.lockTarget = null;
+
+    // --- the aggro token ------------------------------------------------
+    this.token = null;
+    this.aggroCd = 0;
 
     this.outcome = null;   // 'win' | 'lose' | null
     this.outcomeT = 0;
-    this.stats = { swings: 0, hitsDealt: 0, hitsTaken: 0, guarded: 0, rolls: 0, staggers: 0, iframeDodges: 0 };
+    this.stats = { swings: 0, hitsDealt: 0, hitsTaken: 0, guarded: 0, rolls: 0,
+                   staggers: 0, iframeDodges: 0, armored: 0, maxConcurrentWindup: 0 };
   }
 
   get actors() { return [this.player, ...this.enemies]; }
   get livingEnemies() { return this.enemies.filter((e) => !e.dead); }
+
+  /* The one enemy that may be winding up. Everything that used to reach for
+     enemies[0] — the threat arc, the audio telegraph — asks for this instead,
+     and by construction it is never ambiguous. */
+  get windupEnemy() {
+    for (const e of this.enemies) {
+      if (!e.dead && e.state === STATE.ATTACK && e.phase === PHASE.WINDUP) return e;
+    }
+    return null;
+  }
+
+  /* Whoever the health bar should describe: what you have locked, else the
+     one currently swinging at you, else the nearest living body. */
+  get focusEnemy() {
+    const p = this.player;
+    if (p.lockTarget && !p.lockTarget.dead) return p.lockTarget;
+    const w = this.windupEnemy;
+    if (w) return w;
+    let best = null, bestD = Infinity;
+    for (const e of this.livingEnemies) {
+      const d = p.distanceTo(e);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
 
   /* ---- lock-on ---------------------------------------------------------- */
   toggleLock() {
@@ -55,10 +106,98 @@ export class Game {
     p.lockTarget = best;
   }
 
+  /* Cycle to the next target, ordered by bearing around the player so a flick
+     left picks the body that is actually to the left. Without this, lock-on
+     against a crowd is a trap: it holds whatever it grabbed first while
+     something else walks into your back. */
+  cycleLock(dir = 1) {
+    const p = this.player;
+    const live = this.livingEnemies;
+    if (!live.length) return;
+    if (!p.lockTarget || p.lockTarget.dead) { this.toggleLock(); return; }
+    if (live.length === 1) return;
+
+    const base = p.angleTo(p.lockTarget);
+    let best = null, bestScore = Infinity;
+    for (const e of live) {
+      if (e === p.lockTarget) continue;
+      // Signed sweep in the requested direction, wrapped into (0, TAU).
+      let d = angleDelta(base, p.angleTo(e)) * Math.sign(dir);
+      if (d <= 0) d += TAU;
+      if (d < bestScore) { bestScore = d; best = e; }
+    }
+    if (best) p.lockTarget = best;
+  }
+
   _validateLock() {
     const p = this.player;
     if (!p.lockTarget) return;
     if (p.lockTarget.dead || p.distanceTo(p.lockTarget) > LOCK.breakRange) p.lockTarget = null;
+  }
+
+  /* ---- the aggro token --------------------------------------------------
+     Exactly one enemy may hold it, and only the holder may begin an attack.
+     Because a windup cannot start without it, two ground telegraphs can never
+     coexist — the readability guarantee is structural rather than tuned.
+     ---------------------------------------------------------------------- */
+  _updateAggro(dt) {
+    this.aggroCd = Math.max(0, this.aggroCd - dt);
+
+    let h = this.token;
+    // The holder can also stop existing — the tutorial swaps the whole enemy
+    // list out from under the Game — so membership is checked, not assumed.
+    if (h && (h.dead || h.state === STATE.STAGGER || !this.enemies.includes(h))) {
+      this._dropToken(); h = null;
+    }
+
+    if (h) {
+      if (h.state === STATE.ATTACK) {
+        h.tokenHold = 0;
+        h.tokenUsed = true;      // it is spending the token right now
+      } else {
+        h.tokenHold += dt;
+        // Either it has swung and finished, or it has sat on the token without
+        // being able to close. Both hand it on.
+        if (h.tokenUsed || h.tokenHold > AGGRO.maxHold) this._dropToken();
+      }
+    }
+
+    if (this.token || this.aggroCd > 0) return;
+
+    const p = this.player;
+    if (p.dead) return;
+    let best = null, bestScore = -Infinity;
+    for (const e of this.livingEnemies) {
+      if (e.state === STATE.STAGGER) continue;
+      let s = -e.gapTo(p) * AGGRO.gapWeight;
+      // Prefer a threat you can see. A blow from off-camera is not difficulty,
+      // it is a missing tell — the threat arc covers the rest.
+      if (Math.abs(angleDelta(p.facing, p.angleTo(e))) <= AGGRO.frontCone) s += AGGRO.frontBonus;
+      // Hunger, so the ring rotates instead of the two nearest bodies trading
+      // the token between them while a flanker waits forever.
+      s += Math.min(AGGRO.starveCap, (this.time - e.lastTokenAt) * AGGRO.starve);
+      if (s > bestScore) { bestScore = s; best = e; }
+    }
+    if (!best) return;
+
+    this.token = best;
+    best.hasToken = true;
+    best.tokenHold = 0;
+    best.tokenUsed = false;
+    best.lastTokenAt = this.time;
+    // The grant itself must never be the commit: you always get a beat to see
+    // which body has stepped up before its windup begins.
+    best.hesitate = Math.max(best.hesitate, 0.18);
+  }
+
+  _dropToken() {
+    if (this.token) this.token.hasToken = false;
+    this.token = null;
+    // The handoff pause exists so a CROWD breathes between two different
+    // bodies committing. In a duel there is no handoff to make, and charging
+    // one anyway measurably slowed the fight that was already playtested —
+    // 15.5 swings per 40s became 13.8, an 11% cut nobody asked for.
+    this.aggroCd = this.livingEnemies.length > 1 ? AGGRO.handoff : 0;
   }
 
   /* ---- one fixed logic step -------------------------------------------- */
@@ -66,11 +205,20 @@ export class Game {
     if (this.outcome) { this.outcomeT += dt; return; }
     this.time += dt;
     this._validateLock();
+    this._updateAggro(dt);
 
-    const ctx = { input, basis, events: this.events, player: this.player };
+    const ctx = { input, basis, events: this.events, player: this.player, enemies: this.enemies };
 
     this.player.update(dt, ctx);
     for (const e of this.enemies) e.update(dt, ctx);
+
+    // Smoke-test instrumentation: the token's whole promise is that this can
+    // never exceed 1. sim() asserts on it.
+    let winding = 0;
+    for (const e of this.enemies) {
+      if (!e.dead && e.state === STATE.ATTACK && e.phase === PHASE.WINDUP) winding++;
+    }
+    if (winding > this.stats.maxConcurrentWindup) this.stats.maxConcurrentWindup = winding;
 
     this._integrate(dt);
 
@@ -94,6 +242,7 @@ export class Game {
       } else {
         if (ev.result === 'iframe') this.stats.iframeDodges++;
         else if (ev.result === 'guarded') this.stats.guarded++;
+        else if (ev.result === 'armored') { this.stats.armored++; this.stats.hitsTaken++; }
         else this.stats.hitsTaken++;
       }
     }
@@ -123,8 +272,13 @@ export class Game {
         const d = Math.hypot(dx, dz);
         if (d >= min || d < 1e-6) continue;
         const push = (min - d) / d;
-        // The Slagbound is the heavier body: the player gets moved more.
-        const aw = a.isPlayer ? 0.72 : 0.28;
+        // The Slagbound is the heavier body, so the player gets moved more.
+        // Between two Slagbounds neither is heavier — splitting it evenly
+        // matters, because weighting by array index would make whichever
+        // spawned second get shoved twice as hard for no reason.
+        let aw = 0.5;
+        if (a.isPlayer) aw = 0.72;
+        else if (b.isPlayer) aw = 0.28;
         const bw = 1 - aw;
         a.x -= dx * push * aw; a.z -= dz * push * aw;
         b.x += dx * push * bw; b.z += dz * push * bw;
@@ -185,10 +339,14 @@ export class Game {
       } else if (ev.result === 'guarded') {
         stop = Math.max(stop, HITSTOP.guarded);
         punch = Math.max(punch, IMPACT.punchLight);
+      } else if (ev.result === 'armored') {
+        // Held a beat longer than a normal hit taken: shrugging a blow off is
+        // the greataxe's signature moment and it has to READ as one.
+        stop = Math.max(stop, HITSTOP.armored);
+        punch = Math.max(punch, IMPACT.punchLight);
       } else if (ev.attacker === this.player) {
-        const heavy = ev.atk.id === 'H1' || ev.atk.id === 'L3';
-        stop = Math.max(stop, heavy ? HITSTOP.heavy : HITSTOP.clean);
-        punch = Math.max(punch, heavy ? IMPACT.punchHeavy : IMPACT.punchLight);
+        stop = Math.max(stop, ev.atk.heavy ? HITSTOP.heavy : HITSTOP.clean);
+        punch = Math.max(punch, ev.atk.heavy ? IMPACT.punchHeavy : IMPACT.punchLight);
       } else {
         stop = Math.max(stop, HITSTOP.taken);
         punch = Math.max(punch, IMPACT.punchHeavy);
@@ -200,45 +358,62 @@ export class Game {
 
   /* ---- headless smoke test ---------------------------------------------
      NOT a balance oracle. A scripted policy cannot measure whether a fight
-     FEELS good, and a greedy bot will under-read positional mechanics. This
-     exists to prove the fight actually happens: that both sides connect, that
-     i-frames work, that nobody deadlocks. Read the asserts, not the winrate.
+     FEELS good, and a greedy bot will under-read positional mechanics — which
+     is most of what Slice 1 added, so its winrate is worth even less than it
+     was in Slice 0. This exists to prove the fight actually happens: that both
+     sides connect, that i-frames work, that hyperarmour fires, that nobody
+     deadlocks, and that the aggro token never lets two telegraphs coexist.
+     Read the asserts, not the winrate.
      ------------------------------------------------------------------- */
   sim(opts = {}) {
     const maxTime = opts.maxTime ?? 60;
     const policy = opts.policy || 'trade';
     const seed = opts.seed ?? this.seed;
+    const prevEnc = this.encounterId;
+    const prevBuild = this.build;
+    if (opts.encounter) this.encounterId = opts.encounter;
+    if (opts.weapon) this.build = { ...(this.build || {}), weapon: opts.weapon };
     this.reset(seed);
 
     const input = makeScriptInput();
     const basis = { fx: 0, fz: -1, rx: 1, rz: 0 };
-    const p = this.player, e = this.enemies[0];
+    const p = this.player;
     this.toggleLock();
 
     let t = 0;
     const dt = SIM.step;
     while (t < maxTime && !this.outcome) {
       t += dt;
+      // Retarget onto whatever is alive, so a crowd run does not spend forty
+      // seconds walking at a corpse.
+      if (!p.lockTarget || p.lockTarget.dead) this.toggleLock();
+      const e = p.lockTarget || this.livingEnemies[0];
+      if (!e) break;
       const gap = p.gapTo(e);
 
-      // Deliberately simple: close, swing in range, roll when the telegraph
-      // is about to land. Enough to exercise every system once.
+      // Deliberately simple: close, swing in range, roll when a telegraph is
+      // about to land. Enough to exercise every system once.
       input.axis.x = 0; input.axis.y = 0;
       input.held.guard = false;
 
-      const incoming = e.state === STATE.ATTACK && e.phase === PHASE.WINDUP;
-      const impactIn = incoming ? e.atk.windup - e.atkT : 99;
+      const threat = this.windupEnemy;
+      const incoming = !!threat;
+      const impactIn = incoming ? threat.atk.windup - threat.atkT : 99;
+      const swingRange = p.weapon.reach + e.radius - 0.35;
 
-      if (policy !== 'passive' && incoming && impactIn < 0.16 && p.canSpend(PLAYER.roll.stamina)) {
+      if (policy !== 'passive' && incoming && impactIn < 0.16 && p.canSpend(p.rollStamina)) {
         input.axis.x = 1; input.axis.y = 0;
         input.inject('roll');
       } else if (policy === 'block' && incoming) {
         input.held.guard = true;
-      } else if (gap > 1.9) {
+      } else if (gap > swingRange) {
         const a = p.angleTo(e);
         input.axis.x = Math.sin(a); input.axis.y = -Math.cos(a);
-      } else if (policy !== 'passive' && p.state !== STATE.ATTACK && p.canSpend(28)) {
-        input.inject('light');
+      } else if (policy !== 'passive' && p.state !== STATE.ATTACK) {
+        // 'heavy' exists to prove the armoured windup survives contact.
+        const want = policy === 'heavy' ? 'heavy' : 'light';
+        const cost = want === 'heavy' ? p.weapon.heavy.stamina : p.weapon.light[0].stamina;
+        if (p.canSpend(cost)) input.inject(want);
       }
 
       input.sample(dt);
@@ -247,18 +422,28 @@ export class Game {
     }
 
     const s = this.stats;
-    return {
+    const out = {
       seed, policy,
+      weapon: p.weapon.id,
+      encounter: this.encounterId,
       outcome: this.outcome || 'timeout',
       duration: +t.toFixed(2),
       playerHp: +Math.max(0, p.hp).toFixed(1),
-      enemyHp: +Math.max(0, e.hp).toFixed(1),
+      enemiesLeft: this.livingEnemies.length,
       ...s,
       // The asserts that actually matter — see the comment above.
       FIGHT_HAPPENED: s.hitsDealt > 0 && (s.hitsTaken + s.guarded + s.iframeDodges) > 0,
       IFRAMES_WORKED: s.iframeDodges > 0,
       STAGGER_REACHABLE: s.staggers > 0,
+      // Structural, not statistical: the token makes >1 impossible, so this is
+      // a real invariant and any failure is a bug rather than a tuning miss.
+      ONE_TELEGRAPH: s.maxConcurrentWindup <= 1,
     };
+    if (p.weapon.armorDamageMul > 1) out.HYPERARMOUR_FIRED = s.armored > 0;
+
+    this.encounterId = prevEnc;
+    this.build = prevBuild;
+    return out;
   }
 }
 

@@ -218,6 +218,36 @@
   body.no-keys #keys{display:none}
 
   /* ========================= CHARACTER CREATOR ========================== */
+  /* THE RACK. It spans the full width and sits above the attributes because
+     the weapon decides the class and the attributes only shade it. Cards are
+     deliberately wordy: each line is a RULE the weapon owns, not a stat. */
+  .cr-rack{width:min(1120px,96vw);margin-top:18px;text-align:left}
+  .cr-racks{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .cr-weap{flex:1 1 232px;max-width:280px;min-width:min(232px,92vw);
+       border:1px solid var(--edge);background:rgba(0,0,0,.35);
+       padding:14px 15px 15px;text-align:left;transition:.16s;position:relative;
+       display:flex;flex-direction:column;gap:6px}
+  .cr-weap:hover:not(:disabled){border-color:rgba(212,85,42,.6);background:rgba(212,85,42,.09)}
+  .cr-weap.on{border-color:rgba(255,179,71,.75);background:rgba(212,85,42,.16);
+       box-shadow:0 0 0 1px rgba(255,179,71,.28),0 0 26px rgba(212,85,42,.22)}
+  .cr-weap.locked{opacity:.34;cursor:default}
+  .cr-weap-class{font-size:9px;letter-spacing:.34em;color:var(--ember);text-transform:uppercase}
+  .cr-weap.on .cr-weap-class{color:var(--hot)}
+  .cr-weap-name{font-size:17px;color:var(--ink);line-height:1.2}
+  .cr-weap-tag{font-size:11px;color:var(--dim);line-height:1.55;min-height:2.4em}
+  .cr-weap-lines{list-style:none;margin:4px 0 0;padding:0;display:flex;
+       flex-direction:column;gap:4px}
+  .cr-weap-lines li{font-size:10.5px;line-height:1.5;color:var(--faint);
+       font-family:ui-monospace,Consolas,monospace;padding-left:11px;position:relative}
+  .cr-weap-lines li::before{content:'';position:absolute;left:0;top:.62em;
+       width:4px;height:1px;background:var(--ember);opacity:.75}
+  .cr-weap.on .cr-weap-lines li{color:var(--dim)}
+  .cr-weap-lock{margin-top:6px;font-size:9px;letter-spacing:.28em;color:var(--ember)}
+
+  .cr-encrow{width:min(940px,94vw);margin-top:6px;border-bottom:0}
+  .cr-encblurb{width:min(940px,94vw);text-align:left;font-size:11px;line-height:1.6;
+       color:var(--faint);margin-top:-4px}
+
   .cr-cols{display:flex;gap:clamp(18px,4vw,54px);margin-top:20px;text-align:left;
        width:min(940px,94vw);justify-content:center;flex-wrap:wrap}
   .cr-col{flex:1 1 340px;min-width:min(320px,92vw);max-width:440px}
@@ -378,11 +408,12 @@
 
 <div class="hud" id="keys">
   <div><b>WASD</b>move</div>
-  <div><b>LMB / J</b>light &middot; 3-hit chain</div>
+  <div><b>LMB / J</b>light &middot; chain</div>
   <div><b>RMB / K</b>heavy</div>
   <div><b>Shift / F</b>guard</div>
   <div><b>Space</b>roll &middot; backstep</div>
   <div><b>Tab / Q</b>lock-on</div>
+  <div><b>E / wheel</b>next target</div>
   <div><b>Esc</b>menu</div>
   <div><b>F1</b>frame data</div>
   <div><b>R</b>restart</div>

@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { CAMERA } from './config.js';
+import { CAMERA, AGGRO, LOCK, TELEGRAPH } from './config.js';
 import { STATE, PHASE } from './actor.js';
 import { clamp, damp, lerp } from './util.js';
 import { buildTextures } from './textures.js';
@@ -154,7 +154,7 @@ export class View {
   ensureRig(actor, isPlayer) {
     let rig = this.rigs.get(actor);
     if (!rig) {
-      rig = isPlayer ? buildKnight(actor, actor.build)
+      rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
           : (actor.isEffigy ? buildEffigy(actor) : buildSlagbound(actor));
       this.rigs.set(actor, rig);
       this.scene.add(rig.group);
@@ -230,13 +230,20 @@ export class View {
       const st = actor.state === STATE.STAGGER;
       if (!rig.isEffigy) {
         rig.mat.emissive.setHex(st ? 0xffb060 : 0x3a1004);
-        rig.mat.emissiveIntensity = st ? 2.4 : 0.8;
+        rig.mat.emissiveIntensity = (st ? 2.4 : 0.8) * (actor.posturing ? AGGRO.postureDim + 0.35 : 1);
       }
       // The molten core brightens through the windup — a second, body-level
       // tell for players watching the enemy rather than the floor.
+      //
+      // And it goes DARK on anything without the aggro token. In a crowd this
+      // is how you tell at a glance which body can actually hurt you: one lit,
+      // the rest banked. Deliberately not a floor marker — the floor is spoken
+      // for by the telegraph, and stacking a second decal under every enemy is
+      // exactly the readability failure the token exists to prevent.
       if (rig.core) {
         const w = actor.state === STATE.ATTACK ? 1 + actor.windupProgress * 2.6 : 1;
-        rig.core.material.emissiveIntensity = 2.6 * w;
+        const banked = actor.posturing ? AGGRO.postureDim : 1;
+        rig.core.material.emissiveIntensity = 2.6 * w * banked;
       }
       if (rig.flash > 0) {
         rig.mat.emissive.setHex(0xffffff);
@@ -269,20 +276,32 @@ export class View {
     tg.group.position.set(actor.x, 0, actor.z);
     tg.group.rotation.y = actor.facing;
 
+    // Your own telegraph is drawn quieter, and in a different HUE, than the
+    // enemy's. Both sides used to paint the floor the same ember orange, which
+    // was survivable while your widest shape was a 137-degree wedge and stopped
+    // being survivable the moment a three-metre disc could land on top of an
+    // incoming swipe. Orange is the DANGER channel and belongs to the enemy;
+    // yours is cold steel — same information, a colour you never react to.
+    const mine = actor.isPlayer;
+    const k = mine ? TELEGRAPH.playerAlpha : 1;
+    const cool = mine ? TELEGRAPH.playerColor : C.ember;
+    const warm = mine ? TELEGRAPH.playerHot : C.hot;
+    tg.outline.material.color.setHex(cool);
+
     if (actor.phase === PHASE.WINDUP) {
       const t = actor.windupProgress;
       const s = Math.max(0.001, t);
       tg.fill.scale.set(s, s, s);
       // Held down deliberately: under bloom a hot fill blows out into a
       // featureless disc, and the EDGE is the information the player needs.
-      tg.fill.material.opacity = 0.26 + 0.20 * t;
-      tg.fill.material.color.setHex(t > 0.92 ? C.hot : C.ember);
-      tg.outline.material.opacity = 0.20 + 0.30 * t;
+      tg.fill.material.opacity = (0.26 + 0.20 * t) * k;
+      tg.fill.material.color.setHex(t > 0.92 ? warm : cool);
+      tg.outline.material.opacity = (0.20 + 0.30 * t) * k;
     } else {
       tg.fill.scale.set(1, 1, 1);
-      tg.fill.material.color.setHex(C.hot);
-      tg.fill.material.opacity = 0.42;
-      tg.outline.material.opacity = 0.6;
+      tg.fill.material.color.setHex(warm);
+      tg.fill.material.opacity = 0.42 * k;
+      tg.outline.material.opacity = 0.6 * k;
     }
   }
 
@@ -382,12 +401,29 @@ export class View {
   }
 
   /* ---- camera ----------------------------------------------------------- */
-  updateCamera(player, lockTarget, dt) {
+  updateCamera(player, lockTarget, dt, enemies) {
     let fx = player.x, fz = player.z, wantZoom = 1;
     if (lockTarget && !lockTarget.dead) {
       fx = lerp(player.x, lockTarget.x, CAMERA.lockBias);
       fz = lerp(player.z, lockTarget.z, CAMERA.lockBias);
       wantZoom = CAMERA.lockZoomOut;
+    }
+
+    // A crowd is not a midpoint. Widen in proportion to how far the living
+    // bodies are actually spread, so a flanker never walks out of frame —
+    // and do nothing at all below crowdFloor, so the duel keeps exactly the
+    // framing it was playtested with.
+    if (enemies && enemies.length) {
+      let spread = 0;
+      for (const e of enemies) {
+        if (e.dead) continue;
+        const d = player.distanceTo(e);
+        if (d < LOCK.breakRange && d > spread) spread = d;
+      }
+      const t = clamp((spread - CAMERA.crowdFloor) /
+                      Math.max(0.001, CAMERA.crowdRange - CAMERA.crowdFloor), 0, 1);
+      this.crowd = damp(this.crowd || 0, t, CAMERA.crowdEase, dt);
+      wantZoom *= 1 + CAMERA.crowdZoom * this.crowd;
     }
     this.focus.x = damp(this.focus.x, fx, CAMERA.follow, dt);
     this.focus.z = damp(this.focus.z, fz, CAMERA.follow, dt);

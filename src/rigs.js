@@ -2,6 +2,7 @@ import * as THREE from '../vendor/three.module.js';
 import { STATE, PHASE } from './actor.js';
 import { clamp, lerp } from './util.js';
 import { plateColor, heraldryColor, defaultBuild } from './character.js';
+import { WEAPONS, AGGRO, PLAYER } from './config.js';
 
 /* Character rigs and their animation.
 
@@ -50,11 +51,109 @@ function limb(geo, mat, jointY) {
   return pivot;
 }
 
+/* ------------------------------------------------------------------------
+   WEAPONS. Each returns the mesh that the trail should track, and how far past
+   that mesh's origin the actual tip is — the trail extends along that line, so
+   a wrong tipScale draws a ribbon that does not match the blade.
+
+   Both are built THIN IN Y and long in Z, because the shoulder joint rotates
+   about X: that is the plane the swing happens in, and a weapon modelled in any
+   other plane would sweep edge-on and vanish.
+   --------------------------------------------------------------------- */
+function buildSword(pivot, mats) {
+  const { steelD, leather } = mats;
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 6), leather);
+  grip.rotation.x = Math.PI / 2;
+  grip.position.z = 0.12;
+  pivot.add(grip);
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.09), steelD);
+  cross.position.z = 0.3;
+  pivot.add(cross);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.032, 1.35),
+    new THREE.MeshStandardMaterial({ color: PAL.blade, roughness: 0.22, metalness: 0.95 }));
+  blade.position.z = 1.0;
+  blade.castShadow = true;
+  pivot.add(blade);
+  return { blade, tipScale: 1.55 };
+}
+
+/* The Cupola Splitter. A two-metre haft with a fan of iron on the end, which
+   at this camera distance is the entire point: you read a weapon by how far
+   the mass sits from the body, and this one sits a long way out. Its visual
+   length tracks its 3.15 reach the same way the sword's tracks 2.35, so what
+   you see is what the hitbox does. */
+function buildGreataxe(pivot, mats) {
+  const { steelD, leather, dark } = mats;
+  const iron = new THREE.MeshStandardMaterial({ color: 0x8d949c, roughness: 0.42, metalness: 0.88 });
+  const edge = new THREE.MeshStandardMaterial({ color: PAL.blade, roughness: 0.2, metalness: 0.96 });
+
+  // Both hands are on it, so the grip runs most of the lower haft.
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.62, 7), leather);
+  grip.rotation.x = Math.PI / 2;
+  grip.position.z = 0.34;
+  pivot.add(grip);
+
+  const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.062, 2.0, 7), steelD);
+  haft.rotation.x = Math.PI / 2;
+  haft.position.z = 1.0;
+  haft.castShadow = true;
+  pivot.add(haft);
+
+  // The socket the head is wedged into.
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.17, 0.46), iron);
+  eye.position.z = 1.78;
+  eye.castShadow = true;
+  pivot.add(eye);
+
+  // The bit. A wedge of a disc lying FLAT, so it sweeps face-on through the
+  // swing rather than edge-on — from a fixed isometric camera an edge-on blade
+  // is a line, and a line does not read as a greataxe.
+  //
+  // The crescent is faked with two stacked wedges rather than carved: a wide
+  // bright one, and a narrower dark one sitting just in front of it, so all
+  // that survives at the rim is a curved highlight. Cheaper than a lathe and
+  // it reads better at this distance than a true crescent would.
+  const bit = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.82, 0.82, 0.10, 22, 1, false, -Math.PI * 0.44, Math.PI * 0.88),
+    edge);
+  bit.position.z = 1.86;
+  bit.castShadow = true;
+  pivot.add(bit);
+
+  const bitInner = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.60, 0.60, 0.115, 20, 1, false, -Math.PI * 0.46, Math.PI * 0.92),
+    iron);
+  bitInner.position.z = 1.70;
+  pivot.add(bitInner);
+
+  // A beard hanging off the leading edge and a spike opposite it, so the
+  // outline is asymmetric and its facing is legible even end-on.
+  const beard = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.09, 0.34), edge);
+  beard.position.set(0, -0.015, 2.30);
+  beard.castShadow = true;
+  pivot.add(beard);
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.56, 5), iron);
+  spike.rotation.x = -Math.PI / 2;
+  spike.position.z = 1.30;
+  spike.castShadow = true;
+  pivot.add(spike);
+
+  const butt = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.1, 6),
+    new THREE.MeshStandardMaterial({ color: dark, roughness: 0.6, metalness: 0.6 }));
+  butt.rotation.x = Math.PI / 2;
+  butt.position.z = -0.06;
+  pivot.add(butt);
+
+  return { blade: bit, tipScale: 1.30 };
+}
+
 /* ------------------------------------------------------------------------ */
-export function buildKnight(actor, build) {
+export function buildKnight(actor, build, weapon) {
   const g = new THREE.Group();
   const r = actor.radius, h = actor.height;
   const b = build || actor.build || defaultBuild();
+  const w = weapon || actor.weapon || WEAPONS.sword;
+  const twoHand = !!w.twoHand;
 
   const plate = plateColor(b);
   const herald = heraldryColor(b);
@@ -98,9 +197,13 @@ export function buildKnight(actor, build) {
   belt.position.y = 0;
   chest.add(belt);
 
+  // A two-hander is carried in heavier harness. Pure silhouette, but it is the
+  // silhouette that tells you which knight you are looking at while both are
+  // standing still.
+  const pauldronR = r * (twoHand ? 0.58 : 0.46);
   for (const s of [-1, 1]) {
-    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(r * 0.46, 10, 8), steel);
-    pauldron.position.set(s * r * 0.88, h * 0.31, 0);
+    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(pauldronR, 10, 8), steel);
+    pauldron.position.set(s * r * (twoHand ? 0.94 : 0.88), h * 0.31, 0);
     pauldron.scale.y = 0.72;
     pauldron.castShadow = true;
     chest.add(pauldron);
@@ -151,18 +254,9 @@ export function buildKnight(actor, build) {
   const swordArm = limb(armGeo, steelD, 0);
   pivot.add(swordArm);
 
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 6), leather);
-  grip.rotation.x = Math.PI / 2;
-  grip.position.z = 0.12;
-  pivot.add(grip);
-  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.09), steelD);
-  cross.position.z = 0.3;
-  pivot.add(cross);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.032, 1.35),
-    new THREE.MeshStandardMaterial({ color: PAL.blade, roughness: 0.22, metalness: 0.95 }));
-  blade.position.z = 1.0;
-  blade.castShadow = true;
-  pivot.add(blade);
+  const mats = { steel, steelD, leather, cloth, dark };
+  const built = twoHand ? buildGreataxe(pivot, mats) : buildSword(pivot, mats);
+  const blade = built.blade;
 
   // Off arm, which carries the shield and counter-swings when walking.
   const offArm = new THREE.Group();
@@ -182,7 +276,9 @@ export function buildKnight(actor, build) {
   shield.add(boss);
   shield.position.set(0, -h * 0.06, r * 0.72);
   shield.visible = false;
-  offArm.add(shield);
+  // A two-hander has no off hand to put a shield in. It is not hidden, it is
+  // not built — the guard stance poses both arms on the haft instead.
+  if (!twoHand) offArm.add(shield);
 
   const nose = makeNose(r, 0xdfe6ea);
   g.add(nose);
@@ -190,7 +286,11 @@ export function buildKnight(actor, build) {
   return {
     group: g, hips, chest, neck, legL, legR, pivot, offArm, swordArm,
     body: torso, head: helm, blade, shield, nose, mat: steel,
-    baseLean: 0, stride: 0, flash: 0, isPlayer: true,
+    tipScale: built.tipScale,
+    twoHand,
+    swingArc: w.swing || { rest: -0.25, wind: -2.35, end: 1.35 },
+    weaponId: w.id,
+    baseLean: 0, stride: 0, flash: 0, spin: 0, isPlayer: true,
   };
 }
 
@@ -280,7 +380,8 @@ export function buildSlagbound(actor) {
     group: g, hips, chest, neck, legL, legR, pivot, offArm,
     body: torso, head: headMass, blade: headSlab, shield: null,
     mat: hide, core, tip,
-    baseLean: 0.22, stride: 0, flash: 0, isPlayer: false,
+    swingArc: { rest: -0.25, wind: -2.35, end: 1.35 },
+    baseLean: 0.22, stride: 0, flash: 0, spin: 0, isPlayer: false,
   };
 }
 
@@ -354,7 +455,8 @@ export function buildEffigy(actor) {
   return {
     group: g, hips, chest, neck, legL: legStub, legR: new THREE.Group(),
     pivot, offArm, body, head, blade: weight, shield: null,
-    mat: straw, baseLean: 0, stride: 0, flash: 0, isPlayer: false, isEffigy: true,
+    mat: straw, swingArc: { rest: -0.25, wind: -2.35, end: 1.35 },
+    baseLean: 0, stride: 0, flash: 0, spin: 0, isPlayer: false, isEffigy: true,
   };
 }
 
@@ -364,8 +466,8 @@ export function buildEffigy(actor) {
 export function animateRig(rig, actor, dt, clock) {
   const g = rig.group;
   const h = actor.height;
+  const A = rig.swingArc || { rest: -0.25, wind: -2.35, end: 1.35 };
   g.position.set(actor.x, 0, actor.z);
-  g.rotation.y = actor.facing;
   g.rotation.z = 0;
 
   const speed = Math.hypot(actor.vx, actor.vz);
@@ -376,48 +478,59 @@ export function animateRig(rig, actor, dt, clock) {
   if (moving) rig.stride += speed * dt * 2.35;
   else rig.stride += (0 - (rig.stride % (Math.PI * 2))) * 0; // hold pose
 
-  let swing = 0, lean = 0, legPhase = 0, legAmp = 0;
-  let armCounter = 0, crouch = 0, twist = 0;
+  // The shoulder rests where the weapon is CARRIED, not at zero. A greataxe
+  // rests shouldered, which is why the two knights read differently before
+  // either of them has moved.
+  let swing = A.rest, lean = 0, legPhase = 0, legAmp = 0;
+  let armCounter = 0, crouch = 0, twist = 0, spin = 0;
+
+  const rollDur = actor.rollDuration || 0.6;
 
   if (actor.state === STATE.ATTACK && actor.atk) {
     const a = actor.atk;
     const p = actor.phase;
     if (p === PHASE.WINDUP) {
       const t = actor.windupProgress;
-      swing = lerp(-0.25, -2.35, t * t);
+      swing = lerp(A.rest, A.wind, t * t);
       lean = lerp(0, -0.17, t);
       twist = lerp(0, -0.30, t);      // wind the shoulders up with the blade
       crouch = lerp(0, 0.05, t);
+      // A spinning attack coils AGAINST the turn first, so the release reads
+      // as stored rotation rather than as the model suddenly snapping round.
+      if (a.spin) spin = lerp(0, -0.55, t * t);
     } else if (p === PHASE.ACTIVE) {
       const t = (actor.atkT - a.windup) / a.active;
-      swing = lerp(-2.35, 1.35, t);
+      swing = lerp(A.wind, A.end, t);
       lean = 0.2;
       twist = lerp(-0.30, 0.42, t);   // and unwind them through the strike
       crouch = 0.08;
+      // One full revolution over the active frames. The hitbox is already 360
+      // degrees, so this is not lying about coverage — it is showing it.
+      if (a.spin) spin = lerp(-0.55, Math.PI * 2, t);
     } else {
       const t = clamp((actor.atkT - a.windup - a.active) / Math.max(0.001, a.recover), 0, 1);
-      swing = lerp(1.35, 0, t * t);
+      swing = lerp(A.end, A.rest, t * t);
       lean = lerp(0.2, 0, t);
       twist = lerp(0.42, 0, t * t);
       crouch = lerp(0.08, 0, t);
+      // Two-pi is zero, so dropping the spin here is invisible.
     }
     // Braced stance during a swing: legs planted, one forward.
     legAmp = 0.32;
     legPhase = Math.PI * 0.5;
   } else if (actor.state === STATE.ROLL) {
-    const t = clamp(actor.stateT / 0.6, 0, 1);
+    const t = clamp(actor.stateT / rollDur, 0, 1);
     const arc = Math.sin(Math.PI * t);
     lean = -1.15 * arc;
     crouch = 0.5 * arc;
     legAmp = 1.25 * arc;              // tuck the knees in
     legPhase = 0;
-    swing = -0.5 * arc;
+    swing = A.rest - 0.5 * arc;
   } else if (actor.state === STATE.STAGGER) {
     // Recoil hard, then sag. Reads as "that hurt" rather than "paused".
-    const t = clamp(actor.stateT ? 0 : 0, 0, 1);
     const k = clamp(actor.staggerT || 0, 0, 1);
     lean = -0.45 - 0.25 * k;
-    swing = 0.5;
+    swing = A.rest + 0.75;
     legAmp = 0.42;
     legPhase = Math.PI * 0.5;
   } else if (moving) {
@@ -433,12 +546,32 @@ export function animateRig(rig, actor, dt, clock) {
     lean = 0.012 + b * 0.014;
   }
 
+  // A Slagbound without the aggro token cannot swing, and has to LOOK like it
+  // cannot: it holds the slab up and waits. This is the body-level half of the
+  // token's tell — the other half is the core going dim, in render.js. The
+  // floor is left alone on purpose, because the floor belongs to the telegraph.
+  if (actor.posturing && actor.state !== STATE.ATTACK) {
+    swing -= AGGRO.postureLift;
+    lean -= 0.06;
+  }
+
+  rig.spin = spin;
+  g.rotation.y = actor.facing + spin;
+
   rig.pivot.rotation.x = swing;
   rig.chest.rotation.x = rig.baseLean + lean;
   rig.chest.rotation.y = twist;
   rig.legL.rotation.x = Math.sin(legPhase) * legAmp;
   rig.legR.rotation.x = Math.sin(legPhase + Math.PI) * legAmp;
   rig.offArm.rotation.x = -Math.sin(legPhase) * armCounter - crouch * 0.6;
+
+  // Two hands on the haft: the off arm travels WITH the swing instead of
+  // counter-swinging against it. Without this the knight reads as holding a
+  // greataxe one-handed, which is the wrong class entirely.
+  if (rig.twoHand) {
+    rig.offArm.rotation.x = swing * 0.86 - 0.18;
+    rig.offArm.rotation.z = 0.34;
+  }
 
   // Head counter-rotates a little against the chest, which keeps the helm
   // pointing where the fighter is actually looking.
@@ -451,7 +584,7 @@ export function animateRig(rig, actor, dt, clock) {
 
   // A roll physically lowers the whole body — used by the contact shadow too.
   const rollDip = actor.state === STATE.ROLL
-    ? Math.sin(Math.PI * clamp(actor.stateT / 0.6, 0, 1)) * 0.4 : 0;
+    ? Math.sin(Math.PI * clamp(actor.stateT / rollDur, 0, 1)) * 0.4 : 0;
   g.position.y = -rollDip;
 
   if (actor.dead) {

@@ -58,6 +58,14 @@ export function applyDamage(attacker, target, atk, out) {
   // Stagger amplifies incoming damage — this is the punish window.
   if (target.state === STATE.STAGGER) damage *= SLAGBOUND.staggerDamageMul;
 
+  // HYPERARMOUR. A weapon that declares it finishes its swing through a blow
+  // instead of being interrupted by one. That is the whole reason a 0.72s
+  // windup is playable, and it converts the question from "does this fit in
+  // the gap?" to "can I afford this trade?" — so it has to cost. The extra
+  // damage IS the price; without it, trading is strictly free.
+  const armored = !!(target.armored);
+  if (armored) damage *= (target.armorDamageMul || 1);
+
   // --- guard ------------------------------------------------------------
   const guarding = target.state === STATE.GUARD && target.guard;
   if (guarding) {
@@ -96,10 +104,12 @@ export function applyDamage(attacker, target, atk, out) {
   ev.damage = damage;
 
   // Every clean blow MOVES the thing it hits. A hit that only changes a
-  // number does not read as a hit.
-  const heavy = atk.id === 'H1' || atk.id === 'L3';
+  // number does not read as a hit. Impact class is a property of the BLOW
+  // (atk.heavy), never of its id, so adding a weapon needs no edit here.
   target.knock(attacker.x, attacker.z,
-    target.isPlayer ? IMPACT.knockTaken : (heavy ? IMPACT.knockHeavy : IMPACT.knockLight));
+    target.isPlayer
+      ? (armored ? IMPACT.knockArmored : IMPACT.knockTaken)
+      : (atk.heavy ? IMPACT.knockHeavy : IMPACT.knockLight));
 
   if (target.poise !== undefined) {
     const resist = target.staggerResist > 0 ? SLAGBOUND.staggerResistMul : 1;
@@ -111,6 +121,11 @@ export function applyDamage(attacker, target, atk, out) {
       target.knock(attacker.x, attacker.z, IMPACT.knockStagger);
       ev.result = 'stagger';
     }
+  } else if (armored) {
+    // Rocked, not stopped. A much smaller shove, no state change, and the
+    // usual mercy window so a crowd cannot shred you mid-swing.
+    ev.result = 'armored';
+    target.invuln = Math.max(target.invuln, PLAYER.hurtInvuln);
   } else {
     target.stagger(PLAYER.hitStagger);
     target.invuln = Math.max(target.invuln, PLAYER.hurtInvuln);

@@ -1,9 +1,23 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { SLAGBOUND } from './config.js';
-import { damp, lerp, clamp } from './util.js';
+import { SLAGBOUND, AGGRO } from './config.js';
+import { damp, lerp, clamp, TAU } from './util.js';
 
 /* The Slagbound — a foundry hand that never stopped working.
-   Two attacks, on purpose. A duel you can actually learn. */
+   Two attacks, on purpose. A duel you can actually learn.
+
+   In a crowd it does one of exactly two jobs, and which one is decided by the
+   Game, not by itself:
+
+     HOLDER   it has the aggro token. It closes to preferredRange and commits.
+              At most one Slagbound in the clearing is ever doing this, which
+              is what guarantees there is never more than one telegraph on the
+              floor at a time.
+
+     CIRCLER  it does not. It holds an orbit slot measured from the PLAYER'S
+              FACING and postures. Because the slot is relative to your facing
+              rather than to the world, turning to deal with the holder walks
+              the circlers around behind you — which is the entire reason the
+              greataxe's 360 sweep exists. */
 export class Slagbound extends Actor {
   constructor(opts = {}) {
     super(SLAGBOUND, opts);
@@ -13,11 +27,25 @@ export class Slagbound extends Actor {
     this.staggerT = 0;
     this.staggerResist = 0;
 
+    // A crowd is about position, not attrition, so the encounter thins each
+    // body rather than making the fight three times as long.
+    if (opts.hpMul && opts.hpMul !== 1) {
+      this.maxHp = SLAGBOUND.hp * opts.hpMul;
+      this.hp = this.maxHp;
+    }
+
     this.rng = opts.rng || Math.random;
     this.hesitate = this._rollHesitate();
     this.circleDir = this.rng() < 0.5 ? -1 : 1;
     this.circleTimer = 1.2 + this.rng() * 1.4;
     this.intent = 'wait';
+
+    // Aggro-token state lives on Actor and is owned by the Game. Its share of
+    // the ring, however, is its own. Spread evenly at spawn so three bodies surround
+    // rather than queue.
+    const n = Math.max(1, opts.slotCount || 1);
+    this.slotBase = ((opts.slot || 0) / n) * TAU;   // its permanent share of the ring
+    this.slotWander = 0;                            // bounded, never integrated free
   }
 
   _rollHesitate() {
@@ -31,6 +59,12 @@ export class Slagbound extends Actor {
     this.atk = null;
     this.intent = 'staggered';
   }
+
+  /* True when it is holding a threatening pose rather than swinging. Drives
+     the body-level tell in the renderer: circlers dim and raise the slab, the
+     holder lights up. No extra floor decal, because the floor belongs to the
+     telegraph. */
+  get posturing() { return !this.hasToken && this.state !== STATE.STAGGER && !this.dead; }
 
   update(dt, ctx) {
     if (this.dead) return;
@@ -91,7 +125,6 @@ export class Slagbound extends Actor {
     this.faceToward(target.x, target.z, SLAGBOUND.turnRate, dt);
 
     const gap = this.gapTo(target);
-    const pref = SLAGBOUND.preferredRange;
 
     this.circleTimer -= dt;
     if (this.circleTimer <= 0) {
@@ -106,22 +139,64 @@ export class Slagbound extends Actor {
 
     let mx = 0, mz = 0, speed = SLAGBOUND.moveSpeed;
 
-    if (gap > pref + 0.35) {
-      mx = nx; mz = nz;
-      this.intent = 'approach';
-    } else if (gap < pref - 0.9) {
-      mx = -nx * 0.8 + px * 0.6; mz = -nz * 0.8 + pz * 0.6;
-      speed = SLAGBOUND.circleSpeed;
-      this.intent = 'reposition';
+    if (this.hasToken) {
+      // The one body allowed to fight you. Unchanged from the duel — this is
+      // the behaviour that was playtested, and a crowd must not alter it.
+      const pref = SLAGBOUND.preferredRange;
+      if (gap > pref + 0.35) {
+        mx = nx; mz = nz;
+        this.intent = 'approach';
+      } else if (gap < pref - 0.9) {
+        mx = -nx * 0.8 + px * 0.6; mz = -nz * 0.8 + pz * 0.6;
+        speed = SLAGBOUND.circleSpeed;
+        this.intent = 'reposition';
+      } else {
+        mx = px; mz = pz;
+        speed = SLAGBOUND.circleSpeed;
+        this.intent = 'circle';
+      }
     } else {
-      mx = px; mz = pz;
-      speed = SLAGBOUND.circleSpeed;
-      this.intent = 'circle';
+      // Hold a slot on the ring. The bearing is measured off the player's
+      // FACING, so turning away from a circler is exactly what sends it round
+      // behind you.
+      this.slotWander = clamp(this.slotWander + AGGRO.slotDrift * this.circleDir * dt,
+                              -AGGRO.slotSwing, AGGRO.slotSwing);
+      const bearing = target.facing + this.slotBase + this.slotWander;
+      const wx = target.x + Math.sin(bearing) * AGGRO.ringRange;
+      const wz = target.z + Math.cos(bearing) * AGGRO.ringRange;
+      const dx = wx - this.x, dz = wz - this.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 1e-3) {
+        mx = dx / d; mz = dz / d;
+        // Ease in, so a circler settles into its slot instead of jittering
+        // across it every frame.
+        speed = AGGRO.ringSpeed * clamp(d / AGGRO.slotArrive, 0, 1);
+      }
+      this.intent = 'posture';
+    }
+
+    // Separation. Without this three bodies stack into one silhouette and the
+    // fight stops being readable no matter what the token does.
+    let sx = 0, sz = 0;
+    for (const o of (ctx.enemies || [])) {
+      if (o === this || o.dead) continue;
+      const ox = this.x - o.x, oz = this.z - o.z;
+      const od = Math.hypot(ox, oz) || 1e-3;
+      const want = (this.radius + o.radius) * AGGRO.separation;
+      if (od < want) {
+        const f = ((want - od) / want) * AGGRO.separationForce;
+        sx += (ox / od) * f; sz += (oz / od) * f;
+      }
     }
 
     const ml = Math.hypot(mx, mz) || 1;
-    this.vx = damp(this.vx, (mx / ml) * speed, 9, dt);
-    this.vz = damp(this.vz, (mz / ml) * speed, 9, dt);
+    this.vx = damp(this.vx, (mx / ml) * speed + sx, 9, dt);
+    this.vz = damp(this.vz, (mz / ml) * speed + sz, 9, dt);
+
+    // Nothing below this line may run without the token: a Slagbound that
+    // cannot commit must not even start counting down to it, or the moment it
+    // is handed the token it swings with no tell.
+    if (!this.hasToken) { this.intent = 'posture'; return; }
 
     // Punish: if the player is rooted in attack recovery and close enough,
     // stop waiting. This is what makes trading blows a losing plan.

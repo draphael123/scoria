@@ -39,7 +39,10 @@ export class Hud {
 
   update(game, dt) {
     const p = game.player;
-    const e = game.enemies[0];
+    // Whatever you have locked, else whatever is currently swinging at you,
+    // else the nearest. enemies[0] was fine for a duel and is a lie for three.
+    const e = game.focusEnemy;
+    const standing = game.livingEnemies.length;
 
     const hp = clamp(p.hp / p.maxHp, 0, 1);
     this.hpFill.style.width = (hp * 100) + '%';
@@ -57,7 +60,8 @@ export class Hud {
 
     // Ghost the cost of a ROLL on the stamina bar. Of everything stamina buys,
     // the dodge is the one whose affordability you must know without looking.
-    const rollCost = PLAYER.roll.stamina / p.maxStamina;
+    // The cost is the WEAPON's, not the table's — an axe roll is dearer.
+    const rollCost = p.rollStamina / p.maxStamina;
     const canRoll = st >= rollCost && p.staminaLock <= 0;
     this.stBar.classList.toggle('canroll', canRoll);
     if (canRoll) {
@@ -78,7 +82,10 @@ export class Hud {
     } else if (e && !e.dead) {
       this.foe.classList.add('on');
       this.foe.classList.remove('effigy');
-      this.foeName.textContent = 'The Slagbound';
+      // With a crowd, which body this bar describes stops being obvious, so
+      // it says how many are still standing.
+      this.foeName.textContent = standing > 1
+        ? `The Slagbound · ${standing} standing` : 'The Slagbound';
       const eh = clamp(e.hp / e.maxHp, 0, 1);
       this.foeFill.style.width = (eh * 100) + '%';
       this._foeChip += (eh - this._foeChip) * Math.min(1, dt * 3.2);
@@ -155,7 +162,7 @@ export class Debug {
     this.fps += (1 / Math.max(dtReal, 1e-4) - this.fps) * 0.08;
 
     const p = game.player;
-    const e = game.enemies[0];
+    const e = game.focusEnemy;
 
     const pPhase = p.atk ? p.phase : '—';
     const ePhase = e && e.atk ? e.phase : '—';
@@ -170,12 +177,16 @@ export class Debug {
       ['phase left', p.atk ? p.phaseRemaining.toFixed(3) + 's' : '—'],
       ['combo', p.atk ? `${p.comboIndex + 1}/${p.weapon.light.length}` : '—'],
       ['i-frames', p.invulnerable ? 'ACTIVE' : (p.state === STATE.ROLL ? 'roll, no i-frames' : 'no')],
+      ['weapon', `${p.weapon.id}  (${p.weapon.klass})`],
+      ['armour', p.armored ? 'HYPERARMOUR' : '—'],
       ['stamina', p.stamina.toFixed(0) + '/' + p.maxStamina + (p.staminaLock > 0 ? '  LOCKED' : '')],
       ['hp', p.hp.toFixed(0) + '/' + p.maxHp],
       ['lock', p.lockTarget && !p.lockTarget.dead ? 'on' : 'off'],
       ['last in', p.lastAction],
       ['—', ''],
-      ['SLAGBOUND', ''],
+      [`SLAGBOUND  (${game.livingEnemies.length} up)`, ''],
+      ['token', game.token ? (game.token === e ? 'this one' : 'another') : `none, ${game.aggroCd.toFixed(2)}s`],
+      ['winding up', game.windupEnemy ? '1' : '0'],
       ['state', e ? e.state + (e.dead ? ' (dead)' : '') : '—'],
       ['intent', e ? e.intent : '—'],
       ['action', e && e.atk ? e.atkLabel + '  ' + ePhase : '—'],

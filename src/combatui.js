@@ -141,11 +141,14 @@ export class CombatUI {
     if (!visible) { this.warn.classList.remove('on'); return; }
 
     const p = game.player;
-    const e = game.enemies[0];
+    // The aggro token guarantees at most one enemy is ever winding up, so the
+    // threat arc has exactly one thing to point at and never has to choose.
+    const e = game.windupEnemy;
 
     // --- combo pips -------------------------------------------------------
+    // Chain length comes off the weapon: the greataxe has two links, not three.
     this.setChainLength(p.weapon.light.length);
-    const inChain = p.state === STATE.ATTACK && p.atk && p.atk.id.startsWith('L');
+    const inChain = p.state === STATE.ATTACK && p.atk && p.weapon.light.includes(p.atk);
     const idx = inChain ? p.comboIndex : -1;
     for (let i = 0; i < this.pips.length; i++) {
       this.pips[i].className = i < idx ? 'spent' : (i === idx ? 'live' : '');
@@ -155,7 +158,7 @@ export class CombatUI {
     // --- incoming-attack warning -----------------------------------------
     // On a fixed isometric camera the enemy can wind up from a bearing where
     // its own body hides the floor decal. This arc points at the threat.
-    const incoming = this.showThreat && e && !e.dead && e.state === STATE.ATTACK && e.phase === PHASE.WINDUP;
+    const incoming = this.showThreat && !!e;
     if (incoming) {
       // Convert a world bearing into a screen angle for this fixed camera.
       _v.set(e.x, 1.0, e.z).project(camera);

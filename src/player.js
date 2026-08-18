@@ -5,12 +5,22 @@ import { clamp, damp, turnToward, angleDelta } from './util.js';
 
 export class Player extends Actor {
   constructor(opts = {}) {
-    super({ ...PLAYER, reach: WEAPONS.sword.reach }, { ...opts, isPlayer: true });
-    this.weapon = WEAPONS[opts.weapon || 'sword'];
+    // The weapon IS the class, so it has to be resolved before anything else —
+    // reach, roll weight and movement all come off it. A stub weapon selected
+    // from a stale save falls back to the blade rather than crashing the boot.
+    const w = WEAPONS[opts.weapon];
+    const weapon = (w && !w.stub) ? w : WEAPONS.sword;
+    super({ ...PLAYER, reach: weapon.reach }, { ...opts, isPlayer: true });
+    this.weapon = weapon;
 
     // Attributes resolve to numbers exactly once, here. Everything downstream
     // reads the derived values rather than the stats themselves.
-    this.build = opts.build || defaultBuild();
+    // Merged against the defaults rather than trusted: a build can arrive from
+    // a stale localStorage save or from sim({weapon}), and a missing stat would
+    // otherwise derive to NaN health.
+    const d = defaultBuild();
+    const b = opts.build || {};
+    this.build = { ...d, ...b, stats: { ...d.stats, ...(b.stats || {}) } };
     this.derived = derive(this.build);
     this.maxHp = this.derived.hp;
     this.hp = this.derived.hp;
@@ -23,7 +33,7 @@ export class Player extends Actor {
 
     this.comboIndex = 0;
     this.rollDir = 0;
-    this.rollDistance = PLAYER.roll.distance;
+    this.rollDistance = this.derived.rollDistance * this.rollScale.distance;
     this.iframeActive = false;
     this.guardFlash = 0;
     this.staggerT = 0;
@@ -37,6 +47,28 @@ export class Player extends Actor {
   get guard() {
     return this.state === STATE.GUARD ? this.weapon.guard : null;
   }
+
+  /* ---- the roll, as this weapon carries it ------------------------------
+     Weight changes how far the dodge travels, how long you are on the floor
+     afterwards and what it costs. It deliberately does NOT change the i-frame
+     WINDOW — agility owns that — so a heavy weapon dodges just as safely and
+     simply cannot reposition while it does. */
+  get rollScale() { return this.weapon.roll || { distance: 1, duration: 1, stamina: 1 }; }
+  get rollDuration() { return PLAYER.roll.duration * this.rollScale.duration; }
+  get rollStamina() { return PLAYER.roll.stamina * this.rollScale.stamina; }
+
+  /* ---- hyperarmour -------------------------------------------------------
+     True only on an attack that declares it, and only through windup+active.
+     Recovery is never armoured: the commitment has to stay punishable or the
+     weapon becomes a way of ignoring the fight rather than of trading with
+     it. Read by combat.js, which skips the stagger and bills the extra
+     damage instead. */
+  get armored() {
+    if (this.state !== STATE.ATTACK || !this.atk || !this.atk.armor) return false;
+    const p = this.phase;
+    return p === PHASE.WINDUP || p === PHASE.ACTIVE;
+  }
+  get armorDamageMul() { return this.weapon.armorDamageMul ?? 1; }
 
   spendStamina(n) {
     this.stamina = Math.max(0, this.stamina - n);
@@ -87,17 +119,21 @@ export class Player extends Actor {
     // ================= ROLL =============================================
     if (this.state === STATE.ROLL) {
       const R = PLAYER.roll;
+      const dur = this.rollDuration;
       this.stateT += dt;
-      const t = this.stateT / R.duration;
+      const t = this.stateT / dur;
+      // The invulnerable window is the same length whatever you carry. A
+      // heavier roll is longer, so more of it is spent NOT invulnerable —
+      // that tail is the weight, and it is where a greataxe gets punished.
       this.iframeActive = this.stateT >= R.iframeStart &&
                           this.stateT <= R.iframeStart + this.derived.iframeWindow;
 
       // Speed curve: fast out of the gate, dead stop at the end.
-      const speed = (this.rollDistance / R.duration) * 2.1 * Math.max(0, 1 - t) ** 0.7;
+      const speed = (this.rollDistance / dur) * 2.1 * Math.max(0, 1 - t) ** 0.7;
       this.vx = Math.sin(this.rollDir) * speed;
       this.vz = Math.cos(this.rollDir) * speed;
 
-      if (this.stateT >= R.duration) { this.state = STATE.IDLE; this.stateT = 0; this.iframeActive = false; }
+      if (this.stateT >= dur) { this.state = STATE.IDLE; this.stateT = 0; this.iframeActive = false; }
       return;
     }
 
@@ -132,7 +168,7 @@ export class Player extends Actor {
         }
       }
       // Roll cancels recovery — the classic Souls escape, at full stamina price.
-      if (this.phase === PHASE.RECOVER && input.peek('roll') && this.canSpend(PLAYER.roll.stamina)) {
+      if (this.phase === PHASE.RECOVER && input.peek('roll') && this.canSpend(this.rollStamina)) {
         input.take('roll');
         this._beginRoll(wantX, wantZ, hasInput, locked);
         return;
@@ -143,7 +179,7 @@ export class Player extends Actor {
     }
 
     // ================= FREE STATES (idle / move / guard) =================
-    if (input.take('roll') && this.canSpend(PLAYER.roll.stamina)) {
+    if (input.take('roll') && this.canSpend(this.rollStamina)) {
       this._beginRoll(wantX, wantZ, hasInput, locked);
       return;
     }
@@ -195,18 +231,18 @@ export class Player extends Actor {
 
   _beginRoll(wantX, wantZ, hasInput, locked) {
     const R = PLAYER.roll;
-    this.spendStamina(R.stamina);
+    this.spendStamina(this.rollStamina);
     this.state = STATE.ROLL;
     this.stateT = 0;
     this.atk = null;
     this.comboIndex = 0;
     if (hasInput) {
       this.rollDir = Math.atan2(wantX, wantZ);
-      this.rollDistance = this.derived.rollDistance;
+      this.rollDistance = this.derived.rollDistance * this.rollScale.distance;
     } else {
       // No direction held: backstep. Away from the target if locked on.
       this.rollDir = locked ? this.angleTo(this.lockTarget) + Math.PI : this.facing + Math.PI;
-      this.rollDistance = R.backstepDistance;
+      this.rollDistance = R.backstepDistance * this.rollScale.distance;
     }
     if (!locked) this.facing = this.rollDir;
     this.lastAction = hasInput ? 'roll' : 'backstep';
