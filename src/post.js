@@ -60,6 +60,8 @@ uniform float uTime;
 uniform float uExposure;
 uniform vec3  uLift;
 uniform vec3  uGain;
+uniform float uHurt;      // 0..1, how close to dead
+uniform float uAberr;     // edge chromatic split, in UV
 varying vec2 vUv;
 
 // three.js applies renderer.toneMapping ONLY when drawing to the default
@@ -92,7 +94,19 @@ vec3 aces(vec3 color) {
 }
 
 void main() {
-  vec3 base  = texture2D(tDiffuse, vUv).rgb;
+  /* CHROMATIC SPLIT, at the edges only. Sampled along the vector out from the
+     centre and scaled by the square of the distance, so the middle of the
+     frame — where the fight is — is untouched and the corners get a lens.
+     This is the cheapest thing in the whole chain that reads as "a camera"
+     rather than as "a render". */
+  vec2 off = (vUv - 0.5);
+  float rad = dot(off, off);
+  vec2 split = off * rad * uAberr;
+  vec3 base;
+  base.r = texture2D(tDiffuse, vUv + split).r;
+  base.g = texture2D(tDiffuse, vUv).g;
+  base.b = texture2D(tDiffuse, vUv - split).b;
+
   vec3 bloom = texture2D(tBloomA, vUv).rgb * 0.62
              + texture2D(tBloomB, vUv).rgb * 0.38;
 
@@ -105,9 +119,21 @@ void main() {
   c = c * mix(vec3(1.0), uGain, smoothstep(0.25, 0.95, l));
 
   // Vignette, measured in an aspect-corrected disc so it doesn't go oval.
-  vec2 p = (vUv - 0.5) * vec2(1.0, 1.0);
-  float d = length(p) * 1.414;
+  float d = length(off) * 1.414 * 2.0;
   c *= mix(1.0, 1.0 - uVignette, smoothstep(0.35, 1.05, d));
+
+  /* HURT. Below a third health the frame closes in and goes red at the edges.
+     It is doing a job the health bar cannot: a bar is a number you have to
+     look AT, and the thing you cannot afford to look away from in this game is
+     the floor. This is peripheral by construction — you read it without
+     moving your eyes. It breathes rather than pulsing, so it never competes
+     with the attack telegraph for the same visual channel. */
+  if (uHurt > 0.001) {
+    float beat = 0.72 + 0.28 * sin(uTime * 3.4);
+    float edge = smoothstep(0.18, 0.95, d);
+    c = mix(c, c * vec3(1.15, 0.24, 0.18), edge * uHurt * beat * 0.85);
+    c *= mix(1.0, 1.0 - 0.34 * uHurt, edge);
+  }
 
   // A little grain keeps the large flat darks from banding.
   float n = fract(sin(dot(vUv * (1.0 + uTime * 0.0001), vec2(12.9898, 78.233))) * 43758.5453);
@@ -168,11 +194,29 @@ export class Post {
         uExposure: { value: 1.15 },
         uLift: { value: new THREE.Color(0.0018, 0.0030, 0.0055) },  // cool shadows
         uGain: { value: new THREE.Color(1.05, 0.995, 0.93) },    // warm highlights
+        uHurt: { value: 0 },
+        /* The split is in UV, and `rad` peaks near 0.5 — so this number is
+           roughly HALF the maximum offset as a fraction of the screen. 0.9
+           was a nine-percent rainbow; 0.10 was still one percent, which is
+           seven pixels of red/green fringe on every corner object. This
+           effect only works at all when you cannot point at it. */
+        uAberr: { value: 0.006 },
       },
       vertexShader: QUAD_VERT, fragmentShader: COMPOSITE_FRAG, depthTest: false, depthWrite: false,
     });
 
     this.setSize(opts.width || 1, opts.height || 1);
+  }
+
+  /* Driven per frame by the View. Kept as one call rather than as public
+     uniforms so nothing outside this file has to know the chain's shape. */
+  setState({ hurt, grade }) {
+    const u = this.matComposite.uniforms;
+    if (hurt !== undefined) u.uHurt.value = hurt;
+    if (grade) {
+      u.uLift.value.setRGB(grade.lift[0], grade.lift[1], grade.lift[2]);
+      u.uGain.value.setRGB(grade.gain[0], grade.gain[1], grade.gain[2]);
+    }
   }
 
   setSize(w, h) {

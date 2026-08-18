@@ -154,6 +154,22 @@
              background:radial-gradient(ellipse at 50% 42%,rgba(20,14,10,.72),rgba(6,6,7,.94) 72%);
              backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
   .menu-root.on{display:block}
+  /* THE MENU'S OWN GROUND. It used to be a blur over whatever frame the game
+     happened to be on, which meant the title screen looked different every
+     time you saw it and the pause menu inherited whatever was behind it. A
+     menu needs to be a PLACE, so it gets its own: a slow warm gradient off
+     one corner, a fine rule of embers along the bottom, and a vertical scored
+     texture that reads as rolled iron. */
+  .menu-root::before{content:'';position:absolute;inset:0;pointer-events:none;
+       background:
+         radial-gradient(90% 70% at 12% 4%, rgba(212,85,42,.14), transparent 62%),
+         radial-gradient(70% 60% at 92% 96%, rgba(255,179,71,.08), transparent 60%),
+         repeating-linear-gradient(90deg, rgba(255,255,255,.014) 0 1px,
+                                          transparent 1px 3px)}
+  .menu-root::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
+       pointer-events:none;
+       background:linear-gradient(90deg,transparent,rgba(212,85,42,.55),
+                                  rgba(255,179,71,.5),rgba(212,85,42,.55),transparent)}
   .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
           justify-content:center;padding:clamp(20px,5vw,56px);text-align:center;gap:0;
           overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
@@ -170,9 +186,25 @@
   .screen.on{display:flex;animation:fadeUp .45s ease both}
   @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
+  /* The wordmark is struck rather than printed: a bright top edge and a dark
+     bottom one, which is what a letter cut into metal looks like from above.
+     It also breathes, very slowly — the works is not quite out. */
   .wordmark{font-size:clamp(52px,13vw,124px);letter-spacing:.26em;margin-left:.26em;
-            color:#e9dcc4;line-height:1;
-            text-shadow:0 0 60px rgba(212,85,42,.42),0 6px 40px rgba(0,0,0,.9)}
+            color:#e9dcc4;line-height:1;position:relative;
+            text-shadow:
+              0 -1px 0 rgba(255,231,196,.5),
+              0 2px 0 rgba(0,0,0,.85),
+              0 0 60px rgba(212,85,42,.42),
+              0 6px 40px rgba(0,0,0,.9);
+            animation:emberBreathe 7s ease-in-out infinite}
+  @keyframes emberBreathe{
+    0%,100%{text-shadow:0 -1px 0 rgba(255,231,196,.5),0 2px 0 rgba(0,0,0,.85),
+            0 0 54px rgba(212,85,42,.34),0 6px 40px rgba(0,0,0,.9)}
+    50%{text-shadow:0 -1px 0 rgba(255,231,196,.62),0 2px 0 rgba(0,0,0,.85),
+            0 0 82px rgba(212,85,42,.52),0 6px 40px rgba(0,0,0,.9)}}
+  /* A hairline under the title, spreading from the middle. */
+  .tagline::after{content:'';display:block;width:170px;height:1px;margin:16px auto 0;
+       background:linear-gradient(90deg,transparent,rgba(212,85,42,.75),transparent)}
   .tagline{margin-top:20px;font-size:clamp(11px,2.4vw,14px);letter-spacing:.3em;
            text-transform:uppercase;color:var(--ember)}
   .flavour{margin-top:30px;max-width:52ch;font-size:clamp(13px,2.6vw,16px);line-height:1.85;
@@ -182,17 +214,33 @@
 
   .btn-row{display:flex;gap:14px;margin-top:38px;flex-wrap:wrap;justify-content:center}
   .btn-col{display:flex;flex-direction:column;gap:12px;margin-top:26px;width:min(320px,86vw)}
-  .btn{padding:14px 30px;border:1px solid var(--edge);background:rgba(0,0,0,.35);
+  /* The fill WIPES across from the left rather than fading in. A fade is a
+     state change; a wipe is a thing happening, and a menu made of things
+     happening is worth pressing. */
+  .btn{position:relative;padding:14px 30px;border:1px solid var(--edge);
+       background:rgba(0,0,0,.35);overflow:hidden;
        letter-spacing:.2em;font-size:12px;text-transform:uppercase;color:var(--dim);
-       transition:.18s;min-height:48px}
+       transition:color .18s,border-color .18s;min-height:48px}
+  .btn::before{content:'';position:absolute;inset:0;transform:scaleX(0);
+       transform-origin:left;transition:transform .26s cubic-bezier(.2,.9,.3,1);
+       background:linear-gradient(90deg,rgba(212,85,42,.26),rgba(212,85,42,.08))}
+  .btn:hover::before,.btn:focus-visible::before{transform:scaleX(1)}
+  .btn>*{position:relative}
   .btn:hover,.btn:focus-visible{color:var(--ink);border-color:rgba(212,85,42,.7);
-       background:rgba(212,85,42,.12);outline:none}
+       outline:none}
+  /* A bracket on the active one, which is how a rack marks the thing in hand. */
+  .btn.primary::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+       background:linear-gradient(180deg,var(--ember),var(--hot))}
   .btn.primary{color:var(--ink);border-color:rgba(212,85,42,.55)}
   .btn.ghost{border-color:transparent;color:var(--faint);font-size:11px}
   .btn.ghost:hover{color:var(--dim);background:transparent}
 
-  .panel-title{font-size:13px;letter-spacing:.4em;color:var(--ember);text-transform:uppercase;
-               margin-bottom:8px}
+  .panel-title{position:relative;font-size:13px;letter-spacing:.4em;color:var(--ember);
+               text-transform:uppercase;margin-bottom:8px;
+               display:flex;align-items:center;gap:14px;justify-content:center}
+  .panel-title::before,.panel-title::after{content:'';height:1px;width:52px;
+       background:linear-gradient(90deg,transparent,rgba(212,85,42,.6))}
+  .panel-title::after{transform:scaleX(-1)}
   .settings-body{width:min(520px,92vw);margin-top:22px;text-align:left;
                  max-height:56vh;overflow-y:auto;padding-right:4px}
   .srow{display:flex;align-items:center;justify-content:space-between;gap:18px;

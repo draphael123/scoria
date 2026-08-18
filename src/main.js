@@ -762,6 +762,15 @@ function frame(now) {
   view.updateSparks(dtReal);
   // The enemy list goes in so the camera can widen for a spread-out crowd.
   view.updateCamera(game.player, game.player.lockTarget, dtReal, game.enemies);
+  /* The frame closes in and goes red when you are nearly dead. Below a third,
+     ramped to full at a tenth — a bar is a number you have to look AT, and the
+     thing you cannot afford to look away from here is the floor. */
+  {
+    const f = game.player.hp / game.player.maxHp;
+    const hurt = started && !game.zone && !game.player.dead
+      ? Math.max(0, Math.min(1, (0.34 - f) / 0.24)) : 0;
+    view.setHurt(hurt);
+  }
   view.update(dtReal);            // braziers, embers, chains, occluder fade
   view.render(dtReal);
 

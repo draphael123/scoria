@@ -222,24 +222,32 @@ export class View {
     const LOOK = {
       // Indoors. Brown air, no moon to speak of, torches doing all the work.
       undercroft: { fog: 0x241a0c, bg: 0x0a0705, moon: 0xffb27a, lit: 1.30, exp: 1.42,
-                    near: 30, far: 66 },
+                    near: 30, far: 66,
+                    lift: [0.010, 0.005, 0.001], gain: [1.08, 0.97, 0.86] },
       // The town is the only place with a sky worth looking at: colder, wider
       // and higher-key than anywhere in the wood, because arriving somewhere
       // safe should look like a different time of night.
-      town:     { fog: 0x1a2130, bg: 0x0d121b, moon: 0xdbeaff, lit: 3.1, exp: 1.34 },
-      clearing: { fog: 0x0b0e13, bg: 0x06080b, moon: 0xbdd2ea, lit: 1.90, exp: 1.15 },
+      town:     { fog: 0x1a2130, bg: 0x0d121b, moon: 0xdbeaff, lit: 3.1, exp: 1.34,
+                  lift: [0.002, 0.004, 0.009], gain: [1.03, 1.00, 0.98] },
+      clearing: { fog: 0x0b0e13, bg: 0x06080b, moon: 0xbdd2ea, lit: 1.90, exp: 1.15,
+                  lift: [0.002, 0.003, 0.006], gain: [1.05, 1.00, 0.93] },
       // The barrow ground: colder and bluer than the clearing, nothing lit.
-      ossuary:  { fog: 0x0c1016, bg: 0x05070a, moon: 0xcfe0f2, lit: 2.35, exp: 1.05 },
+      ossuary:  { fog: 0x0c1016, bg: 0x05070a, moon: 0xcfe0f2, lit: 2.35, exp: 1.05,
+                  lift: [0.001, 0.003, 0.009], gain: [0.98, 1.00, 1.06] },
       // The felling: the most open and best-lit room in the wood, which is
       // exactly why it is the one with archers in it.
-      felling:  { fog: 0x131414, bg: 0x06070a, moon: 0xe6ecf6, lit: 3.10, exp: 1.02 },
+      felling:  { fog: 0x131414, bg: 0x06070a, moon: 0xe6ecf6, lit: 3.10, exp: 1.02,
+                  lift: [0.004, 0.004, 0.004], gain: [1.04, 1.02, 0.96] },
       // The bog: green, close and heavy. You can see the air.
       bog:      { fog: 0x0e1712, bg: 0x050907, moon: 0xa8c8b4, lit: 1.75, exp: 1.12,
-                  near: 26, far: 74 },
+                  near: 26, far: 74,
+                  lift: [0.001, 0.007, 0.004], gain: [0.94, 1.05, 0.97] },
       // The burn: the one warm room in the wood.
-      charcoal: { fog: 0x140a06, bg: 0x0a0503, moon: 0x8fa0bc, lit: 1.05, exp: 1.22 },
+      charcoal: { fog: 0x140a06, bg: 0x0a0503, moon: 0x8fa0bc, lit: 1.05, exp: 1.22,
+                  lift: [0.008, 0.004, 0.001], gain: [1.09, 0.98, 0.86] },
       // The works: hotter and dirtier still, and the moon has given up.
-      works:    { fog: 0x180a05, bg: 0x0b0402, moon: 0x7a8496, lit: 0.85, exp: 1.26 },
+      works:    { fog: 0x180a05, bg: 0x0b0402, moon: 0x7a8496, lit: 0.85, exp: 1.26,
+                  lift: [0.011, 0.004, 0.001], gain: [1.12, 0.96, 0.82] },
     };
     const L = LOOK[name] || LOOK.clearing;
     this.scene.fog.color.setHex(L.fog);
@@ -254,6 +262,12 @@ export class View {
     // Shafts of moonlight through a broken roof belong to the WOOD. Indoors
     // they were three fifteen-metre cones standing in the middle of a cellar.
     for (const sh of (this.fx.shafts || [])) sh.visible = (name !== 'undercroft' && name !== 'town');
+    /* The GRADE is per room too. Fog and moonlight change what a place is lit
+       BY; the grade changes what the picture of it is made of, and doing both
+       is the difference between six rooms and six photographs of one room. */
+    if (this.post && L.lift) {
+      this.post.setState({ grade: { lift: L.lift, gain: L.gain } });
+    }
   }
 
 
@@ -871,6 +885,13 @@ export class View {
     // fighters fill the screen and all spatial read is lost.
     this.zoomBias = this.w / this.h < 0.85 ? 1.5 : 1;
     this._applyFrustum();
+  }
+
+  /* How close to dead, 0..1, for the peripheral red. Ramped rather than
+     switched at a threshold so it arrives as something you notice rather than
+     as something that turns on. */
+  setHurt(frac) {
+    if (this.post) this.post.setState({ hurt: Math.max(0, Math.min(1, frac)) });
   }
 
   render(dt) { this.post.render(this.scene, this.camera, dt); }
