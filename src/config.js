@@ -610,6 +610,18 @@ export const SLAGBOUND = {
       step: 0.7,
       weight: 0.62, minRange: 0, maxRange: 3.4,
     },
+    /* STAMP. Its two swings are both cones in FRONT of it, so the answer
+       to a Slagbound was to get inside its reach and stay there. This is a
+       ring centred on its own feet: close is no longer safe, and the roll
+       has to go somewhere rather than just through. */
+    stamp: {
+      id: 'stamp', label: 'STAMP',
+      windup: 0.62, active: 0.12, recover: 0.86,
+      damage: 18, poise: 0,
+      shape: 'circle', radius: 2.1, offset: 0.2,
+      step: 0, knock: 7,
+      weight: 0.22, minRange: 0, maxRange: 2.3,
+    },
     overhead: {
       id: 'overhead', label: 'OVERHEAD',
       windup: 0.88, active: 0.12, recover: 0.95,
@@ -680,6 +692,19 @@ export const CINDERBONE = {
       shape: 'arc', reach: 2.05, arc: 1.30,
       step: 0.9,
       weight: 0.66, minRange: 0, maxRange: 2.6,
+    },
+    /* HOOK. A long, narrow lunge on the sorting hook. Both of its other
+       swings are wide and short, so the way to be safe was to sit just
+       outside them — this reaches a metre and a half further than either
+       and covers almost no arc, which makes stepping SIDEWAYS the answer
+       rather than stepping back. */
+    hook: {
+      id: 'hook', label: 'HOOK',
+      windup: 0.52, active: 0.09, recover: 0.66,
+      damage: 12, poise: 0,
+      shape: 'arc', reach: 3.7, arc: 0.55,
+      step: 2.1,
+      weight: 0.24, minRange: 1.9, maxRange: 4.4,
     },
     scythe: {
       id: 'scythe', label: 'SCYTHE',
@@ -752,6 +777,19 @@ export const BOLTBONE = {
       weight: 1, minRange: 2.4, maxRange: 11,
     },
     // What it does when you have already arrived. Bad, on purpose.
+    /* SNAPSHOT. Half the windup of its aimed shot and half the damage. The
+       Boltbone's whole lesson is "close on the archer", and a bow that only
+       ever fires slowly makes that free — this is the one that makes you
+       cross the ground rather than stroll it. */
+    snap: {
+      id: 'snap', label: 'SNAPSHOT',
+      windup: 0.34, active: 0.08, recover: 0.72,
+      damage: 8, poise: 0,
+      shape: 'arc', reach: 1.6, arc: 0.5,
+      shot: { speed: 17, radius: 0.24, life: 1.6 },
+      step: 0,
+      weight: 0.3, minRange: 3.5, maxRange: 16,
+    },
     shove: {
       id: 'shove', label: 'SHOVE',
       windup: 0.34, active: 0.09, recover: 0.58,
@@ -817,6 +855,22 @@ export const KILNWARDEN = {
       lead: 0.40,             // how far ahead of your velocity it aims
       step: 0,
       weight: 1, minRange: 2.6, maxRange: 10.5,
+    },
+    /* BANK. A second ground zone, laid SHORT and wide rather than long and
+       narrow, and dropped where you are standing rather than where you are
+       going. Its other zone rewards moving; this one punishes standing to
+       read it, which is the pair that makes a zone-layer worth having. */
+    bank: {
+      id: 'bank', label: 'BANK',
+      windup: 0.86, active: 0.5, recover: 1.0,
+      damage: 15, poise: 0,
+      shape: 'circle', radius: 2.9, offset: 0,
+      zone: true, telegraph: 'zone',
+      step: 0,
+      // Nudged up from 0.26: at that weight it never once came out across
+      // three forty-five-second runs of the room, which is the same as not
+      // having written it.
+      weight: 0.38, minRange: 2.5, maxRange: 11,
     },
     scour: {
       id: 'scour', label: 'SCOUR',
@@ -893,6 +947,18 @@ export const SKIMMER = {
       step: 1.4, knock: 8.0,
       weight: 0.60, minRange: 0, maxRange: 3.4,
     },
+    /* TURN. It is immune from the front, so the answer is to get behind it
+       — and it needs one thing that says the back is only safe until it
+       decides otherwise. A full 360 with a long windup: readable, avoidable,
+       and it means you cannot simply live back there. */
+    turn: {
+      id: 'turn', label: 'TURN',
+      windup: 0.78, active: 0.14, recover: 1.05,
+      damage: 17, poise: 0,
+      shape: 'arc', reach: 3.0, arc: 6.3,
+      step: 0, knock: 6,
+      weight: 0.22, minRange: 0, maxRange: 3.4,
+    },
     sweep: {
       id: 'sweep', label: 'SKIM',
       // The one attack that opens its own guard: it swings the plate ACROSS,
@@ -959,6 +1025,19 @@ export const BLACKDAMP = {
       step: 0.8,
       weight: 0.66, minRange: 0, maxRange: 2.8,
     },
+    /* SETTLE. A pool of it, left behind on the floor. The Blackdamp takes
+       your stamina and its other two do it by touching you; this one does it
+       by taking the ground away, which is the version that changes where the
+       fight happens rather than how it goes. */
+    settle: {
+      id: 'settle', label: 'SETTLE',
+      windup: 0.92, active: 0.7, recover: 0.9,
+      damage: 6, stamina: 26, poise: 0,
+      shape: 'circle', radius: 2.6, offset: 0,
+      zone: true, telegraph: 'zone',
+      step: 0,
+      weight: 0.24, minRange: 1.4, maxRange: 8,
+    },
     seep: {
       id: 'seep', label: 'SEEP',
       windup: 0.90, active: 0.16, recover: 0.85,
@@ -1021,8 +1100,10 @@ export const GAFFER = {
     label: 'KEEPING TIME',
   },
 
-  punishRange: 0,          // it never punishes; it never attacks
-  punishHesitate: 9,
+  // It still will not chase you down, but it is no longer a free kill once
+  // you have crossed the yard to it.
+  punishRange: 2.6,
+  punishHesitate: 1.1,
 
   hesitateMin: 2.2,
   hesitateMax: 3.6,
@@ -1031,6 +1112,18 @@ export const GAFFER = {
   attacks: {
     // One contemptuous shove, and only if you have already reached it. It is
     // not a fight, it is a man trying to get away from you.
+    /* CALL TIME. It is not a fighter, it is a man keeping the shift moving,
+       so its second move is not an attack at all in spirit: it slams the
+       ground and everything near it gets shoved off. Reaching the Gaffer used
+       to end the argument the moment you arrived. */
+    calltime: {
+      id: 'calltime', label: 'CALL TIME',
+      windup: 0.70, active: 0.12, recover: 1.20,
+      damage: 9, poise: 0,
+      shape: 'circle', radius: 2.8, offset: 0,
+      step: 0, knock: 12,
+      weight: 0.45, minRange: 0, maxRange: 3.0,
+    },
     rebuke: {
       id: 'rebuke', label: 'REBUKE',
       windup: 0.48, active: 0.10, recover: 0.90,
@@ -1085,6 +1178,18 @@ export const HUSK = {
   recoverIdle: 0.3,
 
   attacks: {
+    /* GRAB. The opening's second tell, and deliberately the OPPOSITE shape to
+       the first: the swipe is wide and short, this is narrow and long. One
+       enemy with one attack teaches "wait, then press"; one enemy with two
+       shapes teaches "READ, then press", which is the whole game. */
+    grab: {
+      id: 'grab', label: 'GRAB',
+      windup: 0.86, active: 0.12, recover: 0.80,
+      damage: 7, poise: 0,
+      shape: 'arc', reach: 2.9, arc: 0.6,
+      step: 1.5,
+      weight: 0.4, minRange: 1.2, maxRange: 3.6,
+    },
     swipe: {
       id: 'swipe', label: 'SWIPE',
       // A windup half again as long as anything in the run. This is the
@@ -1485,7 +1590,11 @@ export const ZONES = {
        BEFORE the wood asks you, so the posts are here rather than in a menu —
        and they are the same effigy the opening uses, because a thing you
        learned on should be the thing you practise on. */
-    dummies: [[-2.4, -8.6], [2.4, -8.6], [0, -10.4]],
+    // Down the far end of the street, past everything else. A training post
+    // beside the rack is a thing you trip over on the way out; a yard you have
+    // to walk to is somewhere you go ON PURPOSE, which is the difference
+    // between practice and clutter.
+    dummies: [[-11.2, -10.4], [-9.0, -12.0], [-12.6, -12.4]],
   },
   circle: {
     id: 'circle', name: 'The Burn Circle', theme: 'clearing',

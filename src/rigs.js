@@ -2587,35 +2587,41 @@ export function animateRig(rig, actor, dt, clock) {
     legAmp = 0.32;
     legPhase = Math.PI * 0.5;
   } else if (actor.state === STATE.ROLL) {
-    // A ROLL THAT ROLLS. The previous version leaned and crouched and never
-    // revolved, which is why it read as a crouch-slide rather than as a dodge
-    // — there was no axis in the rig to turn about. `tumble` is that axis.
-    //
-    // A BACKSTEP is deliberately not a tumble: it is a short hop away, and
-    // making both the same animation was most of why the dodge looked wrong
-    // in the first place.
+    /* A DODGE, not a roll.
+
+       It used to be a full forward revolution. A somersault is a big, slow,
+       committed thing, and this game already has a verb for committing — the
+       heavy. The dodge is supposed to be the CHEAP answer, the one you throw
+       out because you were not sure, and a body that turns upside down to do
+       it does not read as cheap. It also cost the animation a category of bug
+       all by itself: a rotating body has a lowest point, and finding a pivot
+       that never puts it under the floor took two attempts.
+
+       So it is a hard lateral push instead: drop the weight, drive off the
+       back leg, lead with the shoulder, and plant. Everything is a lean and a
+       crouch, the body stays the right way up, and the i-frame window is
+       exactly where it always was — the FEEL of the move is unchanged, only
+       what you see. A backstep is the same push aimed the other way.
+
+       `dir` is which side the push is on: dodges are aimed, so leaning into
+       the direction of travel is what sells the weight going with it. */
     const t = clamp(actor.stateT / rollDur, 0, 1);
-    const arc = Math.sin(Math.PI * t);
-    if (actor.backstep) {
-      lean = -0.55 * arc;
-      crouch = 0.30 * arc;
-      legAmp = 0.75 * arc;
-      legPhase = Math.PI * 0.5;
-      swing = A.rest - 0.35 * arc;
-      rig.pitch = -0.35 * arc;
-    } else {
-      // Ease-in-out through a full forward revolution, so the tuck happens
-      // fast and the landing settles rather than the body spinning at a
-      // constant rate like a wheel.
-      const spun = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      rig.pitch = -Math.PI * 2 * spun;
-      lean = -0.30 * arc;
-      crouch = 0.72 * arc;            // tuck hard
-      legAmp = 1.45 * arc;
-      legPhase = 0;
-      swing = A.rest - 0.9 * arc;
-      armCounter = 0;
-    }
+    // Front-loaded: the push happens NOW and the rest is recovering from it.
+    const drive = Math.sin(Math.PI * Math.min(1, t * 1.45));
+    const settle = clamp((t - 0.55) / 0.45, 0, 1);
+    const dir = actor.backstep ? -1 : 1;
+
+    // Sideways lean, out of the rig's roll axis rather than its pitch axis:
+    // this is the one animation in the game that happens across the body.
+    rig.pitch = dir * 0.34 * drive;
+    rig.tilt = -Math.sin(actor.rollRel || 0) * 0.55 * drive;
+
+    lean = dir * 0.62 * drive - 0.15 * settle;
+    crouch = 0.42 * drive;              // duck under it
+    legAmp = 1.25 * drive;              // scissor hard off the back leg
+    legPhase = Math.PI * 0.5;
+    swing = A.rest - 0.55 * drive;      // weapon arm trails
+    armCounter = 0.8;
   } else if (actor.state === STATE.STAGGER) {
     // Recoil hard, then sag. Reads as "that hurt" rather than "paused".
     const k = clamp(actor.staggerT || 0, 0, 1);
@@ -2654,14 +2660,21 @@ export function animateRig(rig, actor, dt, clock) {
   // a colour flash and a shove and no MOVEMENT of the body itself, which is
   // why blows landed on something that never reacted.
   rig.flinch = Math.max(0, (rig.flinch || 0) - dt * 6.0);
+  let roll = rig.tilt || 0;
   if (rig.flinch > 0) {
     const rel = (rig.hitFrom || 0) - actor.facing;
     lean += Math.cos(rel) * rig.flinch * 0.34;
-    rig.tumble.rotation.z = -Math.sin(rel) * rig.flinch * 0.30;
-  } else {
-    rig.tumble.rotation.z = damp(rig.tumble.rotation.z || 0, 0, 12, dt);
+    // Summed rather than assigned: the flinch and the dodge both want the
+    // body's roll axis, and whichever wrote last used to win outright.
+    roll += -Math.sin(rel) * rig.flinch * 0.30;
+    rig._rollRest = roll;
+  } else if (actor.state !== STATE.ROLL) {
+    roll = damp(rig._rollRest || 0, 0, 12, dt);
+    rig._rollRest = roll;
   }
+  rig.tumble.rotation.z = roll;
   rig.tumble.rotation.x = rig.pitch || 0;
+  rig.tilt = 0;
 
   rig.pivot.rotation.x = swing;
   rig.chest.rotation.x = rig.baseLean + lean;
@@ -2704,13 +2717,15 @@ export function animateRig(rig, actor, dt, clock) {
   rig.hips.position.y = h * (rig.isPlayer ? 0.44 : 0.4) - dip;
   rig.chest.position.y = h * (rig.isPlayer ? 0.44 : 0.4) - dip;
 
-  // A roll ARCS. It used to be lowered by 0.4 as well as rotated, and with a
-  // real pivot that put the body's lowest point well under the floor — which
-  // is what "the roll goes through the ground" was. It now rises slightly at
-  // the apex, like something leaving the floor and coming back to it.
+  /* A dodge SKIMS. It is a push along the floor, not a leap, so the rise is
+     small and it happens early — the body is briefly light on its feet at the
+     start of the push and back down for the plant. (When this was a somersault
+     the same line had to arc the body over its own lowest point, which is what
+     "the roll goes through the ground" was; a dodge that stays upright has no
+     lowest point to find.) */
   const rollT = actor.state === STATE.ROLL ? clamp(actor.stateT / rollDur, 0, 1) : 0;
   const hop = actor.state === STATE.ROLL
-    ? Math.sin(Math.PI * rollT) * (actor.backstep ? 0.18 : 0.26) : 0;
+    ? Math.sin(Math.PI * Math.min(1, rollT * 1.6)) * 0.09 : 0;
   g.position.y = hop;
 
   // Whatever the pose does, nothing may finish below the floor. A clamp here

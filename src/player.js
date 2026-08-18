@@ -448,8 +448,15 @@ export class Player extends Actor {
       this.rollDistance = R.backstepDistance * this.rollScale.distance;
     }
     if (!locked) this.facing = this.rollDir;
-    // A backstep is a hop, not a tumble. The renderer needs to know which.
+    // A backstep is a push straight back, not a sidestep. The renderer needs
+    // to know which.
     this.backstep = !hasInput;
+    /* Which SIDE the dodge is going, relative to where the body is pointing.
+       This only matters while locked on — unlocked you turn to face the way
+       you are going, so every dodge is a forward one. Locked, a dodge left and
+       a dodge right have to lean opposite ways or the animation is telling you
+       something the movement is not. */
+    this.rollRel = angleDelta(this.rollDir, this.facing);
     this.lastAction = hasInput ? 'roll' : 'backstep';
   }
 }
