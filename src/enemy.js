@@ -55,9 +55,21 @@ export class Foe extends Actor {
     this.slotWander = 0;                            // bounded, never integrated free
   }
 
+  /* How long it dithers before committing.
+
+     This read SLAGBOUND rather than its own definition until now — the refactor
+     that made every other tuning number come off `this.def` matched on
+     `SLAGBOUND.` with a trailing dot, and this line destructures the object
+     itself. So EVERY foe has been hesitating on the Slagbound's 0.45-1.15
+     range: the Cinderbones' 0.22-0.60, which is the entire "a crowd pressures
+     you through CADENCE" design, has never once been active.
+
+     Scaled by whatever support is in the room — the Gaffer does not hit you,
+     it makes everyone else hit you sooner, which is pressure the one-telegraph
+     rule can survive. */
   _rollHesitate() {
-    const { hesitateMin: a, hesitateMax: b } = SLAGBOUND;
-    return a + this.rng() * (b - a);
+    const { hesitateMin: a, hesitateMax: b } = this.def;
+    return (a + this.rng() * (b - a)) * (this.tempoMul || 1);
   }
 
   stagger(duration) {
@@ -79,6 +91,13 @@ export class Foe extends Actor {
 
     this.invuln = Math.max(0, this.invuln - dt);
     this.staggerResist = Math.max(0, this.staggerResist - dt);
+    this.guardOpen = Math.max(0, this.guardOpen - dt);
+    // The one attack that swings the plate across its own front leaves the
+    // body open for the whole swing — the tell and the window are the same
+    // thing, which is the only way a total frontal guard stays fair.
+    if (this.atk && this.atk.opensGuard && this.state === STATE.ATTACK) {
+      this.guardOpen = Math.max(this.guardOpen, 0.12);
+    }
 
     // Poise only comes back once you stop hitting it.
     this.poiseTimer += dt;

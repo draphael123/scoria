@@ -7,6 +7,7 @@ import { Forest } from './props.js';
 import { Fx } from './fx.js';
 import { Post } from './post.js';
 import { buildKnight, buildSlagbound, buildCinderbone, buildBoltbone, buildKilnwarden,
+         buildSkimmer, buildBlackdamp, buildGaffer,
          buildEffigy, animateRig, PAL } from './rigs.js';
 
 const C = {
@@ -295,6 +296,9 @@ export class View {
         cinderbone: buildCinderbone,
         boltbone: buildBoltbone,
         kilnwarden: buildKilnwarden,
+        skimmer: buildSkimmer,
+        blackdamp: buildBlackdamp,
+        gaffer: buildGaffer,
       };
       rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
           : actor.isEffigy ? buildEffigy(actor)
@@ -399,6 +403,14 @@ export class View {
         // Every lit part of a body banks together, or the token's tell is
         // half-on and reads as a rendering bug rather than as a state.
         if (rig.grate) rig.grate.material.emissiveIntensity = 2.4 * w * banked;
+        // A thrown-open plate has to be VISIBLE as thrown open, or the player
+        // has no way to know the window they earned is currently running.
+        if (rig.plate) {
+          const open = actor.guardOpen > 0;
+          rig.plate.rotation.z = damp(rig.plate.rotation.z || 0, open ? -1.15 : 0, 14, dt);
+          rig.plate.position.x = damp(rig.plate.position.x, open ? actor.radius * 1.7
+                                                                 : actor.radius * 0.85, 14, dt);
+        }
         if (rig.flame) rig.flame.material.emissiveIntensity = 2.4 * w * banked;
         if (rig.muzzle) rig.muzzle.material.emissiveIntensity = 1.4 * w * banked;
       }

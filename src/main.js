@@ -9,6 +9,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
+import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
 const canvas = document.getElementById('c');
@@ -82,6 +83,15 @@ const tutorial = new Tutorial(game, {
   },
 });
 
+/* The bestiary is a record of what you have MET, not a manual handed to you
+   at the start — so it is written when a room begins, from the bodies that
+   are actually in it. */
+function noteFoes() {
+  const ids = new Set();
+  for (const e of game.enemies) if (e.def && e.def.rig) ids.add(e.def.rig);
+  if (ids.size) markSeen([...ids]);
+}
+
 function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); syncWeaponUI(); }
 
 /* The off-hand key is one binding with a different verb per weapon, so the
@@ -119,7 +129,7 @@ const menu = new Menu(settings, {
     }
     tutorial.stop(); tutUI.setVisible(false);
     started = true; paused = false;
-    game.reset(); resetHudSmoothing();
+    game.reset(); resetHudSmoothing(); noteFoes();
   },
   onTrain() {
     game.previewMode = false;
@@ -170,6 +180,7 @@ const menu = new Menu(settings, {
     if (touch) touch.setEnabled(name === null && started);
   },
   onChange(key, value) { applySetting(key, value); audio.uiClick(); },
+  currentWeapon: () => game.player.weapon.id,
 });
 
 /* -------------------------------------------------------------------------
@@ -217,6 +228,10 @@ function onEvents(events) {
       view.addShake(0.7);
       hud.hit('taken');
       audio.guardBreak();
+    } else if (ev.result === 'clang') {
+      view.burst(ev.x, ev.z, 0xdfe9f2, 14, 1.1);
+      view.addShake(0.34);
+      audio.guard();
     } else if (ev.result === 'armored') {
       // You took it and kept swinging. Cold sparks and a small shake, so it
       // reads as absorbed rather than as a hit that failed to land.
@@ -310,6 +325,7 @@ function frame(now) {
     // the rigs have to be told rather than left showing the last room's state.
     if (game.roomIndex !== lastRoom) {
       lastRoom = game.roomIndex;
+      noteFoes();
       resetHudSmoothing();
       view.reap(new Set([game.player, ...game.enemies]));
       cui.flash(game.encounter.name.toUpperCase(), 'bad');
@@ -451,7 +467,7 @@ window.SCORIA = {
      whose Slice 1 additions are almost entirely positional. */
   smoke(n = 5) {
     const rows = [];
-    for (const encounter of ['duel', 'trio', 'ossuary', 'yard', 'kiln']) {
+    for (const encounter of ['duel', 'trio', 'ossuary', 'yard', 'gallery', 'kiln', 'casting']) {
       for (const weapon of ['sword', 'greataxe', 'daggers', 'tome']) {
         for (const policy of ['trade', 'heavy']) {
           // Only the asserts a given weapon actually declares are counted —

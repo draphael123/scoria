@@ -54,6 +54,12 @@ export class Actor {
     this.bleed = 0;
     this.bleedFresh = 0;
     this.bleedTick = 0;
+
+    // Seconds for which a frontal plate is thrown wide. Ticked by the owner.
+    this.guardOpen = 0;
+
+    // Seconds for which a frontal plate is thrown wide. Ticked by the owner.
+    this.guardOpen = 0;
   }
 
   /* ---- attack phase helpers ------------------------------------------- */

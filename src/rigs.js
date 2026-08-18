@@ -1527,6 +1527,408 @@ export function buildKilnwarden(actor) {
   };
 }
 
+/* ------------------------------------------------------------------------
+   THE SKIMMER. It pulled slag off the melt with a plate the size of a door.
+
+   The plate IS the read, and it has to be legible from any angle, because the
+   whole fight is the question "am I in front of it or behind it". So it is
+   enormous, flat, and carried square across the body — the largest single
+   surface in the game — and the back of it is a different colour from the
+   front, which is the cheapest possible way to answer that question at a
+   glance from across a dark room.
+   --------------------------------------------------------------------- */
+export function buildSkimmer(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  const bone = new THREE.MeshStandardMaterial({ color: 0x8f8574, roughness: 0.95 });
+  const boneD = new THREE.MeshStandardMaterial({ color: 0x6b6255, roughness: 0.97 });
+  const crust = new THREE.MeshStandardMaterial({ color: 0x2a221e, roughness: 1 });
+  const plateFront = new THREE.MeshStandardMaterial({
+    color: 0x4d4740, roughness: 0.62, metalness: 0.55 });
+  // The BACK of the plate is scorched bright by four hundred years of melt.
+  // If you can see this, you are behind it, and that is the entire fight.
+  const plateBack = new THREE.MeshStandardMaterial({
+    color: 0x8a3a16, roughness: 0.85, metalness: 0.3 });
+  const molten = new THREE.MeshStandardMaterial({
+    color: 0x1a0a04, emissive: PAL.crack, emissiveIntensity: 2.2, roughness: 1 });
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.40;
+  g.add(hips);
+  const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.68, r * 0.20, 5, 10), boneD);
+  pelvis.rotation.x = Math.PI / 2;
+  pelvis.scale.z = 0.72;
+  hips.add(pelvis);
+
+  const legGeo = new THREE.CapsuleGeometry(r * 0.28, h * 0.18, 3, 8);
+  const legL = limb(legGeo, bone, 0);
+  const legR = limb(legGeo, bone, 0);
+  legL.position.x = -r * 0.48;
+  legR.position.x = r * 0.48;
+  for (const leg of [legL, legR]) {
+    const knee = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.27, 0), crust);
+    knee.position.y = -h * 0.16;
+    leg.add(knee);
+    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.22, h * 0.14, 3, 7), bone);
+    shin.position.y = -h * 0.27;
+    shin.castShadow = true;
+    leg.add(shin);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.5, r * 0.22, r * 0.78), crust);
+    foot.position.set(0, -h * 0.365, r * 0.14);
+    foot.castShadow = true;
+    leg.add(foot);
+  }
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.40;
+  g.add(chest);
+
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.15, r * 0.19, h * 0.30, 7), boneD);
+  spine.position.set(0, h * 0.15, -r * 0.14);
+  chest.add(spine);
+  const ribs = new THREE.Group();
+  chest.add(ribs);
+  for (let i = 0; i < 5; i++) {
+    const hoop = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.78 * (1 - Math.abs(i - 1.8) * 0.10), r * 0.08, 4, 10,
+        Math.PI * 1.3), bone);
+    hoop.rotation.set(Math.PI / 2, 0, -Math.PI * 0.66);
+    hoop.position.y = h * (0.05 + i * 0.055);
+    hoop.scale.z = 0.74;
+    hoop.castShadow = true;
+    ribs.add(hoop);
+  }
+  const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.32, 10, 8), molten);
+  core.position.set(0, h * 0.16, -r * 0.06);
+  core.scale.set(1, 1.2, 0.7);
+  chest.add(core);
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.38;
+  chest.add(neck);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.44, 12, 10), boneD);
+  skull.scale.set(0.95, 0.96, 1.16);
+  skull.position.set(0, r * 0.18, r * 0.16);
+  skull.rotation.x = 0.16;
+  skull.castShadow = true;
+  neck.add(skull);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.52, r * 0.18, r * 0.46), boneD);
+  jaw.position.set(0, -r * 0.06, r * 0.30);
+  jaw.rotation.x = 0.4;
+  neck.add(jaw);
+  for (const sx of [-1, 1]) {
+    const pit = new THREE.Mesh(new THREE.ConeGeometry(r * 0.15, r * 0.32, 6),
+      new THREE.MeshStandardMaterial({ color: 0x0a0705, roughness: 1 }));
+    pit.rotation.x = -Math.PI / 2;
+    pit.position.set(sx * r * 0.19, r * 0.24, r * 0.36);
+    neck.add(pit);
+    const coal = new THREE.Mesh(new THREE.SphereGeometry(r * 0.09, 8, 6), molten);
+    coal.position.set(sx * r * 0.19, r * 0.24, r * 0.40);
+    neck.add(coal);
+  }
+
+  // THE PLATE, on the off arm and held square across the front. Deliberately
+  // wider than the body is: an armoured arc you can see the edges of is an
+  // armoured arc you can plan to walk around.
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.9, h * 0.28, 0);
+  chest.add(offArm);
+  offArm.add(limb(new THREE.CapsuleGeometry(r * 0.24, h * 0.16, 3, 7), bone, 0));
+
+  const plate = new THREE.Group();
+  plate.position.set(r * 0.85, -h * 0.10, r * 0.62);
+  offArm.add(plate);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.7, 0.14), plateFront);
+  face.castShadow = true;
+  plate.add(face);
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.6, 0.06), plateBack);
+  backing.position.z = -0.10;
+  plate.add(backing);
+  for (let i = 0; i < 3; i++) {
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1.72, 0.1), crust);
+    rib.position.set((i - 1) * 0.72, 0, 0.10);
+    plate.add(rib);
+  }
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(2.34, 0.16, 0.24), crust);
+  lip.position.y = -0.86;
+  plate.add(lip);
+
+  // A short hook in the main hand. It barely matters — the plate is the fight.
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.95, h * 0.26, 0);
+  chest.add(pivot);
+  pivot.add(limb(new THREE.CapsuleGeometry(r * 0.24, h * 0.15, 3, 7), bone, 0));
+  const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.1, 6), crust);
+  haft.rotation.x = Math.PI / 2;
+  haft.position.z = 0.55;
+  pivot.add(haft);
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.055, 4, 9, Math.PI * 1.1), crust);
+  hook.rotation.set(0, Math.PI / 2, 0.3);
+  hook.position.z = 1.1;
+  hook.castShadow = true;
+  pivot.add(hook);
+
+  g.add(makeNose(r, PAL.ember));
+
+  return {
+    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    body: spine, head: skull, blade: hook, shield: plate,
+    mat: bone, core, plate, plateBack,
+    tipScale: 1.15,
+    emissiveIdle: 0.06,
+    swingArc: { rest: -0.30, wind: -2.10, end: 1.25 },
+    baseLean: 0.16, stride: 0, flash: 0, spin: 0, isPlayer: false,
+  };
+}
+
+/* ------------------------------------------------------------------------
+   BLACKDAMP. The bad air, and whatever it was wearing.
+
+   Nothing else in the game is LOW. Every other body stands between 1.5 and
+   2.1 units tall, so a thing that comes up to your knee and spreads wide is
+   unmistakable in a crowd without needing a single distinguishing detail —
+   which matters, because it will always be in a crowd.
+
+   It is the one enemy with no bone showing. Whatever is under the sacking is
+   not something the game shows you.
+   --------------------------------------------------------------------- */
+export function buildBlackdamp(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  const shroud = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 1 });
+  const shroudD = new THREE.MeshStandardMaterial({ color: 0x0c0e10, roughness: 1 });
+  const damp = new THREE.MeshStandardMaterial({
+    color: 0x2b3a44, roughness: 1, transparent: true, opacity: 0.55 });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0x0a1418, emissive: 0x64d8e8, emissiveIntensity: 1.8, roughness: 1 });
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.34;
+  g.add(hips);
+  const legL = new THREE.Group();
+  const legR = new THREE.Group();
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.34;
+  g.add(chest);
+
+  // The mass: a wide, low, shapeless bulk.
+  const bulk = new THREE.Mesh(new THREE.SphereGeometry(r * 1.15, 14, 10), shroud);
+  bulk.scale.set(1.15, 0.62, 1.0);
+  bulk.position.y = h * 0.06;
+  bulk.castShadow = true;
+  chest.add(bulk);
+
+  // Sacking hanging off it, in overlapping skirts.
+  for (let i = 0; i < 3; i++) {
+    const skirt = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * (0.9 + i * 0.16), r * (1.16 + i * 0.2),
+        h * 0.10, 12, 1, true), i % 2 ? shroudD : shroud);
+    skirt.material.side = THREE.DoubleSide;
+    skirt.position.y = h * (0.02 - i * 0.07);
+    skirt.castShadow = true;
+    chest.add(skirt);
+  }
+
+  // The damp itself: a low translucent shell that hangs around it, so the
+  // thing has a visible REACH before it has swung at anything.
+  const haze = new THREE.Mesh(new THREE.SphereGeometry(r * 1.8, 14, 10), damp);
+  haze.scale.set(1, 0.34, 1);
+  haze.position.y = h * 0.02;
+  chest.add(haze);
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.16;
+  chest.add(neck);
+  // A hood with nothing in it but two lights, and they are COLD — the only
+  // cold light on any body in the game, because this is the thing that puts
+  // fires out.
+  const hood = new THREE.Mesh(new THREE.SphereGeometry(r * 0.56, 12, 9,
+    0, Math.PI * 2, 0, Math.PI * 0.62), shroudD);
+  hood.scale.set(1.1, 1.05, 1.25);
+  hood.position.y = r * 0.20;
+  hood.castShadow = true;
+  neck.add(hood);
+  const eyes = [];
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.10, 8, 6), eyeMat);
+    eye.position.set(sx * r * 0.17, r * 0.10, r * 0.42);
+    eye.scale.z = 0.6;
+    neck.add(eye);
+    eyes.push(eye);
+  }
+
+  // Arms are long and thin and drag — the only vertical it has.
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.86, h * 0.14, 0);
+  chest.add(pivot);
+  const armGeo = new THREE.CapsuleGeometry(r * 0.13, h * 0.26, 3, 6);
+  pivot.add(limb(armGeo, shroudD, 0));
+  const claw = new THREE.Mesh(new THREE.ConeGeometry(r * 0.17, r * 0.5, 5), shroud);
+  claw.rotation.x = Math.PI;
+  claw.position.y = -h * 0.34;
+  claw.castShadow = true;
+  pivot.add(claw);
+
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.86, h * 0.14, 0);
+  chest.add(offArm);
+  offArm.add(limb(armGeo, shroudD, 0));
+  const claw2 = new THREE.Mesh(new THREE.ConeGeometry(r * 0.17, r * 0.5, 5), shroud);
+  claw2.rotation.x = Math.PI;
+  claw2.position.y = -h * 0.34;
+  offArm.add(claw2);
+
+  g.add(makeNose(r, 0x8fd8e8));
+
+  return {
+    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    body: bulk, head: hood, blade: claw, shield: null,
+    mat: shroud, core: eyes[0], eyes, haze,
+    tipScale: 1.0,
+    emissiveIdle: 0,
+    swingArc: { rest: -0.20, wind: -1.70, end: 1.10 },
+    baseLean: 0.30, stride: 0, flash: 0, spin: 0, isPlayer: false,
+  };
+}
+
+/* ------------------------------------------------------------------------
+   THE GAFFER. The foreman. Never touched a tool.
+
+   It is the only body in the game with no weapon in either hand, and the only
+   one that is TALL AND THIN — everything else is either hunched, low, or
+   armoured. It carries a tally board and a lamp, and the lamp is the tell:
+   while it lives, the room is lit by it.
+   --------------------------------------------------------------------- */
+export function buildGaffer(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  const bone = new THREE.MeshStandardMaterial({ color: 0xa9a08e, roughness: 0.94 });
+  const coat = new THREE.MeshStandardMaterial({ color: 0x241d17, roughness: 0.98 });
+  const coatD = new THREE.MeshStandardMaterial({ color: 0x15100c, roughness: 1 });
+  const brass = new THREE.MeshStandardMaterial({ color: 0x8a6a24, roughness: 0.42, metalness: 0.78 });
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1206, emissive: 0xffc257, emissiveIntensity: 2.6, roughness: 1 });
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.46;
+  g.add(hips);
+
+  const legGeo = new THREE.CapsuleGeometry(r * 0.15, h * 0.34, 3, 6);
+  const legL = limb(legGeo, coatD, 0);
+  const legR = limb(legGeo, coatD, 0);
+  legL.position.x = -r * 0.28;
+  legR.position.x = r * 0.28;
+  for (const leg of [legL, legR]) {
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.32, r * 0.2, r * 0.56), coatD);
+    boot.position.set(0, -h * 0.42, r * 0.1);
+    boot.castShadow = true;
+    leg.add(boot);
+  }
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.46;
+  g.add(chest);
+
+  // A long coat: narrow, straight, buttoned. The only tidy thing left here.
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.52, r * 0.62, h * 0.34, 12), coat);
+  torso.position.y = h * 0.13;
+  torso.scale.z = 0.82;
+  torso.castShadow = true;
+  chest.add(torso);
+  const tails = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.62, r * 0.74, h * 0.22, 12, 1, true), coatD);
+  tails.material.side = THREE.DoubleSide;
+  tails.position.y = -h * 0.08;
+  tails.scale.z = 0.82;
+  tails.castShadow = true;
+  chest.add(tails);
+  for (let i = 0; i < 4; i++) {
+    const button = new THREE.Mesh(new THREE.SphereGeometry(r * 0.05, 6, 5), brass);
+    button.position.set(0, h * (0.02 + i * 0.07), r * 0.50);
+    chest.add(button);
+  }
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.32;
+  chest.add(neck);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.32, 12, 10), bone);
+  skull.scale.set(0.94, 1.06, 1.16);
+  skull.position.y = r * 0.34;
+  skull.castShadow = true;
+  neck.add(skull);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.34, r * 0.12, r * 0.34), bone);
+  jaw.position.set(0, r * 0.16, r * 0.16);
+  jaw.rotation.x = 0.3;
+  neck.add(jaw);
+  for (const sx of [-1, 1]) {
+    const pit = new THREE.Mesh(new THREE.ConeGeometry(r * 0.11, r * 0.24, 6),
+      new THREE.MeshStandardMaterial({ color: 0x0a0705, roughness: 1 }));
+    pit.rotation.x = -Math.PI / 2;
+    pit.position.set(sx * r * 0.13, r * 0.36, r * 0.22);
+    neck.add(pit);
+  }
+  // A flat cap, because of course.
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.42, r * 0.40, r * 0.16, 12), coatD);
+  cap.position.y = r * 0.60;
+  cap.castShadow = true;
+  neck.add(cap);
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(r * 0.6, r * 0.06, r * 0.42), coatD);
+  brim.position.set(0, r * 0.54, r * 0.30);
+  neck.add(brim);
+
+  // THE LAMP. Held high, and it is what the room is running on.
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.58, h * 0.28, 0);
+  chest.add(pivot);
+  const armGeo = new THREE.CapsuleGeometry(r * 0.11, h * 0.18, 3, 6);
+  pivot.add(limb(armGeo, coat, 0));
+  const bail = new THREE.Mesh(new THREE.TorusGeometry(r * 0.16, 0.025, 4, 9, Math.PI), brass);
+  bail.position.y = -h * 0.26;
+  pivot.add(bail);
+  const lampBody = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.20, r * 0.24, r * 0.42, 8), brass);
+  lampBody.position.y = -h * 0.34;
+  lampBody.castShadow = true;
+  pivot.add(lampBody);
+  const flame = new THREE.Mesh(new THREE.SphereGeometry(r * 0.15, 9, 7), lampMat);
+  flame.position.y = -h * 0.34;
+  flame.scale.y = 1.3;
+  pivot.add(flame);
+  const lampLight = new THREE.PointLight(0xffb860, 6, 10, 2);
+  lampLight.position.y = -h * 0.34;
+  pivot.add(lampLight);
+
+  // The tally board in the off hand. It has been counting the whole time.
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.58, h * 0.28, 0);
+  chest.add(offArm);
+  offArm.add(limb(armGeo, coat, 0));
+  const board = new THREE.Mesh(new THREE.BoxGeometry(r * 0.5, r * 0.06, r * 0.66), coatD);
+  board.position.set(0, -h * 0.28, r * 0.22);
+  board.rotation.x = -0.5;
+  board.castShadow = true;
+  offArm.add(board);
+
+  g.add(makeNose(r, 0xffd9a0));
+
+  return {
+    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    body: torso, head: skull, blade: board, shield: null,
+    mat: coat, core: flame, lampLight,
+    tipScale: 1.0,
+    emissiveIdle: 0,
+    // It gestures rather than swings. Small, and unhurried.
+    swingArc: { rest: -0.45, wind: -1.35, end: -0.15 },
+    baseLean: 0.0, stride: 0, flash: 0, spin: 0, isPlayer: false, upright: true,
+  };
+}
+
 /* A wicker training effigy on a post. Deliberately nothing like the
    Slagbound in outline — the tutorial should never teach you to read a shape
    that will not be there in the real fight. */

@@ -801,9 +801,220 @@ export const KILNWARDEN = {
   },
 };
 
+
+/* -------------------------------------------------------------------------
+   THE SKIMMER. It pulled slag off the melt with a plate the size of a door.
+   It still has the plate.
+
+   FRONTALLY IMMUNE. Anything landing inside its facing arc clangs off for a
+   tenth of the damage and no poise at all. The only answer is to get behind
+   it — which makes the Slagbound's deliberately slow turn rate stop being a
+   lever you MAY use and start being the whole puzzle, and which in a crowd
+   costs you the one thing you can least afford to give up: your back.
+
+   It is also the first enemy that gives SHIELD BASH and HEAVE a job nothing
+   else needed doing. Both break its guard outright.
+   ---------------------------------------------------------------------- */
+export const SKIMMER = {
+  name: 'Skimmer',
+  rig: 'skimmer',
+  hp: 150,
+  radius: 0.60,
+  height: 2.05,
+
+  moveSpeed: 2.0,
+  // Slower to turn than anything else in the game, because turning is the
+  // entire counterplay and it has to be beatable on foot.
+  turnRate: 1.9,
+  preferredRange: 2.6,
+  circleSpeed: 1.3,
+
+  poise: 40,
+  poiseRegen: 12,
+  poiseRegenDelay: 1.5,
+  staggerDuration: 1.30,
+  staggerDamageMul: 1.7,
+  staggerResist: 3.2,
+  staggerResistMul: 0.45,
+
+  // The plate. `armorArc` is a HALF-angle: 1.75 rad is a 200-degree frontal
+  // wall, so merely strafing is not enough — you have to commit to going
+  // round, and it gets a swing at you while you do.
+  armorArc: 1.75,
+  armorMul: 0.10,
+  // A guard this total has to be breakable, or the fight is a stalemate for
+  // any weapon without the reach to walk around it. Poise damage at or above
+  // this in one blow throws the plate wide.
+  guardBreakPoise: 26,
+  guardBreakTime: 2.4,
+
+  punishRange: 3.0,
+  punishHesitate: 0.16,
+
+  hesitateMin: 0.6,
+  hesitateMax: 1.4,
+  recoverIdle: 0.35,
+
+  attacks: {
+    shove: {
+      id: 'shove', label: 'PLATE SHOVE',
+      windup: 0.62, active: 0.12, recover: 0.80,
+      damage: 20, poise: 0,
+      shape: 'arc', reach: 2.9, arc: 2.20,
+      step: 1.4, knock: 8.0,
+      weight: 0.60, minRange: 0, maxRange: 3.4,
+    },
+    sweep: {
+      id: 'sweep', label: 'SKIM',
+      // The one attack that opens its own guard: it swings the plate ACROSS,
+      // so for the length of the swing there is nothing in front of it.
+      windup: 0.80, active: 0.14, recover: 0.92,
+      damage: 26, poise: 0,
+      shape: 'arc', reach: 3.4, arc: 2.90,
+      step: 0.6, opensGuard: true,
+      weight: 0.40, minRange: 1.2, maxRange: 4.0,
+    },
+  },
+};
+
+/* -------------------------------------------------------------------------
+   BLACKDAMP. The bad air that took the lower galleries, and whatever it was
+   wearing when it did.
+
+   It attacks your STAMINA, not your health. Nine damage and thirty-four
+   stamina: it cannot kill you, it can only make you unable to do anything
+   about the five things that can. That is the first threat in the game aimed
+   at the economy rather than at the bar, and it is why it is SLOW — you can
+   always avoid it, it simply costs you the floor you needed for everything
+   else.
+
+   Against the tome it does the opposite and the same: it drives HEAT UP.
+   ---------------------------------------------------------------------- */
+export const BLACKDAMP = {
+  name: 'Blackdamp',
+  rig: 'blackdamp',
+  hp: 86,
+  radius: 0.52,
+  height: 1.20,          // low and wide — it crawls
+
+  moveSpeed: 1.9,
+  turnRate: 2.4,
+  preferredRange: 1.6,
+  circleSpeed: 1.2,
+
+  poise: 20,
+  poiseRegen: 8,
+  poiseRegenDelay: 1.4,
+  staggerDuration: 1.05,
+  staggerDamageMul: 1.5,
+  staggerResist: 2.0,
+  staggerResistMul: 0.5,
+
+  punishRange: 2.6,
+  punishHesitate: 0.14,
+
+  hesitateMin: 0.55,
+  hesitateMax: 1.25,
+  recoverIdle: 0.3,
+
+  attacks: {
+    smother: {
+      id: 'smother', label: 'SMOTHER',
+      windup: 0.66, active: 0.14, recover: 0.72,
+      damage: 9, poise: 0,
+      // The number that matters. A third of your bar, and no way to guard it
+      // away — blocking costs stamina too.
+      stamDamage: 34,
+      shape: 'arc', reach: 2.3, arc: 2.40,
+      step: 0.8,
+      weight: 0.66, minRange: 0, maxRange: 2.8,
+    },
+    seep: {
+      id: 'seep', label: 'SEEP',
+      windup: 0.90, active: 0.16, recover: 0.85,
+      damage: 6, poise: 0,
+      stamDamage: 22,
+      // A slow pool it settles into, anchored to the ground like a Kilnwarden
+      // zone — so the two ranged threats share a shape language even though
+      // one burns you and the other empties you.
+      shape: 'circle', radius: 2.6, offset: 0,
+      zone: true, lead: 0.25,
+      step: 0,
+      weight: 0.34, minRange: 1.8, maxRange: 7.0,
+    },
+  },
+};
+
+/* -------------------------------------------------------------------------
+   THE GAFFER. The foreman. Never touched a tool in his life and is not about
+   to start.
+
+   It does not attack. While it is alive every other body in the room commits
+   FASTER — the handoff shortens and everyone's hesitation is cut — so the
+   room is not harder because it hits harder, it is harder because it never
+   stops. Kill it and the fight visibly calms down.
+
+   That makes target PRIORITY a real decision for the first time: every enemy
+   until now was worth the same, and this one is worth more than the thing
+   currently swinging at you. It stands at the back, so it costs you a walk
+   through everything else to reach, and it retreats when you come.
+
+   It does NOT get to break the one-telegraph rule. Pressure through cadence,
+   the same lever the Cinderbones use — because a second telegraph would undo
+   the guarantee the whole crowd design rests on, and no enemy is worth that.
+   ---------------------------------------------------------------------- */
+export const GAFFER = {
+  name: 'The Gaffer',
+  rig: 'gaffer',
+  hp: 120,
+  radius: 0.42,
+  height: 1.94,
+
+  moveSpeed: 3.0,
+  turnRate: 3.6,
+  preferredRange: 8.5,   // stays at the back, and backs off further
+  circleSpeed: 2.2,
+
+  poise: 26,
+  poiseRegen: 10,
+  poiseRegenDelay: 1.3,
+  staggerDuration: 1.15,
+  staggerDamageMul: 1.8,   // it is soft, once you get there
+  staggerResist: 2.0,
+  staggerResistMul: 0.5,
+
+  // What it actually does. Applied while it lives, to everyone else.
+  support: {
+    handoffMul: 0.30,      // the beat between commits nearly vanishes
+    hesitateMul: 0.55,     // and everyone hesitates half as long
+    label: 'KEEPING TIME',
+  },
+
+  punishRange: 0,          // it never punishes; it never attacks
+  punishHesitate: 9,
+
+  hesitateMin: 2.2,
+  hesitateMax: 3.6,
+  recoverIdle: 1.2,
+
+  attacks: {
+    // One contemptuous shove, and only if you have already reached it. It is
+    // not a fight, it is a man trying to get away from you.
+    rebuke: {
+      id: 'rebuke', label: 'REBUKE',
+      windup: 0.48, active: 0.10, recover: 0.90,
+      damage: 11, poise: 0,
+      shape: 'arc', reach: 2.2, arc: 1.7,
+      step: 0.5, knock: 6.5,
+      weight: 1, minRange: 0, maxRange: 2.4,
+    },
+  },
+};
+
 export const FOES = {
   slagbound: SLAGBOUND, cinderbone: CINDERBONE,
   boltbone: BOLTBONE, kilnwarden: KILNWARDEN,
+  skimmer: SKIMMER, blackdamp: BLACKDAMP, gaffer: GAFFER,
 };
 
 /* -------------------------------------------------------------------------
@@ -889,7 +1100,21 @@ export const ENCOUNTERS = {
     hpMul: 1.0,
     // The archers are placed DEEP and apart, so no single break gets you both.
     spawn: [[-2.6, -3.0], [2.6, -3.0], [0, 3.4],
-            [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone']],
+            [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone'],
+            // The Gaffer stands behind its own archers. Reaching it means
+            // crossing the yard under two aim lines, which is the price of
+            // turning the room's cadence back down.
+            [0, -9.4, 'gaffer']],
+  },
+  gallery: {
+    id: 'gallery', name: 'The Lower Gallery', short: 'DAMP',
+    blurb: 'The air went bad down here first. Something is still crawling in ' +
+           'it, and it does not want to kill you \u2014 it wants you unable to ' +
+           'do anything about the rest.',
+    foe: 'cinderbone', theme: 'ossuary',
+    hpMul: 1.0,
+    spawn: [[0, -4.2, 'blackdamp'], [-4.8, -1.6, 'blackdamp'],
+            [-2.8, 2.6], [2.8, 2.6], [5.0, -1.6]],
   },
   kiln: {
     id: 'kiln', name: 'The Kiln Mouth', short: 'KILN',
@@ -902,6 +1127,16 @@ export const ENCOUNTERS = {
             [-5.8, -4.0, 'kilnwarden'], [5.8, -4.0, 'kilnwarden'],
             [-3.2, 1.8], [3.2, 1.8]],
   },
+  casting: {
+    id: 'casting', name: 'The Casting Hall', short: 'PLATE',
+    blurb: 'Where the melt was poured. A skimmer still standing over the ' +
+           'channel with its plate up, a gaffer keeping time behind it, and ' +
+           'the damp coming up through the floor.',
+    foe: 'cinderbone', theme: 'kiln',
+    hpMul: 1.0,
+    spawn: [[0, -3.6, 'skimmer'], [0, -9.0, 'gaffer'],
+            [-5.4, -1.0, 'blackdamp'], [4.6, 1.4], [-4.2, 3.0]],
+  },
 };
 export const DEFAULT_ENCOUNTER = 'duel';
 
@@ -913,7 +1148,12 @@ export const DEFAULT_ENCOUNTER = 'duel';
    This is still not the run structure. It is the smallest thing that makes a
    sequence of fights feel like somewhere you are GOING, and the ordering is
    the whole design: nothing asks two new questions at once. */
-export const ROOM_ORDER = ['ossuary', 'yard', 'kiln'];
+// Six rooms, and the order is still the design: each one introduces exactly
+// one new idea, and the last two combine ideas rather than adding them.
+//   ossuary  a crowd            yard     range, and a priority target
+//   gallery  your economy       kiln     ground denial
+//   casting  everything at once
+export const ROOM_ORDER = ['ossuary', 'yard', 'gallery', 'kiln', 'casting'];
 
 export const EXIT = {
   bearing: 0,             // rad; which way the road runs, 0 = away from spawn

@@ -88,6 +88,10 @@ export class CombatUI {
       if (!byPlayer) this.number('DODGE', 'dodge', ev.x, y, ev.z);
       return;
     }
+    if (ev.result === 'clang') {
+      this.number('CLANG', 'block', ev.x, y, ev.z);
+      return;
+    }
     if (ev.result === 'guarded') {
       this.number(Math.round(ev.damage) > 0 ? 'BLOCK ' + Math.round(ev.damage) : 'BLOCK',
         'block', ev.x, y, ev.z);

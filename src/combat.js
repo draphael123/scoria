@@ -1,4 +1,9 @@
 import { angleDelta, clamp } from './util.js';
+
+/* The frontal-armour half-angle for a body, or 0 if it has none. */
+function tdefArc(target) {
+  return (target.def && target.def.armorArc) || 0;
+}
 import { STATE, PHASE } from './actor.js';
 import { PLAYER, SLAGBOUND, IMPACT, BLEED } from './config.js';
 
@@ -79,6 +84,32 @@ export function applyDamage(attacker, target, atk, out) {
   const tdef = target.def || SLAGBOUND;
   if (target.state === STATE.STAGGER) damage *= tdef.staggerDamageMul;
 
+  // THE PLATE. A frontally-armoured body takes almost nothing from inside its
+  // own facing arc, and no poise at all — so chipping away at the front is not
+  // a slower way to win, it is not a way to win. Getting behind it is the only
+  // answer, which is what turns its slow turn rate into the whole fight.
+  //
+  // `guardOpen` is set for the length of the one attack that swings the plate
+  // ACROSS its own front, and by a blow heavy enough to throw it wide.
+  const arc = tdefArc(target);
+  if (arc && target.guardOpen <= 0 && !atk.ignoreArmor) {
+    const fromAngle = target.angleTo(attacker);
+    if (Math.abs(angleDelta(target.facing, fromAngle)) <= arc) {
+      target.hp -= damage * (target.def.armorMul ?? 0.1);
+      ev.result = 'clang';
+      ev.damage = damage * (target.def.armorMul ?? 0.1);
+      target.knock(attacker.x, attacker.z, IMPACT.knockGuard);
+      // A heavy enough single blow throws the plate open regardless. Without
+      // this a weapon with no way round is simply locked out of the fight.
+      if ((atk.poise || 0) >= (target.def.guardBreakPoise ?? 999)) {
+        target.guardOpen = target.def.guardBreakTime ?? 2;
+        ev.result = 'guardbreak';
+      }
+      out.push(ev);
+      return ev;
+    }
+  }
+
   // HYPERARMOUR. A weapon that declares it finishes its swing through a blow
   // instead of being interrupted by one. That is the whole reason a 0.72s
   // windup is playable, and it converts the question from "does this fit in
@@ -123,6 +154,20 @@ export function applyDamage(attacker, target, atk, out) {
   // --- clean hit --------------------------------------------------------
   target.hp -= damage;
   ev.damage = damage;
+
+  // Damage aimed at the ECONOMY rather than at the bar. Blackdamp cannot kill
+  // you; it can only take away your ability to do anything about the things
+  // that can. On a heat weapon it drives the bar the other way, which is the
+  // same threat expressed in that weapon's own currency.
+  if (atk.stamDamage && target.spendStamina) {
+    target.spendStamina(atk.stamDamage);
+    ev.stam = atk.stamDamage;
+  }
+
+  // Damage aimed at the ECONOMY rather than at the bar. Blackdamp cannot kill
+  // you; it can only take away your ability to do anything about the things
+  // that can. On a heat weapon it drives the bar the other way, which is the
+  // same threat expressed in that weapon's own currency.
 
   // Every clean blow MOVES the thing it hits. A hit that only changes a
   // number does not read as a hit. Impact class is a property of the BLOW

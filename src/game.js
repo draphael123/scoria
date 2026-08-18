@@ -124,7 +124,7 @@ export class Game {
     this.outcomeT = 0;
     this.stats = { swings: 0, hitsDealt: 0, hitsTaken: 0, guarded: 0, rolls: 0,
                    staggers: 0, iframeDodges: 0, armored: 0, bleedTicks: 0,
-                   shotsFired: 0, maxConcurrentWindup: 0 };
+                   shotsFired: 0, clangs: 0, maxConcurrentWindup: 0 };
   }
 
   get actors() { return [this.player, ...this.enemies]; }
@@ -201,8 +201,27 @@ export class Game {
      Because a windup cannot start without it, two ground telegraphs can never
      coexist — the readability guarantee is structural rather than tuned.
      ---------------------------------------------------------------------- */
+  /* Whatever the room's support bodies are doing to its tempo. Recomputed
+     every step rather than cached, because the answer changes the instant one
+     of them dies — and the fight visibly calming down IS the reward for
+     having prioritised it. */
+  _supportState() {
+    let handoff = 1, hesitate = 1, label = null;
+    for (const e of this.enemies) {
+      if (e.dead || !e.def.support) continue;
+      handoff = Math.min(handoff, e.def.support.handoffMul ?? 1);
+      hesitate = Math.min(hesitate, e.def.support.hesitateMul ?? 1);
+      label = e.def.support.label || label;
+    }
+    return { handoff, hesitate, label };
+  }
+
   _updateAggro(dt) {
     this.aggroCd = Math.max(0, this.aggroCd - dt);
+
+    const sup = this._supportState();
+    this.supportLabel = sup.label;
+    for (const e of this.enemies) e.tempoMul = sup.hesitate;
 
     let h = this.token;
     // The holder can also stop existing — the tutorial swaps the whole enemy
@@ -258,7 +277,8 @@ export class Game {
     // bodies committing. In a duel there is no handoff to make, and charging
     // one anyway measurably slowed the fight that was already playtested —
     // 15.5 swings per 40s became 13.8, an 11% cut nobody asked for.
-    this.aggroCd = this.livingEnemies.length > 1 ? AGGRO.handoff : 0;
+    const sup = this._supportState();
+    this.aggroCd = this.livingEnemies.length > 1 ? AGGRO.handoff * sup.handoff : 0;
   }
 
   /* ---- one fixed logic step -------------------------------------------- */
@@ -328,6 +348,7 @@ export class Game {
   _tally(from) {
     for (let i = from; i < this.events.length; i++) {
       const ev = this.events[i];
+      if (ev.result === 'clang') { this.stats.clangs++; continue; }
       if (ev.result === 'bleedtick' || ev.result === 'bleed') {
         if (ev.target !== this.player) this.stats.bleedTicks++;
         continue;
@@ -497,6 +518,11 @@ export class Game {
         if (this.allowSlowMo) this.slowMo = IMPACT.staggerSlowMoTime;
       } else if (ev.result === 'guarded') {
         stop = Math.max(stop, HITSTOP.guarded);
+        punch = Math.max(punch, IMPACT.punchLight);
+      } else if (ev.result === 'clang') {
+        // A blow that goes nowhere still has to FEEL like it went somewhere,
+        // or the player reads it as the hit not registering.
+        stop = Math.max(stop, HITSTOP.heavy);
         punch = Math.max(punch, IMPACT.punchLight);
       } else if (ev.result === 'bleed') {
         stop = Math.max(stop, HITSTOP.clean);

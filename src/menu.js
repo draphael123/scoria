@@ -2,6 +2,7 @@
    index.html so the markup and the behaviour that drives it stay together. */
 
 import { Creator, loadBuild } from './character.js';
+import { Archive } from './archive.js';
 
 const KEY = 'scoria.settings.v1';
 
@@ -82,9 +83,11 @@ export class Menu {
 
     const beginBtn = el('button', 'btn primary', 'ENTER THE CLEARING');
     const trainBtn = el('button', 'btn', 'TRAINING');
+    const arcBtn = el('button', 'btn', 'ARCHIVE');
     const setBtn = el('button', 'btn', 'SETTINGS');
     const row = el('div', 'btn-row');
-    row.append(beginBtn, trainBtn, setBtn);
+    row.append(beginBtn, trainBtn, arcBtn, setBtn);
+    arcBtn.onclick = () => { this._from = 'title'; this.showArchive(); };
     title.appendChild(row);
     trainBtn.onclick = () => { this.hide(); this.h.onTrain?.(); };
 
@@ -100,10 +103,19 @@ export class Menu {
     pause.appendChild(el('div', 'panel-title', 'PAUSED'));
     const pRow = el('div', 'btn-col');
     const resumeBtn = el('button', 'btn primary', 'RESUME');
-    const restartBtn = el('button', 'btn', 'RESTART DUEL');
+    const restartBtn = el('button', 'btn', 'RESTART ROOM');
+    const pArcBtn = el('button', 'btn', 'ARCHIVE');
     const pSetBtn = el('button', 'btn', 'SETTINGS');
     const quitBtn = el('button', 'btn ghost', 'ABANDON — RETURN TO TITLE');
-    pRow.append(resumeBtn, restartBtn, pSetBtn, quitBtn);
+    pRow.append(resumeBtn, restartBtn, pArcBtn, pSetBtn, quitBtn);
+    // Mid-run, "what am I holding" is the only question worth answering, so
+    // it opens on the weapon in your hands rather than on whatever was last
+    // looked at.
+    pArcBtn.onclick = () => {
+      this._from = 'pause';
+      this.archive.setWeapon(this.h.currentWeapon?.() || this.build.weapon);
+      this.showArchive();
+    };
     pause.appendChild(pRow);
 
     resumeBtn.onclick = () => { this.hide(); this.h.onResume?.(); };
@@ -184,9 +196,14 @@ export class Menu {
       onPreview: (b) => this.h.onPreview?.(b),
     });
 
-    root.append(title, pause, settings, this.creator.node);
+    this.archive = new Archive({
+      onBack: () => { if (this._from === 'pause') this.showPause(); else this.showTitle(); },
+    });
+
+    root.append(title, pause, settings, this.creator.node, this.archive.node);
     document.body.appendChild(root);
-    this.screens = { title, pause, settings, creator: this.creator.node };
+    this.screens = { title, pause, settings, creator: this.creator.node,
+                     archive: this.archive.node };
   }
 
   _row(parent, label, hint) {
@@ -261,6 +278,7 @@ export class Menu {
   showTitle() { this._show('title'); }
   showCreator() { this.creator.refresh(); this._show('creator'); }
   showPause() { this._show('pause'); }
+  showArchive() { this.archive.refresh(); this._show('archive'); }
   showSettings() {
     // Rebuilt on entry so a defaults-reset shows the new values immediately.
     const body = this.screens.settings.querySelector('.settings-body');
@@ -279,7 +297,9 @@ export class Menu {
   togglePause() {
     if (this.screen === 'title') return;
     if (this.screen === null) { this.showPause(); }
-    else if (this.screen === 'settings') { if (this._from === 'pause') this.showPause(); else this.showTitle(); }
+    else if (this.screen === 'settings' || this.screen === 'archive') {
+      if (this._from === 'pause') this.showPause(); else this.showTitle();
+    }
     else { this.hide(); this.h.onResume?.(); }
   }
 }

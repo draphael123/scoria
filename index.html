@@ -340,6 +340,64 @@
        font:inherit;font-size:14px;padding:8px 11px;width:min(220px,52vw);outline:none}
   .cr-name:focus{border-color:rgba(212,85,42,.7)}
 
+
+  /* ============================== ARCHIVE =============================== */
+  .archive-screen{justify-content:flex-start;padding-top:24px}
+  .ar-tabs{display:flex;gap:8px;margin:14px 0 4px}
+  .ar-body{width:min(980px,95vw);text-align:left;margin-top:14px;
+       max-height:66vh;overflow-y:auto;padding-right:6px}
+  .ar-picker{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+
+  .ar-whead{border-left:2px solid var(--ember);padding-left:14px;margin-bottom:16px}
+  .ar-klass{font-size:9px;letter-spacing:.34em;color:var(--ember);text-transform:uppercase}
+  .ar-wname{font-size:22px;color:var(--ink);margin-top:2px}
+  .ar-wtag{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.6}
+  .ar-facts{display:flex;gap:22px;flex-wrap:wrap;margin-top:12px}
+  .ar-fact{display:flex;flex-direction:column}
+  .ar-fact b{font-size:15px;color:var(--hot);font-weight:400;
+       font-family:ui-monospace,Consolas,monospace}
+  .ar-fact span{font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase}
+
+  .ar-table{font-family:ui-monospace,Consolas,monospace;font-size:11px}
+  .ar-row{display:grid;grid-template-columns:1.9fr repeat(8,.62fr);gap:6px;
+       padding:8px 0;border-bottom:1px solid rgba(230,220,203,.07);align-items:baseline}
+  .ar-row span{color:var(--dim);text-align:right}
+  .ar-row .ar-mv{text-align:left;display:flex;flex-direction:column;gap:2px}
+  .ar-row .ar-mv b{color:var(--ink);font-weight:400;font-size:12px;letter-spacing:.06em}
+  .ar-row .ar-mv i{color:var(--faint);font-style:normal;font-size:9.5px;letter-spacing:.12em}
+  .ar-row .ar-rec{color:#c9744a}
+  .ar-hdr span{color:var(--ember);font-size:9px;letter-spacing:.18em;text-transform:uppercase}
+  .ar-hdr{border-bottom-color:rgba(212,85,42,.3)}
+  .ar-tags{display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 2px}
+  .ar-tags em{font-style:normal;font-size:9px;letter-spacing:.14em;color:var(--hot);
+       border:1px solid rgba(212,85,42,.4);padding:2px 7px;text-transform:uppercase}
+  .ar-note{font-size:11.5px;line-height:1.75;color:var(--dim);margin-top:14px;
+       border-left:1px solid rgba(212,85,42,.4);padding-left:12px}
+
+  .ar-beasts{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+       gap:12px;margin-top:16px}
+  .ar-beast{border:1px solid var(--edge);background:rgba(0,0,0,.32);padding:14px 15px 15px}
+  .ar-beast.unknown{opacity:.36}
+  .ar-bname{font-size:17px;color:var(--ink)}
+  .ar-asks{font-size:9.5px;letter-spacing:.28em;color:var(--hot);margin-top:5px}
+  .ar-blore{font-size:11.5px;color:var(--dim);line-height:1.65;margin-top:8px}
+  .ar-bstats{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px}
+  .ar-bstat{display:flex;flex-direction:column}
+  .ar-bstat b{font-size:13px;color:var(--ink);font-weight:400;
+       font-family:ui-monospace,Consolas,monospace}
+  .ar-bstat span{font-size:8.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+  .ar-batks{margin-top:11px;display:flex;flex-direction:column;gap:5px}
+  .ar-batk{display:flex;justify-content:space-between;gap:10px;font-size:10px;
+       font-family:ui-monospace,Consolas,monospace}
+  .ar-batk b{color:var(--ember);font-weight:400;letter-spacing:.1em}
+  .ar-batk span{color:var(--faint);text-align:right}
+  .ar-warn{margin-top:10px;font-size:10.5px;line-height:1.6;color:var(--hot);
+       border-left:1px solid rgba(255,179,71,.5);padding-left:9px}
+  .ar-counter{margin-top:11px;font-size:11px;line-height:1.7;color:var(--dim);
+       border-top:1px solid rgba(230,220,203,.08);padding-top:10px}
+  .ar-where{margin-top:9px;font-size:8.5px;letter-spacing:.2em;color:var(--faint);
+       text-transform:uppercase}
+
   /* ============================ TUTORIAL ================================ */
   .tut-root{position:fixed;left:calc(26px + var(--safe-l));top:26px;width:min(340px,74vw);
        z-index:9;pointer-events:none;opacity:0;transition:opacity .3s;
