@@ -1377,6 +1377,9 @@ export class Forest {
   _buildTown(tex) {
     const rng = makeRng(80808);
     const g = new THREE.Group();
+    // Declared up here because the buildings pass now pushes into it - the
+    // Archive's door lamp is built with the building, not with the furniture.
+    this.townLamps = this.townLamps || [];
 
     /* The town's own palette. It must not read as the forest with houses in
        it: the wood is bark, ash and cold blue, so the town is DRESSED STONE,
@@ -1401,7 +1404,9 @@ export class Forest {
       g.add(hs);
 
       const hw = b.w / 2, hd = b.d / 2;
-      const jag = () => 0.55 + rng() * 0.45;      // how much of the wall is left
+      // How much of the wall is left. The Archive is the one building here
+      // that anybody still maintains, so its walls stand to full height.
+      const jag = () => (b.ruin === 'intact' ? 1 : 0.55 + rng() * 0.45);
 
       const wall = (lx, lz, ww, wd, frac) => {
         const h = b.h * frac;
@@ -1442,6 +1447,45 @@ export class Forest {
       lintel.position.set(doorSide, 2.1, 0);
       lintel.castShadow = true;
       hs.add(lintel);
+
+      /* THE ARCHIVE, which did not fall. A pitched roof, a lamp burning in
+         the doorway, and shelving visible through it: in a town built entirely
+         out of absence, one building with its lights on is the composition. */
+      if (b.ruin === 'intact') {
+        const roof = new THREE.Mesh(
+          new THREE.ConeGeometry(Math.max(b.w, b.d) * 0.78, 2.2, 4), timber);
+        roof.rotation.y = Math.PI / 4;
+        roof.position.y = b.h + 1.0;
+        roof.castShadow = true;
+        hs.add(roof);
+        this._registerOccluder(roof, timber, b.h + 2.2);
+
+        // Shelves along the inside of the back wall.
+        for (let i = 0; i < 3; i++) {
+          const shelf = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.8, 0.12, 0.5), timber);
+          shelf.position.set(0, 0.7 + i * 0.9, -b.d / 2 + 0.6);
+          hs.add(shelf);
+          for (let k = 0; k < 9; k++) {
+            const book = new THREE.Mesh(
+              new THREE.BoxGeometry(0.1 + rng() * 0.08, 0.3 + rng() * 0.2, 0.34), stoneD);
+            book.position.set(-b.w * 0.36 + k * (b.w * 0.8 / 9) + 0.2,
+                              0.95 + i * 0.9, -b.d / 2 + 0.6);
+            hs.add(book);
+          }
+        }
+
+        // A lamp over the door: the only warm light in Scoria that is not the
+        // rack, and it is what tells you the place is open.
+        const lampMat = new THREE.MeshStandardMaterial({
+          color: 0x2a1c0c, emissive: 0xffc070, emissiveIntensity: 1.6, roughness: 1 });
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.24, 9, 7), lampMat);
+        lamp.position.set(b.x < 0 ? hw : -hw, 2.5, 0);
+        hs.add(lamp);
+        const ll = new THREE.PointLight(0xffb060, 22, 14, 2);
+        ll.position.copy(lamp.position);
+        hs.add(ll);
+        this.townLamps.push({ mat: lampMat, light: ll, phase: rng() * 10 });
+      }
 
       // How it fell.
       if (b.ruin === 'burned') {
@@ -1679,7 +1723,91 @@ export class Forest {
     this.townFire = { coals, light, phase: 2.2 };
     g.add(rack);
 
-    this.townLamps = this.townLamps || [];
+    /* --- THE RECORD KEEPER ---------------------------------------------
+       A man at a lectern outside his own door, because a keeper inside the
+       Archive is a keeper nobody meets: the whole point of him is that he is
+       the first thing in Scoria that talks back.
+
+       Built stiff and narrow on purpose. Everything else standing upright in
+       this game is trying to kill you, so he has to read as a PERSON at a
+       glance - which on this camera means tall, thin, still, and the only
+       thing in town wearing a colour. */
+    const keeper = new THREE.Group();
+    keeper.position.set(3.4, 0, 2.8);
+    keeper.rotation.y = -2.5;
+
+    const robe = new THREE.MeshStandardMaterial({ color: 0x2b3348, roughness: 0.95 });
+    const robeD = new THREE.MeshStandardMaterial({ color: 0x1b2130, roughness: 1 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xb09070, roughness: 0.9 });
+    const paper = new THREE.MeshStandardMaterial({ color: 0xcfc4a8, roughness: 1 });
+
+    const kBody = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.46, 1.35, 10), robe);
+    kBody.position.y = 0.68;
+    kBody.castShadow = true;
+    keeper.add(kBody);
+    // A stole down the front: one vertical accent, which is what makes a
+    // cylinder read as somebody dressed rather than as a bollard.
+    const kStole = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.0, 0.06), robeD);
+    kStole.position.set(0, 0.85, 0.3);
+    keeper.add(kStole);
+
+    const kShoulders = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 7), robe);
+    kShoulders.scale.set(1.25, 0.6, 0.9);
+    kShoulders.position.y = 1.36;
+    kShoulders.castShadow = true;
+    keeper.add(kShoulders);
+
+    const kHead = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), skin);
+    kHead.position.y = 1.62;
+    kHead.castShadow = true;
+    keeper.add(kHead);
+    // A flat cap, because a hood would read as one more hooded thing.
+    const kCap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.09, 10), robeD);
+    kCap.position.y = 1.76;
+    keeper.add(kCap);
+
+    for (const sx of [-1, 1]) {
+      const kArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.5, 3, 6), robe);
+      kArm.position.set(sx * 0.3, 1.12, 0.1);
+      kArm.rotation.x = -0.5;
+      kArm.castShadow = true;
+      keeper.add(kArm);
+      const kHand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), skin);
+      kHand.position.set(sx * 0.3, 0.9, 0.35);
+      keeper.add(kHand);
+    }
+
+    // The lectern he is writing at, and the ledger open on it.
+    const lect = new THREE.Group();
+    lect.position.set(0, 0, 0.72);
+    const kPost = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.0, 6), timber);
+    kPost.position.y = 0.5;
+    lect.add(kPost);
+    const kFoot = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.38, 0.09, 8), timber);
+    kFoot.position.y = 0.05;
+    lect.add(kFoot);
+    const kTop = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.07, 0.62), timber);
+    kTop.position.y = 1.02;
+    kTop.rotation.x = -0.35;
+    kTop.castShadow = true;
+    lect.add(kTop);
+    const kPage = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.05, 0.46), paper);
+    kPage.position.y = 1.09;
+    kPage.rotation.x = -0.35;
+    lect.add(kPage);
+    // His lamp. Small, and the second warm thing on this side of the street.
+    const kLampMat = new THREE.MeshStandardMaterial({
+      color: 0x2a1c0c, emissive: 0xffc070, emissiveIntensity: 1.5, roughness: 1 });
+    const kLamp = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), kLampMat);
+    kLamp.position.set(0.5, 1.16, 0.1);
+    lect.add(kLamp);
+    const kLight = new THREE.PointLight(0xffb060, 9, 9, 2);
+    kLight.position.copy(kLamp.position);
+    lect.add(kLight);
+    this.townLamps.push({ mat: kLampMat, light: kLight, phase: 7.3 });
+    keeper.add(lect);
+    g.add(keeper);
+
     /* --- THE ROLL -------------------------------------------------------
        The shift book, cut into stone: a long low wall covered edge to edge in
        ruled lines and tally strokes. No legible text, because a wall you can

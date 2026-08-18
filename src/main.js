@@ -341,6 +341,8 @@ function enterZone(id) {
 
 /* What each prop does. Kept here rather than in config because these are
    FLOW, not tuning — they decide where the game goes next. */
+let keeperLine = 0;
+
 function doZoneAction(action) {
   if (action === 'rack') {
     // The rack opens the same creator the title screen uses. Walking to it is
@@ -352,6 +354,24 @@ function doZoneAction(action) {
     const prop = game.near && game.near.prop;
     showPlacard('THE ROLL', prop && prop.text ? prop.text : '');
     audio.uiClick();
+  } else if (action === 'archive') {
+    // The record, opened by walking to the building that holds it.
+    menu.showArchive ? menu.showArchive() : menu.showCreator();
+    audio.uiClick();
+  } else if (action === 'keeper') {
+    /* The keeper says one thing per press and then repeats his last line.
+       Deliberately not a dialogue TREE: he has four things to tell you about
+       what the record is, and a menu of ways to ask him is four times the
+       machinery for none of the information. */
+    const prop = game.near && game.near.prop;
+    const lines = (prop && prop.lines) || [];
+    if (lines.length) {
+      keeperLine = Math.min(keeperLine, lines.length - 1);
+      const [who, what] = lines[keeperLine];
+      showPlacard(who, what);
+      if (keeperLine < lines.length - 1) keeperLine++;
+      audio.uiClick();
+    }
   } else if (action === 'depart') {
     enterZone('circle');
   } else if (action === 'begin') {

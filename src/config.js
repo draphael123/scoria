@@ -1445,10 +1445,47 @@ export const ZONES = {
         prompt: 'READ THE ROLL', action: 'read',
         text: 'FOURTEEN THOUSAND SIX HUNDRED AND ELEVEN NAMES. ' +
               'THE LAST COLUMN IS WHAT EACH ONE WAS MADE INTO.' },
+      /* THE ARCHIVE. The only building in Scoria with a roof still on it,
+         because it is the only building anybody came back for.
+
+         Making the record a PLACE rather than a menu key is the point: the
+         hook of this game is that the rack is your character sheet, and a
+         character sheet you walk to and open is a different object from one
+         you tab to. */
+      { id: 'archive', kind: 'archive', x: 7.8, z: -1.2, r: 2.6,
+        prompt: 'THE ARCHIVE', action: 'archive' },
+      // And the man who keeps it. He explains what the record is FOR, which
+      // is the one thing a menu cannot do for itself.
+      // Out in the street, not in his own doorway: standing him on the
+      // threshold meant his prompt and the Archive's fought over the same
+      // two metres and you could not reliably reach the door.
+      { id: 'keeper', kind: 'keeper', x: 3.4, z: 2.8, r: 2.0,
+        prompt: 'SPEAK TO THE KEEPER', action: 'keeper',
+        lines: [
+          ['THE KEEPER',
+           'You are the fourth this year. The other three are in the ' +
+           'ledger too, in the column for what they were made into.'],
+          ['THE KEEPER',
+           'Everything you meet out there gets written down. Not by me — ' +
+           'by the iron. I only copy it out and file it.'],
+          ['THE KEEPER',
+           'The moves your weapon knows. The names of what has tried to ' +
+           'take it off you. Go in and read it. It is your handwriting, ' +
+           'whether or not you remember writing it.'],
+          ['THE KEEPER',
+           'And it keeps. Whatever the wood does to you tonight, the ' +
+           'record stands in the morning. That is the only thing in ' +
+           'Scoria that does.'],
+        ] },
       // The road out. Locked until you are carrying something.
       { id: 'gate', kind: 'gate', x: 0, z: 12.4, r: 2.2,
         prompt: 'INTO THE WOOD', action: 'depart' },
     ],
+    /* Training posts. The town is where you find out what a weapon does
+       BEFORE the wood asks you, so the posts are here rather than in a menu —
+       and they are the same effigy the opening uses, because a thing you
+       learned on should be the thing you practise on. */
+    dummies: [[-2.4, -8.6], [2.4, -8.6], [0, -10.4]],
   },
   circle: {
     id: 'circle', name: 'The Burn Circle', theme: 'clearing',
@@ -1476,6 +1513,13 @@ export const INTERACT = { hint: 4.2 };
    rather than a box, so you can walk into the shell of a house and stand in
    what used to be somebody's front room. */
 export const TOWN_BUILDINGS = [
+  /* THE ARCHIVE. Deliberately the ONE intact building in a town built out of
+     absence: every other shell here is roofless, burned or fallen in, so the
+     single square structure with four walls and a door reads as the only
+     thing anybody still maintains. Its east wall is left open as the way in. */
+  { id: 'archive', x: 8.6, z: -1.2, w: 6.4, d: 6.0, rot: -0.06, h: 4.2,
+    walls: ['n', 's', 'e'], ruin: 'intact' },
+
   // --- west side of the street -----------------------------------------
   { id: 'w1', x: -8.6, z: 1.2, w: 5.6, d: 4.8, rot: 0.10, h: 3.1,
     walls: ['n', 'w', 'e'], ruin: 'roofless' },

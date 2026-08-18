@@ -1,4 +1,5 @@
 import { Player } from './player.js';
+import { Effigy } from './tutorial.js';
 import { Foe } from './enemy.js';
 import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
@@ -187,7 +188,12 @@ export class Game {
     // A ZONE is a place, not a fight: nobody spawns, nothing can be won or
     // lost, and the only things in it are the ones you can walk up to.
     if (this.zone) {
-      this.enemies = [];
+      /* Training posts. A zone has no FIGHT, but it can still have something
+         to hit: the town's posts go into the enemy list because that is where
+         the hit loop and the renderer both look, and everything else about a
+         zone (no aggro, no waves, no outcome) is unchanged. */
+      this.enemies = (this.zone.dummies || []).map(
+        ([dx, dz]) => new Effigy({ x: dx, z: dz, facing: Math.PI }));
       this.pending = [];
       this.blockers = [];
       // A zone's walls come from its own definition, and they are boxes: a
@@ -497,9 +503,14 @@ export class Game {
     // A zone runs the player and nothing else — no aggro, no shots, no waves,
     // no outcome. Everything below this line belongs to a fight.
     if (this.zone) {
-      this.player.update(dt, { input, basis, events: this.events,
-                               player: this.player, enemies: [], game: this });
+      const zctx = { input, basis, events: this.events, player: this.player,
+                     enemies: this.enemies, game: this };
+      this.player.update(dt, zctx);
+      for (const e of this.enemies) e.update(dt, zctx);
       this._integrate(dt);
+      // The posts can be hit and can hit back, and nothing else here can.
+      resolveActive(this.player, this.enemies, this.events);
+      for (const e of this.enemies) resolveActive(e, [this.player], this.events);
       this._updateZone();
       return;
     }
