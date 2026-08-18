@@ -223,9 +223,91 @@ export function mistTexture() {
   }, { repeat: 1 });
 }
 
+
+/* LIVING forest floor. The ash ground belongs to the works; everywhere the
+   wood has taken back is leaf litter, moss and wet needle-mat instead.
+
+   The difference between the two is mostly SATURATION. Ash is grey-brown with
+   no hue in it at all; loam has a green in the mid-tones that reads instantly
+   as "something grows here", which is the entire point of the room swap. */
+export function loamGroundTexture() {
+  return makeTexture(512, (g, S) => {
+    g.fillStyle = '#241f18';
+    g.fillRect(0, 0, S, S);
+
+    // Broad damp/dry drifts. Green where the moss has taken, browner where the
+    // litter is deep.
+    for (let i = 0; i < 46; i++) {
+      const x = rnd() * S, y = rnd() * S, r = 45 + rnd() * 140;
+      const mossy = rnd() < 0.45;
+      const c = mossy ? [38 + rnd() * 22, 52 + rnd() * 26, 30 + rnd() * 16]
+                      : [48 + rnd() * 20, 38 + rnd() * 16, 26 + rnd() * 12];
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${0.2 + rnd() * 0.26})`);
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+
+    // Fallen leaves. Short strokes rather than dots, because a leaf read from
+    // above is a direction, not a speck.
+    for (let i = 0; i < 900; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      const a = rnd() * Math.PI, len = 3 + rnd() * 7;
+      const warm = rnd();
+      g.strokeStyle = warm < 0.3 ? `rgba(96,72,38,${0.16 + rnd() * 0.24})`
+                    : warm < 0.7 ? `rgba(62,54,34,${0.14 + rnd() * 0.2})`
+                                 : `rgba(44,58,34,${0.14 + rnd() * 0.2})`;
+      g.lineWidth = 1 + rnd() * 1.6;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      g.stroke();
+    }
+
+    // Twigs.
+    for (let i = 0; i < 70; i++) {
+      const x = rnd() * S, y = rnd() * S, a = rnd() * Math.PI * 2, len = 8 + rnd() * 22;
+      g.strokeStyle = `rgba(28,22,16,${0.3 + rnd() * 0.3})`;
+      g.lineWidth = 1 + rnd();
+      g.beginPath(); g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      g.stroke();
+    }
+
+    grain(g, S, 2600, 0.1);
+  }, { repeat: 9 });
+}
+
+/* Standing water for the bog: near-black with a faint cold sheen, so the
+   reflection pass has something to sit on and the surface still reads as
+   WET rather than as a hole in the floor. */
+export function bogWaterTexture() {
+  return makeTexture(256, (g, S) => {
+    g.fillStyle = '#12181a';
+    g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 30; i++) {
+      const x = rnd() * S, y = rnd() * S, r = 20 + rnd() * 70;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, `rgba(72,96,102,${0.07 + rnd() * 0.1})`);
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+    // Scum and floating litter.
+    for (let i = 0; i < 130; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      g.fillStyle = `rgba(48,60,38,${0.1 + rnd() * 0.2})`;
+      g.beginPath(); g.ellipse(x, y, 2 + rnd() * 9, 1 + rnd() * 4, rnd() * 3, 0, 7); g.fill();
+    }
+  }, { repeat: 4 });
+}
+
 export function buildTextures() {
   return {
     ground: ashGroundTexture(),
+    loam: loamGroundTexture(),
+    bog: bogWaterTexture(),
     bark: barkTexture(),
     stone: stoneTexture(),
     sky: skyTexture(),

@@ -189,6 +189,47 @@ class Motes {
   }
 }
 
+
+/* ---------------------------------------------------------------------------
+   WHAT EACH ROOM LOOKS LIKE.
+
+   Five rooms in a wood have to read as five PLACES, and props alone will not
+   do it: two rooms with different piles of debris in them are still the same
+   room. What actually separates them is the floor you are standing on, the
+   colour of the air, and the colour of the light - so those three live in one
+   table and every room states all of them.
+
+     floor   'loam' (the wood has it back) or 'ash' (the works, and the town)
+     pool    the tint of the light the fight happens in
+     fog     ground-fog colour, and how much of it there is
+     drift   the colour of what is falling through the air
+     embers  whether anything is burning here at all
+   ------------------------------------------------------------------------ */
+const LOOKS = {
+  // The burn circle: moonlit, a fire going, and the only room you know.
+  clearing: { floor: 'loam', pool: 0xffffff, poolA: 0.44,
+              fog: 0x9fb0c4, fogA: 1.0, drift: 0x9fc6e8, embers: true },
+  // The barrow ground. Colder, bluer, and nothing is burning.
+  ossuary:  { floor: 'loam', pool: 0x8fa6c6, poolA: 0.42,
+              fog: 0x8fa4bc, fogA: 1.05, drift: 0x9fc6e8, embers: false },
+  // The felling: dry, open, and the palest floor in the run - it is the room
+  // where being SEEN is the problem, so it is the room that hides you least.
+  felling:  { floor: 'loam', pool: 0xc9c0a4, poolA: 0.5,
+              fog: 0xa8a08c, fogA: 0.7,  drift: 0xc8c0a0, embers: false },
+  // The bog: green-black, wet, and thick with air you can see.
+  bog:      { floor: 'loam', pool: 0x7fa694, poolA: 0.4,
+              fog: 0x74907c, fogA: 1.9,  drift: 0x8fc0a4, embers: false },
+  // The burn: the one warm room, and it arrives after two cold ones.
+  charcoal: { floor: 'loam', pool: 0xffb070, poolA: 0.6,
+              fog: 0xff9a5a, fogA: 1.7,  drift: 0xffb070, embers: true },
+  // The works. Ash underfoot again - you are back on ground that never healed.
+  works:    { floor: 'ash',  pool: 0xff8a4a, poolA: 0.66,
+              fog: 0xc07a4a, fogA: 1.5,  drift: 0xffa060, embers: true },
+  // Scoria itself.
+  town:     { floor: 'ash',  pool: 0x6f7a8c, poolA: 0.2,
+              fog: 0x8f9aa8, fogA: 1.25, drift: 0x9fb0c4, embers: false },
+};
+
 /* ------------------------------------------------------------------------ */
 export class Forest {
   constructor(scene, tex, quality = 'high') {
@@ -209,6 +250,7 @@ export class Forest {
     this._buildGround(tex);
     this._buildTrees(tex, hi);
     this._buildDeadfall(tex);
+    this._buildUndergrowth(tex);
     this._buildRuin(tex);
 
     this._buildRoad(tex);
@@ -252,6 +294,11 @@ export class Forest {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
+    // Kept, because the floor is swapped per theme. Ash belongs to the works
+    // and to the town; everywhere the wood has taken back gets loam, and that
+    // one texture swap does more to separate forest from foundry than any
+    // amount of props standing on top of it.
+    this.ground = ground;
 
     // Light pool: the clearing reads brighter than the wood around it, which
     // both frames the fight and hides where the ground geometry ends.
@@ -367,52 +414,54 @@ export class Forest {
 
   /* What is left of the works. It is the reason the wood is dead, and the one
      thing in the clearing still burning. */
+  /* What is left in the CLEARING itself: a cairn, a traveller's fire, and
+     nothing else. The furnace used to stand here and it was wrong - it made
+     every room in the wood read as a foundry floor, so the works has been
+     collected into one room at the end of the run where arriving at it means
+     something. Everything before that is forest. */
   _buildRuin(tex) {
-    // Everything the ruin adds goes into ONE group, so a theme that is not in
-    // the wood can switch the whole works off. Adding straight to the scene
-    // left a burning furnace standing in the middle of the town.
     const ruin = new THREE.Group();
     this.scene.add(ruin);
     this.ruin = ruin;
 
-    const a = Math.PI * 1.12;
-    const R = ARENA.radius - 1.0;
-    const x = Math.sin(a) * R, z = Math.cos(a) * R;
-
-    const stoneMat = new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.96 });
-    const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.8, 5.0, 11), stoneMat);
-    stack.position.set(x, 2.5, z);
-    stack.castShadow = true;
-    ruin.add(stack);
-    this._registerOccluder(stack, stoneMat, 5.0);
-
-    const mouth = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.05, 1.25),
-      new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.95 }));
-    mouth.position.set(x * 0.87, 1.0, z * 0.87);
-    mouth.lookAt(0, 1.0, 0);
-    ruin.add(mouth);
-    this.forgeMouth = mouth;
-
-    this.forgeLight = new THREE.PointLight(0xff6a20, 13, 18, 2);
-    this.forgeLight.position.set(x * 0.82, 1.3, z * 0.82);
-    ruin.add(this.forgeLight);
-
-    // Collapsed blocks spilling from the base.
     const rng = this.rng;
+    const stoneMat = new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.96 });
+    const moss = new THREE.MeshStandardMaterial({ color: 0x2f3a24, roughness: 1 });
+    const barkMat = new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 0.97 });
+
+    // A cairn at the clearing's edge. Somebody counted something here once.
+    const a = Math.PI * 1.12;
+    const R = ARENA.radius - 0.6;
+    const cx = Math.sin(a) * R, cz = Math.cos(a) * R;
+    for (let i = 0; i < 7; i++) {
+      const r = 0.62 - i * 0.07;
+      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), i % 3 === 1 ? moss : stoneMat);
+      st.position.set(cx + (rng() - 0.5) * 0.16, 0.28 + i * 0.42, cz + (rng() - 0.5) * 0.16);
+      st.rotation.set(rng(), rng(), rng());
+      st.scale.y = 0.62;
+      st.castShadow = true;
+      ruin.add(st);
+    }
+    this._registerOccluder(ruin.children[0], stoneMat, 3.4);
+
+    // Blocks spilling around it.
     for (let i = 0; i < 7; i++) {
       const b = new THREE.Mesh(
-        new THREE.BoxGeometry(0.5 + rng() * 0.5, 0.35 + rng() * 0.3, 0.45 + rng() * 0.4), stoneMat);
-      const ba = a + (rng() - 0.5) * 1.5;
-      const br = R - 1.6 - rng() * 2.4;
-      b.position.set(Math.sin(ba) * br, 0.2 + rng() * 0.12, Math.cos(ba) * br);
+        new THREE.BoxGeometry(0.5 + rng() * 0.5, 0.3 + rng() * 0.26, 0.45 + rng() * 0.4),
+        rng() < 0.4 ? moss : stoneMat);
+      const ba = a + (rng() - 0.5) * 1.7;
+      const br = R - 1.4 - rng() * 2.6;
+      b.position.set(Math.sin(ba) * br, 0.16 + rng() * 0.1, Math.cos(ba) * br);
       b.rotation.set(rng() * 0.4, rng() * Math.PI, rng() * 0.3);
       b.castShadow = true;
-      this.scene.add(b);
+      ruin.add(b);
     }
 
-    // Guttering fires in the deadfall, the last of the burn.
-    for (const [fa, fr] of [[0.5, ARENA.radius + 1.4], [2.4, ARENA.radius + 0.4], [4.2, ARENA.radius + 2.0]]) {
+    // Fires somebody left burning. Three of them around the clearing edge,
+    // because one reads as a campsite and three read as a place people keep
+    // stopping at and not coming back from.
+    for (const [fa, fr] of [[0.5, ARENA.radius + 1.4], [2.4, ARENA.radius + 0.4],
+                            [4.2, ARENA.radius + 2.0]]) {
       const g = new THREE.Group();
       const coals = new THREE.Mesh(
         new THREE.SphereGeometry(0.28, 9, 7),
@@ -421,6 +470,23 @@ export class Forest {
       coals.scale.y = 0.5;
       coals.position.y = 0.16;
       g.add(coals);
+      // A ring of stones and three sticks over it. Without them a glowing lump
+      // on the floor reads as slag, which is exactly the association this pass
+      // is trying to break.
+      for (let k = 0; k < 7; k++) {
+        const ang = (k / 7) * Math.PI * 2;
+        const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 0), stoneMat);
+        st.position.set(Math.sin(ang) * 0.46, 0.08, Math.cos(ang) * 0.46);
+        st.scale.y = 0.7;
+        g.add(st);
+      }
+      for (let k = 0; k < 3; k++) {
+        const ang = (k / 3) * Math.PI * 2 + 0.4;
+        const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.1, 5), barkMat);
+        stick.position.set(Math.sin(ang) * 0.22, 0.44, Math.cos(ang) * 0.22);
+        stick.rotation.set(Math.cos(ang) * 0.5, 0, -Math.sin(ang) * 0.5);
+        g.add(stick);
+      }
       const light = new THREE.PointLight(0xff8a3a, 6.5, 11, 2);
       light.position.y = 0.5;
       g.add(light);
@@ -429,6 +495,97 @@ export class Forest {
       this.fires.push({ group: g, coals, light, phase: this.rng() * 10 });
     }
   }
+
+  /* UNDERGROWTH. The layer that was missing.
+
+     A wood is not trunks - it is what is growing at ANKLE height between them,
+     and without that layer a forest floor reads as a car park with poles on
+     it. Everything here is short by rule: the camera is fixed and low, so
+     anything above knee height in the fighting area is one more thing that has
+     to be faded out to see your own duel. */
+  _buildUndergrowth(tex) {
+    const rng = makeRng(13579);
+    const g = new THREE.Group();
+    this.scene.add(g);
+    this.undergrowth = g;
+
+    const frond = new THREE.MeshStandardMaterial({ color: 0x2c3a22, roughness: 1 });
+    const frondDry = new THREE.MeshStandardMaterial({ color: 0x3d3a20, roughness: 1 });
+    const moss = new THREE.MeshStandardMaterial({ color: 0x2f3f26, roughness: 1 });
+    const stone = new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.97 });
+    const bark = new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 0.97 });
+
+    // Ferns. A splayed rosette of flattened cones - NOT crossed quads, which
+    // from a top-down camera collapse into a visible X and read as a cone
+    // rather than as a plant.
+    const fernGeo = new THREE.ConeGeometry(0.13, 0.72, 4);
+    for (let i = 0; i < 260; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.86 + Math.pow(rng(), 0.7) * 22;
+      const x = Math.sin(a) * rad, z = Math.cos(a) * rad;
+      const clump = new THREE.Group();
+      const n = 4 + (rng() * 4) | 0;
+      const dry = rng() < 0.3;
+      for (let k = 0; k < n; k++) {
+        const ba = (k / n) * Math.PI * 2 + rng() * 0.6;
+        const lean = 0.5 + rng() * 0.5;
+        const bl = new THREE.Mesh(fernGeo, dry ? frondDry : frond);
+        bl.scale.set(1, 0.7 + rng() * 0.8, 0.28);
+        bl.position.set(Math.sin(ba) * 0.1, 0.24, Math.cos(ba) * 0.1);
+        bl.rotation.set(Math.cos(ba) * lean, -ba, -Math.sin(ba) * lean);
+        clump.add(bl);
+      }
+      clump.position.set(x, 0, z);
+      clump.scale.setScalar(0.7 + rng() * 0.8);
+      g.add(clump);
+    }
+
+    // Mossy boulders. The user asked for rocks and rocks are right: they are
+    // the one thing a dead wood and a live wood both have.
+    for (let i = 0; i < 26; i++) {
+      const a = rng() * Math.PI * 2;
+      const da = Math.abs(((a - EXIT.bearing + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      const rad = ARENA.radius * (da < EXIT.gapAngle ? 1.5 : 0.8) + rng() * 14;
+      const r = 0.4 + Math.pow(rng(), 2) * 1.5;
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), stone);
+      rock.position.set(Math.sin(a) * rad, r * 0.42, Math.cos(a) * rad);
+      rock.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+      rock.scale.y = 0.72;
+      rock.castShadow = true;
+      g.add(rock);
+      if (r > 0.9) this._registerOccluder(rock, stone, r * 1.4);
+      // A moss cap on the upper face, so the rock reads as OLD.
+      const mm = new THREE.Mesh(new THREE.SphereGeometry(r * 0.92, 8, 5, 0, 6.3, 0, 1.0), moss);
+      mm.position.copy(rock.position);
+      mm.position.y += r * 0.05;
+      mm.scale.y = 0.72;
+      g.add(mm);
+    }
+
+    // Saplings pushing up through the litter, and bramble arcs.
+    for (let i = 0; i < 60; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.95 + rng() * 20;
+      const h = 1.2 + rng() * 1.8;
+      const sap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.055, h, 4), bark);
+      sap.position.set(Math.sin(a) * rad, h / 2, Math.cos(a) * rad);
+      sap.rotation.set((rng() - 0.5) * 0.3, rng() * 3, (rng() - 0.5) * 0.3);
+      g.add(sap);
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(0.3 + rng() * 0.2, 0.7, 5), frond);
+      crown.position.set(sap.position.x, h * 0.86, sap.position.z);
+      g.add(crown);
+    }
+    for (let i = 0; i < 40; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.9 + rng() * 18;
+      const br = new THREE.Mesh(
+        new THREE.TorusGeometry(0.35 + rng() * 0.5, 0.025, 3, 8, 2.2 + rng()), frondDry);
+      br.position.set(Math.sin(a) * rad, 0.05, Math.cos(a) * rad);
+      br.rotation.set(0.2 + rng() * 0.6, rng() * 3, rng() * 3);
+      g.add(br);
+    }
+  }
+
 
 
   /* THE LONG YARD. Where the ore came in and the slag went out, so it is built
@@ -439,15 +596,403 @@ export class Forest {
      low and soft. The two rooms share a clearing, and if the only difference
      between them is which pile of debris is switched on then the run reads as
      one room with a reskin. Height is what makes it read as somewhere else. */
-  _buildYard() {
+  /* THE FELLING. Where the wood was cut, back when anybody was cutting it.
+
+     This room introduces ARCHERS, so what it needs from its dressing is COVER
+     you can put between yourself and an aim line - and cover in a forest is a
+     stack of cordwood, not a crane. It is also the driest and most open room
+     in the run, which is the price of that cover: plenty to hide behind, and
+     nothing at all to hide IN. */
+  _buildFelling() {
     const rng = makeRng(51515);
     const g = new THREE.Group();
+    const bark = new THREE.MeshStandardMaterial({ map: this._tex.bark, roughness: 0.97 });
+    const cut = new THREE.MeshStandardMaterial({ color: 0x8a7550, roughness: 0.92 });
     const iron = new THREE.MeshStandardMaterial({ color: 0x37302a, roughness: 0.78, metalness: 0.5 });
-    const rust = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.92, metalness: 0.25 });
-    const timber = new THREE.MeshStandardMaterial({ color: 0x3a2f22, roughness: 0.98 });
-    const ingot = new THREE.MeshStandardMaterial({ color: 0x6a6f76, roughness: 0.5, metalness: 0.7 });
 
-    // Rails, running out along the haul road's bearing and across it.
+    /* A sawn round: bark on the curve, pale heartwood on the ends. Two
+       materials on one cylinder, which is the cheapest possible way of making
+       felled timber read as FELLED rather than as a pipe. */
+    const round = (r, h, seg = 9) =>
+      new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.04, h, seg), [bark, cut, cut]);
+
+    // Stumps, scattered thickly and kept LOW - the fighting circle has to stay
+    // walkable and the camera has to stay able to see into it.
+    for (let i = 0; i < 22; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.5 + rng() * 9;
+      const x = Math.sin(a) * rad, z = Math.cos(a) * rad;
+      if (Math.hypot(x, z) < 5.4) continue;
+      const h = 0.36 + rng() * 0.5;
+      const st = round(0.4 + rng() * 0.3, h);
+      st.position.set(x, h / 2, z);
+      st.rotation.y = rng() * Math.PI;
+      st.castShadow = true;
+      g.add(st);
+      for (let k = 0; k < 3; k++) {
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.1), cut);
+        ch.position.set(x + (rng() - 0.5) * 1.5, 0.03, z + (rng() - 0.5) * 1.5);
+        ch.rotation.set(0, rng() * Math.PI, 0);
+        g.add(ch);
+      }
+    }
+
+    /* Cordwood stacks. THE feature of the room: chest-high, solid, and placed
+       on the bearings the archers shoot down, so stepping behind one is a real
+       answer to being shot at rather than a decorative pile. */
+    for (const [sa, sr, len] of [[-0.9, 8.4, 4.6], [0.9, 8.4, 4.6],
+                                 [2.5, 9.6, 3.6], [-2.5, 9.6, 3.6], [3.5, 7.8, 3.0]]) {
+      const stack = new THREE.Group();
+      for (let r = 0; r < 4; r++) {
+        const n = r > 2 ? 4 : 5;
+        for (let c = 0; c < n; c++) {
+          const lg = round(0.19 + rng() * 0.05, len, 7);
+          lg.rotation.z = Math.PI / 2;
+          lg.position.set(0, 0.22 + r * 0.4, (c - (n - 1) / 2) * 0.42 + (rng() - 0.5) * 0.05);
+          lg.castShadow = true;
+          stack.add(lg);
+        }
+      }
+      // Retaining stakes at each end, or the pile reads as spilled.
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 2.1, 5), bark);
+        stake.position.set(sx * (len / 2 + 0.1), 1.0, sz * 1.15);
+        stack.add(stake);
+      }
+      stack.position.set(Math.sin(sa) * sr, 0, Math.cos(sa) * sr);
+      stack.rotation.y = -sa + Math.PI / 2;
+      g.add(stack);
+      this._registerOccluder(stack.children[0], bark, 1.8);
+    }
+
+    /* One giant, down. Long enough to cross most of the clearing edge, with
+       its root plate torn up at one end - a single object at a scale nothing
+       else in the run has, which is what stops the room reading as a tidy
+       woodpile depot. */
+    const trunk = round(0.85, 17, 11);
+    trunk.rotation.set(Math.PI / 2, 0.5, 0.42);
+    trunk.position.set(-9.4, 0.9, 2.0);
+    trunk.castShadow = true;
+    g.add(trunk);
+    this._registerOccluder(trunk, bark, 2.0);
+
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 0.5, 13), bark);
+    plate.position.set(-12.0, 1.7, -5.6);
+    plate.rotation.set(0, 0, Math.PI / 2 - 0.3);
+    plate.castShadow = true;
+    g.add(plate);
+    for (let i = 0; i < 11; i++) {
+      const ang = rng() * Math.PI * 2;
+      const rt = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.11, 1.1 + rng() * 1.3, 5), bark);
+      rt.position.set(plate.position.x + (rng() - 0.5) * 0.6,
+                      plate.position.y + Math.cos(ang) * (1.2 + rng()),
+                      plate.position.z + Math.sin(ang) * (1.2 + rng()));
+      rt.rotation.set(rng() * 1.4, rng() * 3, rng() * 1.4);
+      g.add(rt);
+    }
+
+    // A splitting block with the axe still in it.
+    const block = round(0.55, 0.8);
+    block.position.set(4.2, 0.4, 6.6);
+    block.castShadow = true;
+    g.add(block);
+    const helve = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 1.0, 5), bark);
+    helve.position.set(4.2, 1.28, 6.6);
+    helve.rotation.z = 0.34;
+    g.add(helve);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, 0.1), iron);
+    head.position.set(4.06, 0.84, 6.6);
+    head.rotation.z = 0.34;
+    g.add(head);
+
+    g.visible = false;
+    this.felling = g;
+    this.scene.add(g);
+  }
+
+  /* THE BOG. The lowest ground in the run, and the one place the wood is still
+     drowning rather than dead.
+
+     Its foes are the Blackdamp, which take your STAMINA, and the room says so
+     before they do: standing water everywhere, so half the floor already looks
+     like somewhere you would rather not be caught standing. */
+  _buildBog(tex) {
+    const rng = makeRng(24680);
+    const g = new THREE.Group();
+    const bark = new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 0.97 });
+    const pale = new THREE.MeshStandardMaterial({ color: 0x9aa08c, roughness: 0.88 });
+    // Pale, because the water under them ended up nearly black and a dark reed
+    // on dark water is not a reed, it is nothing.
+    const reed = new THREE.MeshStandardMaterial({ color: 0x8a8760, roughness: 1 });
+    /* WATER, and it took three tries to get right.
+
+       A low-roughness standard material lying flat mirrors the whole sky dome
+       at once, and a uniform mirror of a bright sky is not water - it is SNOW.
+       It went white even with the base colour set to pure red, which is the
+       tell: none of that brightness was diffuse, so no amount of darkening the
+       colour was ever going to touch it.
+
+       So the surface itself is rough and nearly matte, and the wetness is put
+       back deliberately as a few narrow additive glints. A shaped highlight
+       reads as water; an evenly lit plane never will. */
+    const water = new THREE.MeshStandardMaterial({
+      map: tex.bog, color: 0x24322e, roughness: 0.86, metalness: 0.0,
+      envMapIntensity: 0.05, transparent: true, opacity: 0.95 });
+    const glint = new THREE.MeshBasicMaterial({
+      color: 0x8fb4c0, transparent: true, opacity: 0.16, depthWrite: false,
+      blending: THREE.AdditiveBlending });
+    const mud = new THREE.MeshStandardMaterial({ color: 0x1d1a14, roughness: 1 });
+
+    /* Pools. Flat discs a hair above the floor, with LOW roughness so the moon
+       and the telegraphs glint off them - which is the only thing that makes a
+       dark disc read as water and not as a hole. */
+    for (let i = 0; i < 13; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * (0.34 + rng() * 0.9);
+      const r = 1.1 + rng() * 2.9;
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(r, 18), water);
+      pool.rotation.x = -Math.PI / 2;
+      pool.scale.y = 0.6 + rng() * 0.7;
+      pool.position.set(Math.sin(a) * rad, 0.014 + rng() * 0.004, Math.cos(a) * rad);
+      g.add(pool);
+      // A mud rim. Without it the pool's edge is a hard cut in the floor and
+      // the disc reads as something LYING on the ground rather than as a hole
+      // in it with water at the bottom.
+      const rim = new THREE.Mesh(new THREE.RingGeometry(r * 0.97, r * 1.16, 20), mud);
+      rim.rotation.x = -Math.PI / 2;
+      rim.scale.y = pool.scale.y;
+      rim.position.set(pool.position.x, 0.01, pool.position.z);
+      g.add(rim);
+
+      // Two narrow glints across each pool. This is the whole of the wetness.
+      for (let k = 0; k < 4; k++) {
+        const gl = new THREE.Mesh(
+          new THREE.PlaneGeometry(r * (0.25 + rng() * 0.4), 0.07 + rng() * 0.06), glint);
+        gl.rotation.x = -Math.PI / 2;
+        gl.rotation.z = 0.5 + rng() * 0.4;
+        gl.position.set(pool.position.x + (rng() - 0.5) * r * 0.7, 0.026,
+                        pool.position.z + (rng() - 0.5) * r * 0.5);
+        g.add(gl);
+      }
+
+      const n = 8 + ((rng() * 12) | 0);
+      for (let k = 0; k < n; k++) {
+        const ra = rng() * Math.PI * 2, rr = r * (0.8 + rng() * 0.35);
+        const h = 0.5 + rng() * 0.8;
+        const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, h, 3), reed);
+        blade.position.set(pool.position.x + Math.sin(ra) * rr, h / 2,
+                           pool.position.z + Math.cos(ra) * rr * 0.7);
+        blade.rotation.set((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5);
+        g.add(blade);
+      }
+    }
+
+    /* Dead pale birches standing in the water. The only near-white verticals
+       anywhere in the run, which is what makes this room recognisable at a
+       glance from the top of the screen. */
+    for (let i = 0; i < 14; i++) {
+      const a = rng() * Math.PI * 2;
+      const da = Math.abs(((a - EXIT.bearing + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      if (da < EXIT.gapAngle) continue;
+      const rad = ARENA.radius * 0.92 + rng() * 7;
+      const h = 4 + rng() * 5;
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.19, h, 6), pale);
+      t.position.set(Math.sin(a) * rad, h / 2, Math.cos(a) * rad);
+      t.rotation.set((rng() - 0.5) * 0.22, rng() * 3, (rng() - 0.5) * 0.22);
+      t.castShadow = true;
+      g.add(t);
+      this._registerOccluder(t, pale, h);
+    }
+
+    // A causeway of sunken logs across the middle, half under.
+    for (let i = 0; i < 6; i++) {
+      const lg = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 3.4 + rng() * 2, 7), bark);
+      lg.rotation.set(Math.PI / 2, 0, 0.3 + rng() * 2.4);
+      lg.position.set(-6 + i * 2.6 + (rng() - 0.5) * 1.4, 0.1, -3 + (rng() - 0.5) * 5);
+      lg.castShadow = true;
+      g.add(lg);
+    }
+
+    g.visible = false;
+    this.bog = g;
+    this.scene.add(g);
+  }
+
+
+  /* THE KILN MOUTH. The heat is back on, so this one is built out of LIGHT
+     rather than out of objects: seams of molten slag running through the
+     floor, and the ground pool going hot. It is the only warm room in the run
+     and it arrives after two cold ones, which is most of the effect. */
+  /* THE BURN. A charcoal-burner's clearing: earth-covered mounds smouldering
+     from the inside, and stacked cordwood waiting its turn.
+
+     It keeps the job the old kiln room did - it is the one WARM room, and it
+     arrives after two cold ones, which is most of the effect - but it earns
+     that warmth out of the forest instead of importing a foundry into it.
+     Charcoal is what a wood makes FOR a works, so it also says, without a
+     word, what is at the end of the road. */
+  _buildCharcoal() {
+    const rng = makeRng(31337);
+    const g = new THREE.Group();
+    const earth = new THREE.MeshStandardMaterial({ color: 0x2c2419, roughness: 1 });
+    const char = new THREE.MeshStandardMaterial({ color: 0x14100e, roughness: 1 });
+    const bark = new THREE.MeshStandardMaterial({ map: this._tex.bark, roughness: 0.97 });
+    const glow = new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.9 });
+
+    /* The mounds. A squashed cone of earth with a ring of vents glowing at the
+       base - so the light comes out at ANKLE height, the fight is lit from
+       below, and the ground telegraphs sit in it. */
+    this.seams = [];
+    for (const [ma, mr, ms] of [[-1.1, 9.6, 1.0], [1.3, 10.2, 0.85],
+                                [2.9, 9.0, 1.15], [4.4, 10.6, 0.9]]) {
+      const mx = Math.sin(ma) * mr, mz = Math.cos(ma) * mr;
+      const mound = new THREE.Mesh(new THREE.ConeGeometry(2.3 * ms, 2.1 * ms, 14), earth);
+      mound.position.set(mx, 1.02 * ms, mz);
+      mound.castShadow = true;
+      g.add(mound);
+      this._registerOccluder(mound, earth, 2.1 * ms);
+
+      for (let k = 0; k < 9; k++) {
+        const va = (k / 9) * Math.PI * 2 + rng();
+        const vent = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.22), glow.clone());
+        vent.position.set(mx + Math.sin(va) * 2.16 * ms, 0.2, mz + Math.cos(va) * 2.16 * ms);
+        vent.lookAt(0, 0.2, 0);
+        g.add(vent);
+        this.seams.push({ mesh: vent, phase: rng() * 7 });
+      }
+      const light = new THREE.PointLight(0xff7020, 5.4, 12, 2);
+      light.position.set(mx, 0.6, mz);
+      g.add(light);
+
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.3 * ms, 10), glow.clone());
+      hole.rotation.x = -Math.PI / 2;
+      hole.position.set(mx, 2.06 * ms, mz);
+      g.add(hole);
+      this.seams.push({ mesh: hole, phase: rng() * 7 });
+    }
+
+    /* Seams of embers where a mound burned through and ran. This is the old
+       kiln's floor lighting, kept because lighting a fight from underneath is
+       worth keeping - just made of raked coals rather than molten slag. */
+    for (let i = 0; i < 7; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * (0.4 + rng() * 0.62);
+      const len = 2 + rng() * 3.4;
+      const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.26 + rng() * 0.24, len), glow.clone());
+      seam.rotation.x = -Math.PI / 2;
+      seam.rotation.z = rng() * Math.PI;
+      seam.position.set(Math.sin(a) * rad, 0.02, Math.cos(a) * rad);
+      g.add(seam);
+      this.seams.push({ mesh: seam, phase: rng() * 7 });
+      const lip = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, len * 0.9), char);
+      lip.position.set(seam.position.x + 0.55, 0.05, seam.position.z);
+      lip.rotation.y = -seam.rotation.z;
+      g.add(lip);
+      const light = new THREE.PointLight(0xff7020, 2.6, 6.5, 2);
+      light.position.set(seam.position.x, 0.5, seam.position.z);
+      g.add(light);
+    }
+
+    // Finished charcoal, heaped; and the cordwood waiting its turn.
+    for (let i = 0; i < 8; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.88 + rng() * 4;
+      const heap = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55 + rng() * 0.6, 0), char);
+      heap.position.set(Math.sin(a) * rad, 0.26, Math.cos(a) * rad);
+      heap.rotation.set(rng(), rng(), rng());
+      heap.scale.y = 0.7;
+      heap.castShadow = true;
+      g.add(heap);
+    }
+    for (const [sa, sr] of [[0.3, 11.4], [-2.0, 11.0]]) {
+      const stack = new THREE.Group();
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) {
+        const lg = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 3.0, 7), bark);
+        lg.rotation.z = Math.PI / 2;
+        lg.position.set(0, 0.22 + r * 0.42, (c - 1.5) * 0.44);
+        stack.add(lg);
+      }
+      stack.position.set(Math.sin(sa) * sr, 0, Math.cos(sa) * sr);
+      stack.rotation.y = -sa;
+      g.add(stack);
+    }
+
+    g.visible = false;
+    this.charcoal = g;
+    this.scene.add(g);
+  }
+
+  /* THE WORKS. The last room, and the ONLY industrial place in the run.
+
+     Everything that used to be scattered through the wood lives here: the
+     furnace, the rails, the tipped carts, the ingots, the slag still running.
+     Collecting it into one room is what buys the forest back - and it means
+     arriving at the works is an event rather than the fourth time you have
+     walked past a chimney. */
+  _buildWorks(tex) {
+    const rng = makeRng(70707);
+    const g = new THREE.Group();
+    this.worksSeams = [];
+    const stone = new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.96 });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x37302a, roughness: 0.86, metalness: 0.0, envMapIntensity: 0.12 });
+    const rust = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.94, metalness: 0.0 });
+    const timber = new THREE.MeshStandardMaterial({ color: 0x3a2f22, roughness: 0.98 });
+    // Metalness plus this scene's environment map is a lamp, not steel: these
+    // came out pure white and were the brightest thing in a room whose whole
+    // point is that the SLAG is what glows. Same lesson as the bog water.
+    const ingotMat = new THREE.MeshStandardMaterial({
+      color: 0x4a4f55, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.1 });
+    const molten = new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.85 });
+    const crust = new THREE.MeshStandardMaterial({ color: 0x1b1512, roughness: 1 });
+
+    /* THE FURNACE. Taller than anything else the run has shown you.
+
+       Placed on the bearing OPPOSITE the camera, which is the only place an
+       eleven-metre chimney can go on a camera that never turns: anywhere on
+       the camera's side of the arena and you are looking at its shadowed back,
+       so the tallest object in the run renders as a black hole in the picture.
+       Across the circle you see its lit face, and it frames the top of frame
+       instead of blocking the bottom. */
+    const fa = CAMERA_BEARING + Math.PI;
+    const FR = ARENA.radius + 1.6;
+    const fx = Math.sin(fa) * FR, fz = Math.cos(fa) * FR;
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 2.5, 8.5, 13), stone);
+    stack.position.set(fx, 4.25, fz);
+    stack.castShadow = true;
+    g.add(stack);
+    this._registerOccluder(stack, stone, 11.0);
+
+    const mouth = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.1, 2.5),
+      new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.95 }));
+    mouth.position.set(fx * 0.83, 1.5, fz * 0.83);
+    mouth.lookAt(0, 1.5, 0);
+    g.add(mouth);
+    this.worksMouth = mouth;
+    const flight = new THREE.PointLight(0xff6a20, 30, 26, 2);
+    flight.position.set(fx * 0.8, 2.0, fz * 0.8);
+    g.add(flight);
+    this.worksLight = flight;
+    // Uplight on the stack itself. The mouth lights the FLOOR in front of the
+    // furnace; without this the eleven metres above it stayed unlit and the
+    // tallest object in the run was an absence.
+    const up = new THREE.SpotLight(0xff8a44, 90, 26, 0.55, 0.75, 1.3);
+    up.position.set(fx * 0.62, 0.5, fz * 0.62);
+    up.target.position.set(fx, 8.0, fz);
+    g.add(up, up.target);
+
+    // Three tap-holes up the stack, glowing. A silhouette with light coming
+    // OUT of it reads as a furnace; the same silhouette unlit reads as a wall.
+    for (let k = 0; k < 3; k++) {
+      const th = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.34),
+        new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85 }));
+      th.position.set(fx * 0.9, 3.4 + k * 2.4, fz * 0.9);
+      th.lookAt(0, 3.4 + k * 2.4, 0);
+      g.add(th);
+    }
+
+    // Rails out along the haul road and across it.
     for (const [ang, len, n] of [[EXIT.bearing, 34, 2], [EXIT.bearing + Math.PI / 2, 26, 2]]) {
       const sn = Math.sin(ang), cs = Math.cos(ang);
       for (let k = 0; k < n; k++) {
@@ -457,8 +1002,8 @@ export class Forest {
         rail.rotation.y = -ang;
         g.add(rail);
       }
-      for (let s = 0; s < 16; s++) {
-        const d = -len / 2 + (s / 15) * len;
+      for (let si = 0; si < 16; si++) {
+        const d = -len / 2 + (si / 15) * len;
         const tie = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.34), timber);
         tie.position.set(sn * (2 + d), 0.03, cs * (2 + d));
         tie.rotation.y = -ang;
@@ -466,93 +1011,38 @@ export class Forest {
       }
     }
 
-    // Tipped ore carts. Boxes on their sides with a wheel showing — the wheel
-    // is what stops them reading as crates.
-    for (let i = 0; i < 5; i++) {
-      const a = rng() * Math.PI * 2;
-      const rad = ARENA.radius * 0.84 + rng() * 5;
+    // Tipped ore carts. The wheel is what stops them reading as crates.
+    for (const [ca, cr] of [[-1.3, 9.4], [1.9, 10.2], [3.6, 8.8]]) {
       const cart = new THREE.Group();
-      cart.position.set(Math.sin(a) * rad, 0.5, Math.cos(a) * rad);
-      cart.rotation.set((rng() - 0.5) * 1.1, rng() * Math.PI, (rng() - 0.5) * 0.9);
       const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.1), rust);
       body.castShadow = true;
       cart.add(body);
-      for (const sx of [-1, 1]) {
-        const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.08, 5, 12), iron);
-        wheel.position.set(sx * 0.8, -0.3, 0);
-        wheel.rotation.y = Math.PI / 2;
-        cart.add(wheel);
+      for (const wx of [-0.62, 0.62]) {
+        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.1, 11), iron);
+        w.rotation.z = Math.PI / 2;
+        w.position.set(wx, -0.1, 0.5);
+        cart.add(w);
       }
+      cart.position.set(Math.sin(ca) * cr, 0.62, Math.cos(ca) * cr);
+      cart.rotation.set(1.3, ca, 0.3);
       g.add(cart);
     }
 
-    // Ingot stacks, low and neat — the one tidy thing left in the works.
-    for (let i = 0; i < 7; i++) {
-      const a = rng() * Math.PI * 2;
-      const rad = ARENA.radius * 0.9 + rng() * 6;
-      const stack = new THREE.Group();
-      stack.position.set(Math.sin(a) * rad, 0, Math.cos(a) * rad);
-      stack.rotation.y = rng() * Math.PI;
-      const rows = 2 + (rng() * 3 | 0);
-      for (let r2 = 0; r2 < rows; r2++) {
-        for (let c = 0; c < 3 - (r2 % 2); c++) {
-          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.26), ingot);
-          bar.position.set((c - 1) * 0.3 + (r2 % 2) * 0.15, 0.09 + r2 * 0.17, 0);
-          bar.rotation.y = (r2 % 2) * Math.PI / 2;
-          bar.castShadow = true;
-          stack.add(bar);
-        }
+    // Ingot stacks: what the whole place was for.
+    for (const [ia, ir] of [[0.7, 8.6], [-2.4, 9.0]]) {
+      const stackG = new THREE.Group();
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3 - r; c++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.2, 0.34), ingotMat);
+        b.position.set(0, 0.1 + r * 0.21, (c - (2 - r) / 2) * 0.4);
+        b.castShadow = true;
+        stackG.add(b);
       }
-      g.add(stack);
+      stackG.position.set(Math.sin(ia) * ir, 0, Math.cos(ia) * ir);
+      stackG.rotation.y = -ia;
+      g.add(stackG);
     }
 
-    // Two crane frames at the tree line. The only tall man-made things in the
-    // game, and the reason this room has a skyline the others do not.
-    for (const a of [EXIT.bearing + 1.9, EXIT.bearing - 2.1]) {
-      const rad = ARENA.radius + 1.2;
-      const crane = new THREE.Group();
-      crane.position.set(Math.sin(a) * rad, 0, Math.cos(a) * rad);
-      crane.rotation.y = -a;
-      for (const sx of [-1, 1]) {
-        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 6.4, 0.22), timber);
-        leg.position.set(sx * 1.5, 3.2, 0);
-        leg.rotation.z = -sx * 0.07;
-        leg.castShadow = true;
-        crane.add(leg);
-      }
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.26, 0.26), timber);
-      beam.position.y = 6.3;
-      beam.castShadow = true;
-      crane.add(beam);
-      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 4), iron);
-      chain.position.set(0.6, 5.0, 0);
-      crane.add(chain);
-      const hookMass = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), iron);
-      hookMass.position.set(0.6, 3.6, 0);
-      hookMass.castShadow = true;
-      crane.add(hookMass);
-      g.add(crane);
-      this._registerOccluder(beam, timber, 6.5);
-    }
-
-    g.visible = false;
-    this.yard = g;
-    this.scene.add(g);
-  }
-
-  /* THE KILN MOUTH. The heat is back on, so this one is built out of LIGHT
-     rather than out of objects: seams of molten slag running through the
-     floor, and the ground pool going hot. It is the only warm room in the run
-     and it arrives after two cold ones, which is most of the effect. */
-  _buildKiln() {
-    const rng = makeRng(31337);
-    const g = new THREE.Group();
-    const molten = new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.85 });
-    const crust = new THREE.MeshStandardMaterial({ color: 0x1b1512, roughness: 1 });
-
-    // Seams. Thin bright strips just under the fighting circle, so the floor
-    // itself is a light source and the fight is lit from below.
-    this.seams = [];
+    // Molten seams under the fighting circle.
     for (let i = 0; i < 9; i++) {
       const a = rng() * Math.PI * 2;
       const rad = ARENA.radius * (0.35 + rng() * 0.75);
@@ -562,17 +1052,12 @@ export class Forest {
       seam.rotation.z = rng() * Math.PI;
       seam.position.set(Math.sin(a) * rad, 0.02, Math.cos(a) * rad);
       g.add(seam);
-      this.seams.push({ mesh: seam, phase: rng() * 7 });
-
-      // Crust lips either SIDE of the seam, not over it. A single slab centred
-      // on the crack covered the light it was supposed to be framing, and read
-      // as a black plank lying on a glowing stripe.
+      this.worksSeams.push({ mesh: seam, phase: rng() * 7 });
       const w = 0.30 + rng() * 0.22;
       for (const sx of [-1, 1]) {
         const lip = new THREE.Mesh(new THREE.BoxGeometry(w, 0.13, len * 1.02), crust);
         lip.position.set(
-          seam.position.x + Math.cos(-seam.rotation.z) * sx * (0.28 + w * 0.5),
-          0.06,
+          seam.position.x + Math.cos(-seam.rotation.z) * sx * (0.28 + w * 0.5), 0.06,
           seam.position.z - Math.sin(-seam.rotation.z) * sx * (0.28 + w * 0.5));
         lip.rotation.y = -seam.rotation.z;
         lip.castShadow = true;
@@ -592,17 +1077,18 @@ export class Forest {
       heap.rotation.set(rng(), rng(), rng());
       heap.castShadow = true;
       g.add(heap);
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6),
+      const gl = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6),
         new THREE.MeshBasicMaterial({ color: 0xff9a3c }));
-      glow.position.copy(heap.position);
-      glow.position.y += 0.35;
-      g.add(glow);
+      gl.position.copy(heap.position);
+      gl.position.y += 0.35;
+      g.add(gl);
     }
 
     g.visible = false;
-    this.kiln = g;
+    this.works = g;
     this.scene.add(g);
   }
+
 
 
   /* ---------------------------------------------------------------------
@@ -1110,15 +1596,25 @@ export class Forest {
       road.add(rut);
     }
 
-    // Sleepers laid across the track where it leaves the circle.
-    for (let i = 0; i < 6; i++) {
+    // Roots crossing the path where it leaves the circle. This used to be
+    // railway sleepers, which made the way out of every forest room read as a
+    // mine tramway - the works has its own room now and the rails went with
+    // it. A path through a wood is worn EARTH with roots across it.
+    for (let i = 0; i < 7; i++) {
       const d = R - 1.4 + i * 1.5;
-      const sleeper = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 0.42), wood);
-      sleeper.position.set(sn * d, 0.08, cs * d);
-      sleeper.rotation.y = -a;
-      sleeper.castShadow = true;
-      road.add(sleeper);
+      const root = new THREE.Mesh(
+        new THREE.TorusGeometry(1.3 + this.rng() * 0.6, 0.08 + this.rng() * 0.05,
+                                4, 10, 1.5 + this.rng() * 0.9), wood);
+      root.position.set(sn * d, 0.0, cs * d);
+      root.rotation.set(0, -a + (this.rng() - 0.5) * 0.5, 0);
+      road.add(root);
     }
+    // And a log fallen across it, stepped over so often the bark is off.
+    const fallen = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 4.4, 9), wood);
+    fallen.position.set(sn * (R + 2.6), 0.3, cs * (R + 2.6));
+    fallen.rotation.set(Math.PI / 2, -a + 0.2, 0);
+    fallen.castShadow = true;
+    road.add(fallen);
 
     // Two gateposts, one of them leaning. Nothing here has been maintained in
     // four hundred years.
@@ -1207,100 +1703,85 @@ export class Forest {
      on. Everything is built once, lazily, and toggled after that.
      ------------------------------------------------------------------ */
   setTheme(name) {
-    // Deliberately NOT guarded on `theme === name`. An early return here meant
-    // that if anything switched the theme twice in a frame — which the zone
-    // flow does, because entering a zone resets the world — the visibility
-    // pass could be skipped and the town would exist but stay hidden.
-    //
-    // Lazy BUILDS are still guarded (they are the expensive part). Applying a
-    // handful of `.visible` flags every call costs nothing and cannot get out
-    // of step with what the game thinks it is showing.
-    const changed = this.theme !== name;
+    /* Deliberately NOT guarded on `theme === name`. An early return here meant
+       that if anything switched the theme twice in a frame - which the zone
+       flow does, because entering a zone resets the world - the visibility
+       pass could be skipped and the town would exist but stay hidden.
+
+       Lazy BUILDS are still guarded (they are the expensive part). Applying a
+       handful of `.visible` flags every call costs nothing and cannot get out
+       of step with what the game thinks it is showing. */
     this.theme = name;
-    // Cold rooms are everything that is not the clearing or the kiln.
-    const ossuary = name === 'ossuary' || name === 'yard';
+    const T = LOOKS[name] || LOOKS.clearing;
 
-    // The forge is the heart of the clearing. On the sorting floor it is
-    // somewhere behind you, so its light goes out and the room goes cold.
-    if (this.forgeMouth) this.forgeMouth.visible = !ossuary;
-    if (this.forgeLight) this.forgeLight.intensity = ossuary ? 0 : 13;
-    for (const f of this.fires) f.group.visible = !ossuary;
-
-    if (this.pool && changed) {
-      this.pool.material.color.setHex(ossuary ? 0x7f95b4 : 0xffffff);
-      this.pool.material.opacity = ossuary ? 0.34 : 0.5;
+    // --- the floor --------------------------------------------------------
+    // Ash is the works' and the town's. Everywhere the wood has taken back is
+    // loam, and that single swap separates forest from foundry more cheaply
+    // than any number of props standing on top of it.
+    if (this.ground) {
+      const want = T.floor === 'loam' ? this._tex.loam : this._tex.ground;
+      if (this.ground.material.map !== want) {
+        this.ground.material.map = want;
+        this.ground.material.needsUpdate = true;
+      }
     }
-    if (this.embers) this.embers.points.visible = !ossuary;
 
-    // Each room switches its OWN dressing on, built lazily the first time it
-    // is needed. The bones are shared between the two cold rooms because the
-    // sorting floor and the yard are the same place doing different jobs; the
-    // yard adds height on top, and the kiln adds light instead of objects.
-    const bonesOn = ossuary || name === 'yard';
-    if (bonesOn && !this.bones) this._buildBones();
-    if (this.bones) this.bones.visible = bonesOn;
+    // --- the light pool ---------------------------------------------------
+    if (this.pool) {
+      this.pool.material.color.setHex(T.pool);
+      this.pool.material.opacity = T.poolA;
+    }
 
-    // The fog is tinted per place, which is a third of what separates them:
-    // cold blue in the wood, a dirty grey in the town, and hot low smoke at
-    // the kiln.
-    const FOG_TINT = { town: 0x8f9aa8, kiln: 0xff9a5a, yard: 0x7f92ab,
-                       ossuary: 0x8fa4bc, clearing: 0x9fb0c4 };
+    // --- what belongs to the WOOD ----------------------------------------
+    const town = name === 'town';
+    const forest = !town;
+    if (this.trees) this.trees.visible = forest;
+    if (this.undergrowth) this.undergrowth.visible = forest;
+    if (this.circleMark) this.circleMark.visible = forest;
+    if (this.road) this.road.visible = forest;
+    for (const m of this.mistPlanes) m.mesh.visible = forest;
+    if (this.ash) this.ash.points.visible = true;
+
+    // The clearing's cairn and campfires. They belong to the ONE room you
+    // start every run in, and nowhere else - three fires in every room made
+    // the whole wood look like it was still being worked.
+    const camp = name === 'clearing';
+    if (this.ruin) this.ruin.visible = camp;
+    for (const f of this.fires) f.group.visible = camp;
+    if (this.embers) this.embers.points.visible = T.embers;
+
+    // --- per-room dressing, built lazily the first time it is needed ------
+    if (name === 'ossuary' && !this.bones) this._buildBones();
+    if (this.bones) this.bones.visible = name === 'ossuary';
+
+    if (name === 'felling' && !this.felling) this._buildFelling();
+    if (this.felling) this.felling.visible = name === 'felling';
+
+    if (name === 'bog' && !this.bog) this._buildBog(this._tex);
+    if (this.bog) this.bog.visible = name === 'bog';
+
+    if (name === 'charcoal' && !this.charcoal) this._buildCharcoal();
+    if (this.charcoal) this.charcoal.visible = name === 'charcoal';
+
+    if (name === 'works' && !this.works) this._buildWorks(this._tex);
+    if (this.works) this.works.visible = name === 'works';
+
+    if (town && !this.town) this._buildTown(this._tex);
+    if (this.town) this.town.visible = town;
+
+    // --- fog and drift, tinted per place ---------------------------------
     for (const f of (this.fogSheets || [])) {
-      f.mesh.material.color.setHex(FOG_TINT[name] || FOG_TINT.clearing);
-      f.mesh.material.opacity = f.base * (name === 'kiln' ? 1.7 : name === 'town' ? 1.25 : 1);
+      f.mesh.material.color.setHex(T.fog);
+      f.mesh.material.opacity = f.base * T.fogA;
     }
     if (this.drift) {
       // The drift is the WOOD's. A town does not have it, which is one more
       // way of saying you have come out of the trees.
-      this.drift.points.visible = name !== 'town';
-      this.drift.points.material.color.setHex(name === 'kiln' ? 0xffb070 : 0x9fc6e8);
-    }
-
-    const town = name === 'town';
-    if (town && !this.town) this._buildTown(this._tex);
-    if (this.town) this.town.visible = town;
-    // In town the fighting circle, the tree line's mist and the haul road all
-    // belong to somewhere else.
-    if (this.road) this.road.visible = !town;
-    if (this.ruin) this.ruin.visible = !town;
-    if (this.ash) this.ash.points.visible = true;
-    if (this.trees) this.trees.visible = !town;
-    if (this.circleMark) this.circleMark.visible = !town;
-    for (const m of this.mistPlanes) m.mesh.visible = !town;
-    if (town) {
-      if (this.forgeMouth) this.forgeMouth.visible = false;
-      if (this.forgeLight) this.forgeLight.intensity = 0;
-      for (const f of this.fires) f.group.visible = false;
-      if (this.pool) {
-        this.pool.material.color.setHex(0x6f7a8c);
-        this.pool.material.opacity = 0.20;
-      }
-      if (this.embers) this.embers.points.visible = false;
-    }
-
-    if (name === 'yard' && !this.yard) this._buildYard();
-    if (this.yard) this.yard.visible = name === 'yard';
-
-    if (name === 'kiln' && !this.kiln) this._buildKiln();
-    if (this.kiln) this.kiln.visible = name === 'kiln';
-
-    // The kiln is the one warm room, and it arrives after two cold ones.
-    if (name === 'kiln') {
-      if (this.forgeMouth) this.forgeMouth.visible = true;
-      if (this.forgeLight) this.forgeLight.intensity = 26;
-      for (const f of this.fires) f.group.visible = true;
-      if (this.pool) {
-        this.pool.material.color.setHex(0xffb070);
-        this.pool.material.opacity = 0.62;
-      }
-      if (this.embers) this.embers.points.visible = true;
-    }
-    // The yard is colder and emptier than the sorting floor, not warmer.
-    if (name === 'yard' && this.pool) {
-      this.pool.material.color.setHex(0x8fa2bc);
-      this.pool.material.opacity = 0.28;
+      this.drift.points.visible = forest;
+      this.drift.points.material.color.setHex(T.drift);
     }
   }
+
 
   /* What the sorting floor is covered in. Deliberately LOW and pushed to the
      edge — anything tall in the fighting area is another thing the camera has
@@ -1423,10 +1904,18 @@ export class Forest {
     // The kiln's floor seams pulse slowly and out of phase with each other, so
     // the room is never evenly lit twice and the fight reads differently
     // depending on where in the circle it has drifted.
-    if (this.kiln && this.kiln.visible && this.seams) {
-      this._seamT = (this._seamT || 0) + dt;
-      for (const s of this.seams) {
-        s.mesh.material.opacity = 0.62 + 0.3 * Math.sin(this._seamT * 1.1 + s.phase);
+    // The burn's vents and the works' slag both pulse slowly and out of phase
+    // with each other, so neither room is ever evenly lit twice and a fight
+    // reads differently depending on where in the circle it has drifted.
+    this._seamT = (this._seamT || 0) + dt;
+    if (this.charcoal && this.charcoal.visible) {
+      for (const sm of this.seams || []) {
+        sm.mesh.material.opacity = 0.62 + 0.3 * Math.sin(this._seamT * 1.1 + sm.phase);
+      }
+    }
+    if (this.works && this.works.visible) {
+      for (const sm of this.worksSeams || []) {
+        sm.mesh.material.opacity = 0.62 + 0.3 * Math.sin(this._seamT * 1.1 + sm.phase);
       }
     }
     this.t += dt;
@@ -1456,10 +1945,11 @@ export class Forest {
       f.coals.material.emissiveIntensity = 2.2 * k;
     }
 
-    if (this.forgeLight) {
+    // The furnace, which now only exists in the works.
+    if (this.worksLight && this.works && this.works.visible) {
       const k = 0.85 + Math.sin(t * 1.6) * 0.1 + Math.sin(t * 5.4) * 0.05;
-      this.forgeLight.intensity = 13 * k;
-      this.forgeMouth.material.opacity = 0.8 + k * 0.18;
+      this.worksLight.intensity = 30 * k;
+      this.worksMouth.material.opacity = 0.8 + k * 0.18;
     }
 
     for (const m of this.mistPlanes) {

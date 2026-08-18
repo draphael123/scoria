@@ -1137,13 +1137,12 @@ export const ENCOUNTERS = {
     spawn: [[0, -4.6], [-4.0, -2.0], [4.0, -2.0]],
   },
   ossuary: {
-    id: 'ossuary', name: 'The Sorting Floor', short: 'BONES',
+    id: 'ossuary', name: 'The Barrow Ground', short: 'BONES',
     // Two come up out of the floor once the first three are engaged, so the
     // room escalates rather than arriving all at once.
     rocks: 5,
-    blurb: 'Where the good iron was picked out of the slag by hand. The ' +
-           'pickers are still at it, and there is nothing left down here ' +
-           'to pick but you.',
+    blurb: 'They buried the pickers where they fell, in a row, under ' +
+           'turf. The turf is still there. The row is not.',
     foe: 'cinderbone', theme: 'ossuary',
     hpMul: 1.0,
     // A ring, so you arrive already surrounded and the first decision of the
@@ -1155,11 +1154,11 @@ export const ENCOUNTERS = {
             [-3.4, 2.6, null, { at: 7.0 }], [3.4, 2.6, null, { at: 12.0 }]],
   },
   yard: {
-    id: 'yard', name: 'The Long Yard', short: 'BOLTS',
-    blurb: 'The hauling yard. They cut the sightlines long so a bolt could ' +
-           'reach anything leaving with iron it had not earned. You are ' +
-           'carrying iron.',
-    foe: 'cinderbone', theme: 'yard',
+    id: 'yard', name: 'The Felling', short: 'BOLTS',
+    blurb: 'The works ate a thousand trees a year and this is where they ' +
+           'came from. It is the most open ground in the wood, which was ' +
+           'good for dropping timber and is good for shooting across.',
+    foe: 'cinderbone', theme: 'felling',
     hpMul: 1.0,
     // Boulders on the yard, which is the room where cover MATTERS — the two
     // archers cannot shoot through them.
@@ -1173,11 +1172,11 @@ export const ENCOUNTERS = {
             [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone']],
   },
   gallery: {
-    id: 'gallery', name: 'The Lower Gallery', short: 'DAMP',
-    blurb: 'The air went bad in the lower gallery first, and took the ' +
-           'shift that was down there. What is left of them does not want ' +
-           'you dead. It wants you too tired to be difficult.',
-    foe: 'cinderbone', theme: 'ossuary',
+    id: 'gallery', name: 'The Drowned Hollow', short: 'DAMP',
+    blurb: 'The lowest ground in the wood, and the water has nowhere to ' +
+           'go. What is standing in it does not want you dead. It wants ' +
+           'you too tired to be difficult.',
+    foe: 'cinderbone', theme: 'bog',
     hpMul: 1.0,
     rocks: 7,
     spawn: [[0, -4.2, 'blackdamp'], [-4.8, -1.6, 'blackdamp'],
@@ -1185,11 +1184,11 @@ export const ENCOUNTERS = {
             [5.0, -1.6, null, { atRemaining: 2 }]],
   },
   kiln: {
-    id: 'kiln', name: 'The Kiln Mouth', short: 'KILN',
-    blurb: 'The kiln is lit. Nobody lit it. The wardens who fed it will ' +
-           'burn the ground you stand on rather than walk over and do it ' +
-           'properly. They were never paid to hurry.',
-    foe: 'cinderbone', theme: 'kiln',
+    id: 'kiln', name: 'The Burn', short: 'KILN',
+    blurb: 'Charcoal mounds, still going after four hundred years. The ' +
+           'burners who tended them will set the ground you stand on ' +
+           'alight rather than walk over. They were never paid to hurry.',
+    foe: 'cinderbone', theme: 'charcoal',
     hpMul: 1.0,
     spawn: [[0, -4.4, 'slagbound'],
             [-5.8, -4.0, 'kilnwarden'], [5.8, -4.0, 'kilnwarden'],
@@ -1197,10 +1196,11 @@ export const ENCOUNTERS = {
   },
   casting: {
     id: 'casting', name: 'The Casting Hall', short: 'PLATE',
-    blurb: 'The casting hall, where a life went into the iron and a ' +
-           'weapon came out. The last shift is still on it: a skimmer ' +
-           'over the channel, a gaffer keeping time, and the damp.',
-    foe: 'cinderbone', theme: 'kiln',
+    blurb: 'The wood ends and the works begins. This is the floor where a ' +
+           'life went into the iron and a weapon came out. The last shift ' +
+           'is still on it: a skimmer over the channel, a gaffer keeping ' +
+           'time, and the damp.',
+    foe: 'cinderbone', theme: 'works',
     hpMul: 1.0,
     rocks: 6,
     // The finale keeps five, and it is the only room that gets the Gaffer:
