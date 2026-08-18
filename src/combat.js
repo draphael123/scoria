@@ -221,7 +221,12 @@ export function applyDamage(attacker, target, atk, out) {
     const extra = (attacker.mods && attacker.mods.bleedFlat) || 0;
     target.bleed = Math.min(BLEED.maxStacks, (target.bleed || 0) + atk.bleed + extra);
     target.bleedFresh = 0;
-    if (target.bleed >= BLEED.pop) {
+    /* DEEP CUTS lowers the BAR rather than raising the stacks. Popping at four
+       is a different rhythm — one fewer hit in every chain — where +1 a hit
+       would only have been a bigger number arriving at the same moment. */
+    const pop = BLEED.pop + ((attacker.mods && attacker.mods.bleedThreshold) || 0);
+    target.bleedPopAt = pop;
+    if (target.bleed >= pop) {
       target.bleed = 0;
       target.hp -= BLEED.popDamage;
       ev.bleedPop = true;

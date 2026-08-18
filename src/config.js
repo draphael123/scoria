@@ -1729,6 +1729,155 @@ export const DOMAINS = {
            blurb: 'what you take away with you' },
 };
 
+
+/* -------------------------------------------------------------------------
+   MASTERY — the hook, finally stated as a system.
+
+   "The armoury rack is your character sheet." Boons are what the weapon picked
+   up on ONE run and lose when you die. Mastery is what it keeps. Between them
+   they are the same idea at two timescales, which is the whole shape of the
+   game: a run is a rehearsal, and what survives the rehearsal is the class.
+
+   Three rules make this worth having rather than an XP bar:
+
+   1. YOU DO NOT EARN IT BY WINNING. Each weapon has a RITE — the one thing it
+      is actually for — and mastery only comes from doing that. The sword
+      learns from blows you turned aside. The greataxe learns from blows you
+      chose to eat. The knives learn from things that bled out. The tome learns
+      from heat you dumped rather than heat you built. You cannot grind a
+      weapon by using a different weapon well, and you cannot grind it at all
+      by playing safe: every rite requires the risk the weapon is built around.
+
+   2. THE MIDDLE RANK IS A RULE, NOT A NUMBER. Rank 1 is a stat, because a
+      first reward has to be legible. Rank 2 CHANGES WHAT THE WEAPON CAN DO —
+      it is the rank the whole system exists for, and it is the one that makes
+      two masteries of the same weapon feel like two classes.
+
+   3. RANK 3 IS A SECOND ABILITY, on key 2. New verbs are the only reward that
+      keeps paying, and putting them at the top means the ceiling of every
+      weapon is "you know one more thing" rather than "your numbers are bigger".
+
+   Everything is declarative, read at Player construction, and merges into the
+   same BOON_MODS table the run's boons write to — so a mastery and a boon
+   compose without either knowing the other exists.
+   ---------------------------------------------------------------------- */
+export const MASTERY = {
+  /* What it costs to reach each rank. A rank should be several runs, not
+     several rooms, or "persists across runs" means nothing — but the first
+     numbers here were set by guessing and measured badly: a bot doing nothing
+     BUT the rite for two solid minutes reached 23. Halved, so rank 1 is about
+     a run of playing to the weapon's strength and rank 3 is about six. */
+  thresholds: [0, 22, 70, 165],
+
+  rites: {
+    sword: {
+      name: 'THE TURNING',
+      how: 'Blows taken on the shield.',
+      why: 'A sword and board is a question about whether you can afford to ' +
+           'stand still. The rite is the answer.',
+      ranks: [
+        { name: 'Set Guard', text: 'The arm remembers the weight. +10% damage.',
+          mods: { damageMul: 1.10 } },
+        { name: 'The Wall', text: 'A guard that runs dry no longer breaks — ' +
+          'it only stops absorbing. Nothing you block can open you.',
+          mods: { guardNeverBreaks: 1, guardAbsorbFlat: 0.06 } },
+        { name: 'Riposte', text: 'A second ability on 2: a short thrust that ' +
+          'comes out of a block, cheap and fast.', ability: 'riposte' },
+      ],
+    },
+    greataxe: {
+      name: 'THE TRADE',
+      how: 'Blows taken while swinging.',
+      why: 'The axe buys its hyperarmour with your health. Mastery is having ' +
+           'made that trade often enough to be right about it.',
+      ranks: [
+        { name: 'Braced', text: 'You have been hit here before. +12% poise damage.',
+          mods: { poiseMul: 1.12 } },
+        { name: 'Two Men Hung It', text: 'Hyperarmour costs 20% taken instead ' +
+          'of 20%+. Halved, and it never staggers you.',
+          mods: { armorTradeMul: 0.5 } },
+        { name: 'Upheaval', text: 'A second ability on 2: plant the haft and ' +
+          'bring the whole floor up.', ability: 'upheaval' },
+      ],
+    },
+    daggers: {
+      name: 'THE FLENSING',
+      // Deliberately does not name the number: Deep Cuts changes it to four.
+      how: 'Bleeds you opened and finished.',
+      why: 'The knives do not kill things. They open them and wait. The rite ' +
+           'is the waiting done properly.',
+      ranks: [
+        { name: 'Quick Hands', text: 'Nothing wasted. +14% roll distance, ' +
+          'off-hand costs 20% less.',
+          mods: { rollMul: 1.14, offhandCostMul: 0.8 } },
+        { name: 'Deep Cuts', text: 'Bleed pops at FOUR stacks instead of five.',
+          mods: { bleedThreshold: -1 } },
+        { name: 'Bloodletting', text: 'A second ability on 2: a spending ' +
+          'strike that consumes every stack on the target at once.',
+          ability: 'bloodlet' },
+      ],
+    },
+    tome: {
+      name: 'THE BELLOWS',
+      how: 'Heat vented rather than spent.',
+      why: 'Anyone can build heat. A bellows-master is someone who has ' +
+           'learned when to let it go.',
+      ranks: [
+        { name: 'Steady Draw', text: 'The stone runs cooler. Heat sheds ' +
+          '6/s faster.', mods: { heatDecayFlat: 6 } },
+        { name: 'Backdraught', text: 'Venting no longer costs you the windup ' +
+          '— it comes out on the frame you ask for it.',
+          mods: { instantVent: 1 } },
+        { name: 'Firestorm', text: 'A second ability on 2: spend the whole ' +
+          'bar as a ring of standing fire.', ability: 'firestorm' },
+      ],
+    },
+  },
+};
+
+/* The abilities mastery unlocks. Kept out of WEAPONS so the weapon table stays
+   the thing you read to know what a weapon IS, and this stays the thing you
+   read to know what it can BECOME. */
+export const MASTERY_ABILITIES = {
+  riposte: {
+    id: 'riposte', key: 2, name: 'RIPOSTE',
+    blurb: 'Fast, cheap, and it comes out of a guard. Needs Turning II.',
+    atk: { id: 'A2', label: 'RIPOSTE',
+      windup: 0.14, active: 0.08, recover: 0.34,
+      stamina: 14, damage: 26, poise: 12,
+      shape: 'arc', reach: 2.3, arc: 0.7, step: 1.4,
+      pose: 'thrust', cancelFrom: null, next: null },
+  },
+  upheaval: {
+    id: 'upheaval', key: 2, name: 'UPHEAVAL',
+    blurb: 'The floor comes up. Needs the Trade II.',
+    atk: { id: 'A2', label: 'UPHEAVAL',
+      windup: 0.54, active: 0.16, recover: 0.92,
+      stamina: 42, damage: 52, poise: 54,
+      shape: 'circle', radius: 2.6, offset: 1.0, step: 0.6,
+      knock: 9, heavy: true, armor: true, cancelFrom: null, next: null },
+  },
+  bloodlet: {
+    id: 'bloodlet', key: 2, name: 'BLOODLETTING',
+    blurb: 'Spends every stack at once. Needs the Flensing II.',
+    atk: { id: 'A2', label: 'BLOODLETTING',
+      windup: 0.20, active: 0.08, recover: 0.44,
+      stamina: 20, damage: 14, poise: 6,
+      shape: 'arc', reach: 2.0, arc: 1.0, step: 1.0,
+      spendBleed: 9, cancelFrom: null, next: null },
+  },
+  firestorm: {
+    id: 'firestorm', key: 2, name: 'FIRESTORM',
+    blurb: 'The whole bar, as standing fire. Needs the Bellows II.',
+    atk: { id: 'A2', label: 'FIRESTORM',
+      windup: 0.46, active: 0.6, recover: 0.86,
+      stamina: -100, damage: 30, poise: 10,
+      shape: 'circle', radius: 3.4, offset: 0,
+      zone: true, telegraph: 'zone', step: 0,
+      cancelFrom: null, next: null },
+  },
+};
+
 export const BOON_MODS = {
   // Every field here is read in exactly one place. If you add one, add the
   // read too, or it is a lie printed on a card.
@@ -1752,6 +1901,12 @@ export const BOON_MODS = {
   healOnStagger: 0,
   healOnClear: 0,
   goldMul: 1,
+
+  // --- written only by MASTERY, never by a boon ------------------------
+  guardNeverBreaks: 0,   // a dry guard stops absorbing rather than breaking
+  armorTradeMul: 1,      // scales the greataxe's hyperarmour penalty
+  bleedThreshold: 0,     // shifts BLEED.maxStacks; -1 means it pops at four
+  instantVent: 0,        // the tome's vent skips its windup
 };
 
 export const BOONS = [

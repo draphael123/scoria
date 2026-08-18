@@ -6,7 +6,8 @@
    that could trivialise the duel would be a build that answers the question
    Slice 0 exists to ask. */
 
-import { WEAPONS, WEAPON_ORDER, ENCOUNTERS, DEFAULT_ENCOUNTER } from './config.js';
+import { WEAPONS, WEAPON_ORDER, ENCOUNTERS, DEFAULT_ENCOUNTER, MASTERY } from './config.js';
+import { loadMastery, progress } from './mastery.js';
 
 // Bumped from v1: a saved build now carries a weapon and an encounter, and a
 // v1 save that lacks them is merged against the defaults rather than rejected.
@@ -312,6 +313,44 @@ export class Creator {
       const ul = el('ul', 'cr-weap-lines');
       for (const line of (w.lines || [])) ul.appendChild(el('li', null, line));
       card.appendChild(ul);
+      /* WHAT THIS ONE HAS KEPT. The rack is the character sheet, so the
+         rack is where a weapon's mastery has to be readable — putting it in a
+         menu somewhere else would make the rack a shop again.
+
+         Shown as a rite name, a bar, and the ranks earned in plain words. The
+         unearned ones are shown too, greyed: knowing what a weapon BECOMES is
+         most of the reason to keep carrying it. */
+      if (!w.stub && MASTERY.rites[id]) {
+        const rite = MASTERY.rites[id];
+        const st = (this._mastery || (this._mastery = loadMastery()))[id];
+        const pr = progress(st ? st.rite : 0);
+        const m = el('div', 'cr-mast');
+        const head = el('div', 'cr-mast-head');
+        head.appendChild(el('span', 'cr-mast-name', rite.name));
+        head.appendChild(el('span', 'cr-mast-rank',
+          pr.rank ? 'I'.repeat(pr.rank) : '—'));
+        m.appendChild(head);
+
+        const bar = el('div', 'cr-mast-bar');
+        const fill = el('i');
+        fill.style.width = (pr.frac * 100).toFixed(1) + '%';
+        bar.appendChild(fill);
+        m.appendChild(bar);
+        m.appendChild(el('div', 'cr-mast-how',
+          pr.need === null ? rite.how + ' Mastered.'
+            : `${rite.how} ${pr.have} / ${pr.need}`));
+
+        const list = el('ul', 'cr-mast-ranks');
+        rite.ranks.forEach((r, i) => {
+          const li = el('li', i < pr.rank ? 'got' : null);
+          li.appendChild(el('b', null, r.name));
+          li.appendChild(document.createTextNode(' — ' + r.text));
+          list.appendChild(li);
+        });
+        m.appendChild(list);
+        card.appendChild(m);
+      }
+
       if (w.stub) card.appendChild(el('div', 'cr-weap-lock', 'NOT YET FORGED'));
 
       card.disabled = !!w.stub;
@@ -411,6 +450,8 @@ export class Creator {
   _save() { saveBuild(this.b); }
 
   refresh() {
+    // Re-read: a rank earned since the panel was last built has to show.
+    this._mastery = loadMastery();
     const left = remaining(this.b);
     this.pointsLabel.innerHTML = left > 0
       ? `<b>${left}</b> point${left === 1 ? '' : 's'} to spend`

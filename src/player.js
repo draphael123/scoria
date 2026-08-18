@@ -35,7 +35,15 @@ export class Player extends Actor {
     this.maxStamina = this.weapon.resource === 'heat' ? PLAYER.heatMax : this.derived.stamina;
     // Boons live on the RUN, not on the player, because the player is rebuilt
     // at every doorway. This is a reference to that table, not a copy.
+    /* One table, already composed by the Game out of what this RUN has picked
+       up and what this WEAPON has kept. Composed upstream rather than here so
+       there is exactly one place that knows how a boon and a mastery combine —
+       doing it in two places is how one of them ends up dropping half of it. */
     this.mods = opts.mods || { ...BOON_MODS };
+    // A rank-3 mastery hands the weapon a second verb, and it goes into the
+    // same list the weapon's own abilities live in so nothing downstream has
+    // to care where it came from.
+    this.extraAbilities = opts.abilities || [];
     this.maxStamina += this.mods.staminaFlat;
     this.stamina = this.maxStamina;   // full headroom == stone cold
     this.staminaDelay = 0;
@@ -84,6 +92,9 @@ export class Player extends Actor {
 
   get guard() {
     if (this.state !== STATE.GUARD) return null;
+    // THE WALL. A dry guard stops absorbing rather than breaking open, which
+    // is the difference between "you ran out" and "you are now in trouble".
+    if (this.staminaLock > 0 && !this.mods.guardNeverBreaks) return null;
     const g = this.weapon.guard;
     if (!this.mods.guardAbsorbFlat) return g;
     // Returned as a copy: the weapon table is shared and must never be
@@ -114,7 +125,10 @@ export class Player extends Actor {
   /* +20% taken while armoured, unless a boon has bought that off. */
   get armorDamageMul() {
     if (this.mods.armorPenaltyOff) return 1;
-    return this.weapon.armorDamageMul ?? 1;
+    const base = this.weapon.armorDamageMul ?? 1;
+    // TWO MEN HUNG IT scales the PENALTY, not the multiplier: halving 1.2
+    // would be a 40% discount on damage taken rather than a halved surcharge.
+    return 1 + (base - 1) * this.mods.armorTradeMul;
   }
 
   /* Recomputed when the run's mods change mid-fight — a boon that raises the
@@ -373,7 +387,7 @@ export class Player extends Actor {
     // ABILITIES (1..4). Stamina like everything else — there is no mana here,
     // and a second pool would undo the reason stamina is the single economy:
     // that every choice trades against every other choice.
-    for (const ab of (this.weapon.abilities || [])) {
+    for (const ab of [...(this.weapon.abilities || []), ...this.extraAbilities]) {
       if (!input.peek('ability' + ab.key)) continue;
       input.take('ability' + ab.key);
       const acost = ab.atk.stamina * this.mods.abilityCostMul;

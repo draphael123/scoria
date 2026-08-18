@@ -1,5 +1,7 @@
 import { Player } from './player.js';
 import { Effigy } from './tutorial.js';
+import { loadMastery, saveMastery, masteryMods, masteryAbilities,
+         countRite, rankFor } from './mastery.js';
 import { Foe } from './enemy.js';
 import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
@@ -76,6 +78,32 @@ export class Game {
     }
     this.offer = out;
     return out;
+  }
+
+  /* The player's full mod table: what the RUN picked up composed with what the
+     WEAPON has kept. Written once and called from both places that need it —
+     the two were being assembled separately and the rank-up path was silently
+     dropping every additive mod the run held. */
+  composedMods() {
+    const wid = this.build?.weapon || 'sword';
+    const mast = masteryMods(wid, this.mastery);
+    const out = { ...BOON_MODS };
+    for (const src of [this.run.mods, mast]) {
+      for (const [k, v] of Object.entries(src)) {
+        if (BOON_MODS[k] === undefined) continue;
+        if (BOON_MODS[k] === 1) out[k] *= v;
+        else out[k] += v;
+      }
+    }
+    return out;
+  }
+
+  /* Commit the rite counts to storage. Called at the moments a run visibly
+     changes state - a room cleared, a death, a doorway - which is often enough
+     that nothing meaningful is ever lost and rare enough that it never lands
+     inside an exchange. */
+  bankMastery() {
+    if (this.mastery) saveMastery(this.mastery);
   }
 
   takeBoon(b) {
@@ -161,6 +189,7 @@ export class Game {
     // an empty bar is a death sentence you cannot see coming.
     if (this.player.resource !== 'heat') this.player.stamina = carried.stamina;
     this.roomsCleared = cleared;
+    this.bankMastery();
     return true;
   }
 
@@ -178,11 +207,19 @@ export class Game {
 
     if (!this.run) this.newRun();
 
+    /* What the weapon has KEPT. Loaded lazily and held on the Game rather
+       than re-read from storage per reset: the player is rebuilt at every
+       doorway and hitting localStorage five times a run for a value that
+       cannot change mid-room is work for nothing. */
+    if (!this.mastery) this.mastery = loadMastery();
+    const wid = this.build?.weapon || 'sword';
+
     this.player = new Player({
       x: 0, z: 5.5, facing: Math.PI,
       build: this.build,
       weapon: this.build?.weapon,
-      mods: this.run.mods,
+      mods: this.composedMods(),
+      abilities: masteryAbilities(wid, this.mastery),
     });
 
     // A ZONE is a place, not a fight: nobody spawns, nothing can be won or
@@ -571,7 +608,57 @@ export class Game {
     for (const e of this.livingEnemies) resolveActive(e, [this.player], this.events);
     if (this.events.length > evStart) this._tally(evStart);
 
-    if (this.player.dead && !this.outcome) { this.outcome = 'lose'; this.outcomeT = 0; }
+    /* THE RITE, counted off the events THIS step produced.
+
+       It has to run after resolveActive, and it has to read only from evStart:
+       the first version sat before hit resolution, so it saw the previous
+       step's events — which in a harness that clears the array each iteration
+       is none at all, and every weapon sat at rank zero forever. When a brand
+       new system reports exactly zero, the measurement is the first suspect.
+
+       Counted here rather than in a UI layer because it must be counted
+       whether or not anybody is looking, and off the EVENTS rather than off
+       state because the events are the only place that already knows the
+       difference between a blow you turned aside and a blow you avoided.
+
+       Written to storage on every rank change AND at every checkpoint - see
+       bankMastery(). Saving only on rank change lost everything earned below
+       the next threshold, which is not "worth nothing": it is the progress bar
+       on the rack, and a player who blocked their way through a whole run and
+       came back to an unmoved bar would rightly conclude the system was fake.
+       Saving every increment is the other extreme - several writes a second in
+       a fight - so it is checkpointed instead. */
+    if (!this.zone && this.events.length > evStart) {
+      const wid = this.build?.weapon || 'sword';
+      const st = this.mastery && this.mastery[wid];
+      if (st) {
+        const gained = countRite(wid, this.events.slice(evStart), this.player);
+        if (gained) {
+          st.rite += gained;
+          const now = rankFor(st.rite);
+          if (now !== st.rank) {
+            st.rank = now;
+            this.events.push({ type: 'mastery', result: 'rankup',
+                               weapon: wid, rank: now });
+            saveMastery(this.mastery);
+            // The new rank has to reach the actor standing there, not only the
+            // next one built at the next doorway.
+            this.player.mods = this.composedMods();
+            this.player.extraAbilities = masteryAbilities(wid, this.mastery);
+            this.player.refreshDerived();
+          }
+        }
+      }
+    }
+
+
+
+    if (this.player.dead && !this.outcome) {
+      this.outcome = 'lose'; this.outcomeT = 0;
+      // Dying costs you the run. It must not cost you the rite as well - that
+      // is the entire promise of the word "persists".
+      this.bankMastery();
+    }
     else if (!this.livingEnemies.length && !(this.pending && this.pending.length)) {
       // A cleared room is only a WIN if it was the last one. Otherwise the
       // tree line opens and the fight is not over, it has moved.
@@ -591,6 +678,7 @@ export class Game {
         // from is not a choice.
         if (!this._clearPaid) {
           this._clearPaid = true;
+          this.bankMastery();
           this.run.roomsCleared++;
           const heal = this.run.mods.healOnClear;
           if (heal) this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);

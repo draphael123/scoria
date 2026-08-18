@@ -9,7 +9,8 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
-import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER, DOMAINS } from './config.js';
+import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER, DOMAINS,
+         MASTERY } from './config.js';
 import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
@@ -486,6 +487,19 @@ window.addEventListener('keydown', unlockAudio, { once: true });
    Feedback
    ---------------------------------------------------------------------- */
 function onEvents(events) {
+  // A rank is the only thing in this game that survives dying, so it gets the
+  // loudest announcement the HUD has.
+  for (const ev of events) {
+    if (ev.type !== 'mastery') continue;
+    const rite = MASTERY.rites[ev.weapon];
+    const rank = rite && rite.ranks[ev.rank - 1];
+    if (rank) {
+      showPlacard(`${rite.name} ${'I'.repeat(ev.rank)}`, `${rank.name.toUpperCase()} — ${rank.text}`);
+      cui.flash(rank.name.toUpperCase(), 'good');
+      audio.victory();
+      syncWeaponUI();
+    }
+  }
   if (tutorial.active) tutorial.noteEvents(events);
   for (const ev of events) {
     const byPlayer = ev.attacker === game.player;

@@ -511,6 +511,26 @@
   .cr-weap.on .cr-weap-class{color:var(--hot)}
   .cr-weap-name{font-size:17px;color:var(--ink);line-height:1.2}
   .cr-weap-tag{font-size:11px;color:var(--dim);line-height:1.55;min-height:2.4em}
+  /* ---- MASTERY, on the rack ------------------------------------------
+     The rack is the character sheet, so this is where a weapon's progress has
+     to live. Deliberately shows the ranks you have NOT earned as well: knowing
+     what a weapon becomes is most of the reason to keep carrying it. */
+  .cr-mast{margin-top:10px;padding-top:9px;border-top:1px solid rgba(230,220,203,.1)}
+  .cr-mast-head{display:flex;justify-content:space-between;align-items:baseline}
+  .cr-mast-name{font-size:9px;letter-spacing:.28em;color:var(--ember);text-transform:uppercase}
+  .cr-mast-rank{font-family:Cormorant Garamond,Georgia,serif;font-size:15px;color:var(--hot);
+       letter-spacing:.12em}
+  .cr-mast-bar{height:3px;margin-top:6px;background:rgba(230,220,203,.1);overflow:hidden}
+  .cr-mast-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ember),var(--hot))}
+  .cr-mast-how{margin-top:5px;font-size:9.5px;letter-spacing:.05em;color:var(--faint)}
+  .cr-mast-ranks{list-style:none;margin:7px 0 0;padding:0;display:flex;
+       flex-direction:column;gap:4px}
+  .cr-mast-ranks li{font-size:10px;line-height:1.45;color:rgba(154,144,132,.42)}
+  .cr-mast-ranks li b{color:rgba(154,144,132,.62);font-weight:400}
+  /* Earned ranks come forward; the rest stay legible but plainly not yours. */
+  .cr-mast-ranks li.got{color:var(--dim)}
+  .cr-mast-ranks li.got b{color:var(--hot)}
+
   .cr-weap-lines{list-style:none;margin:4px 0 0;padding:0;display:flex;
        flex-direction:column;gap:4px}
   .cr-weap-lines li{font-size:10.5px;line-height:1.5;color:var(--faint);
