@@ -78,6 +78,9 @@
           font-size:min(64px,9vw);letter-spacing:.2em;opacity:0;pointer-events:none;z-index:6;
           transition:opacity .7s;text-shadow:0 4px 40px rgba(0,0,0,.9)}
   .banner.on{opacity:1}
+  /* The outcome banner belongs to the fight. Without this it bleeds through
+     the title and pause screens. */
+  body:not(.hud-on) .banner{opacity:0}
   .banner.lose{color:#b33a2a}
   .banner.win{color:#e2c68a}
 
