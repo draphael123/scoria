@@ -3,6 +3,7 @@
 
 import { Creator, loadBuild } from './character.js';
 import { Archive } from './archive.js';
+import { STANDING } from './config.js';
 
 const KEY = 'scoria.settings.v1';
 
@@ -53,6 +54,55 @@ const el = (tag, cls, html) => {
   if (html !== undefined) n.innerHTML = html;
   return n;
 };
+
+
+/* ---------------------------------------------------------------------------
+   THE KEEPER'S BOOK — where gold goes.
+
+   Built as a plain list rather than as cards, on purpose. The boon offer is
+   cards because it is a fast choice between three things you did not pick;
+   this is a slow choice between six that are always there, and dressing a shop
+   up as a hand would make the two read as the same kind of decision.
+   ------------------------------------------------------------------------ */
+class StandingPanel {
+  constructor(opts) {
+    this.onBuy = opts.onBuy || (() => {});
+    this.node = el('div', 'screen std-root');
+  }
+
+  refresh(bank) {
+    const n = this.node;
+    n.innerHTML = '';
+    n.appendChild(el('div', 'std-title', 'THE KEEPER\u2019S BOOK'));
+    n.appendChild(el('div', 'std-sub',
+      'What the works owes you, and what it costs to have it written down.'));
+
+    const purse = el('div', 'std-purse');
+    purse.appendChild(el('b', null, String(bank.gold)));
+    purse.appendChild(document.createTextNode('GOLD IN THE ACCOUNT'));
+    n.appendChild(purse);
+
+    const list = el('div', 'std-list');
+    for (const item of STANDING) {
+      const has = bank.owned.includes(item.id);
+      const can = !has && bank.gold >= item.cost;
+      const row = el('button', 'std-row' + (has ? ' owned' : can ? '' : ' short'));
+      const head = el('div', 'std-head');
+      head.appendChild(el('span', 'std-name', item.name));
+      head.appendChild(el('span', 'std-cost', has ? 'WRITTEN' : String(item.cost)));
+      row.appendChild(head);
+      row.appendChild(el('div', 'std-text', item.text));
+      row.appendChild(el('div', 'std-line', '\u201c' + item.line + '\u201d'));
+      if (!has && can) row.onclick = () => this.onBuy(item.id);
+      list.appendChild(row);
+    }
+    n.appendChild(list);
+
+    const back = el('button', 'btn std-back', 'CLOSE THE BOOK');
+    back.onclick = () => this.onBuy(null);
+    n.appendChild(back);
+  }
+}
 
 export class Menu {
   constructor(settings, handlers = {}) {
@@ -204,10 +254,20 @@ export class Menu {
       onBack: () => { if (this._from === 'pause') this.showPause(); else this.showTitle(); },
     });
 
-    root.append(title, pause, settings, this.creator.node, this.archive.node);
+    /* The Keeper's book. Registered as a screen like any other, so Esc, the
+       back stack and the pause menu all handle it without special cases. */
+    this.standing = new StandingPanel({
+      onBuy: (id) => {
+        if (id === null) { this.hide(); return; }
+        this.h.onBuyStanding?.(id);
+        this.standing.refresh(this.h.bank?.() || { gold: 0, owned: [] });
+      },
+    });
+    root.append(title, pause, settings, this.creator.node, this.archive.node,
+                this.standing.node);
     document.body.appendChild(root);
     this.screens = { title, pause, settings, creator: this.creator.node,
-                     archive: this.archive.node };
+                     archive: this.archive.node, standing: this.standing.node };
   }
 
   _row(parent, label, hint) {
@@ -283,6 +343,10 @@ export class Menu {
   showCreator() { this.creator.refresh(); this._show('creator'); }
   showPause() { this._show('pause'); }
   showArchive() { this.archive.refresh(); this._show('archive'); }
+  showStanding() {
+    this.standing.refresh(this.h.bank?.() || { gold: 0, owned: [] });
+    this._show('standing');
+  }
   showSettings() {
     // Rebuilt on entry so a defaults-reset shows the new values immediately.
     const body = this.screens.settings.querySelector('.settings-body');

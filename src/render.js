@@ -7,7 +7,7 @@ import { Forest } from './props.js';
 import { Fx } from './fx.js';
 import { Post } from './post.js';
 import { buildKnight, buildSlagbound, buildCinderbone, buildBoltbone, buildKilnwarden,
-         buildTallowman,
+         buildTallowman, buildMasterwork,
          buildSkimmer, buildBlackdamp, buildGaffer,
          buildEffigy, animateRig, PAL } from './rigs.js';
 
@@ -333,6 +333,7 @@ export class View {
         blackdamp: buildBlackdamp,
         gaffer: buildGaffer,
         tallowman: buildTallowman,
+        masterwork: buildMasterwork,
       };
       rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
           : actor.isEffigy ? buildEffigy(actor)

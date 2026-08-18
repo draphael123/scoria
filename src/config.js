@@ -1285,9 +1285,131 @@ export const TALLOWMAN = {
   },
 };
 
+
+/* -------------------------------------------------------------------------
+   THE MASTERWORK. The last thing Scoria ever made, and the end of the run.
+
+   The premise says the works learned to fold a life into iron, and that the
+   last column of the roll is what each name was made INTO. This is the entry
+   at the bottom of that column: a suit of plate with fourteen thousand names
+   chased into it and nobody at all inside. They stopped needing a wearer.
+
+   It exists because the run had no ending. Five rooms cleared and then the
+   game simply stopped, which made the whole descent read as a corridor rather
+   than as a place with something at the bottom of it.
+
+   As a fight it is the OPPOSITE of the Tallowman, on purpose. He is enormous,
+   slow and legible and every answer is the roll. This thing is fast, precise
+   and armoured, and the roll is not enough on its own — it punishes greed with
+   a parry-shaped window instead of with reach. And it has a SECOND PHASE,
+   which the Tallowman deliberately does not: the opening teaches you to read
+   one moveset, and the finale teaches you that a moveset can change.
+   ---------------------------------------------------------------------- */
+export const MASTERWORK = {
+  gold: 340,
+  name: 'The Masterwork',
+  rig: 'masterwork',
+  hp: 620,
+  radius: 0.72,
+  height: 2.35,
+
+  moveSpeed: 3.4,          // it can and will close on you
+  turnRate: 3.2,
+  preferredRange: 2.5,
+  circleSpeed: 2.0,
+
+  poise: 120,
+  poiseRegen: 18,
+  poiseRegenDelay: 2.2,
+  staggerDuration: 2.0,
+  staggerDamageMul: 1.7,
+  staggerResist: 2.6,
+  staggerResistMul: 0.45,
+
+  punishRange: 5.0,
+  punishHesitate: 0.16,
+
+  hesitateMin: 0.55,
+  hesitateMax: 1.25,
+  recoverIdle: 0.22,
+
+  /* THE SECOND PHASE. At half health the seams open and the fire that is
+     inside it gets out: everything commits faster, it hesitates less, and two
+     attacks it was holding back come into the rotation.
+
+     Written as a declarative table because a boss phase is exactly the sort of
+     thing that ends up as a special case in three files otherwise. */
+  phase2: {
+    at: 0.5,
+    label: 'THE SEAMS OPEN',
+    hesitateMul: 0.55,
+    windupMul: 0.82,          // every telegraph gets shorter, none disappear
+    unlock: ['pour', 'names'],
+  },
+
+  attacks: {
+    // The bread and butter, and the reason it is not the Tallowman: a fast
+    // two-part thrust that is thin enough to sidestep and long enough to
+    // punish standing still.
+    lance: {
+      id: 'lance', label: 'LANCE',
+      windup: 0.44, active: 0.09, recover: 0.52,
+      damage: 24, poise: 0,
+      shape: 'arc', reach: 3.6, arc: 0.6,
+      step: 2.4,
+      weight: 0.34, minRange: 1.4, maxRange: 4.8,
+    },
+    // A wide horizontal cut at knee height. Rolls through it work; walking
+    // backwards does not.
+    reap: {
+      id: 'reap', label: 'REAP',
+      windup: 0.5, active: 0.12, recover: 0.68,
+      damage: 27, poise: 0,
+      shape: 'arc', reach: 3.0, arc: 3.2,
+      step: 1.1, knock: 6,
+      weight: 0.3, minRange: 0, maxRange: 3.6,
+    },
+    // The greed punisher. Almost no windup, tiny reach: this is what lands if
+    // you stayed in to squeeze one more hit out of its recovery.
+    riposte: {
+      id: 'riposte', label: 'RETORT',
+      windup: 0.24, active: 0.07, recover: 0.44,
+      damage: 18, poise: 0,
+      shape: 'arc', reach: 2.1, arc: 1.1,
+      step: 0.6,
+      weight: 0.2, minRange: 0, maxRange: 2.4,
+    },
+
+    // ---- held back until the seams open ------------------------------
+    // The pour: it opens its chest and what is inside runs out onto the floor.
+    pour: {
+      id: 'pour', label: 'THE POUR',
+      windup: 0.86, active: 0.7, recover: 0.9,
+      damage: 30, poise: 0,
+      shape: 'circle', radius: 3.2, offset: 0,
+      zone: true, telegraph: 'zone',
+      step: 0,
+      phase: 2,
+      weight: 0.3, minRange: 1.2, maxRange: 9,
+    },
+    // Fourteen thousand names, read out at once. A full ring centred on it,
+    // enormous windup, and the only attack in the game that hits behind you
+    // AND at range.
+    names: {
+      id: 'names', label: 'THE ROLL CALL',
+      windup: 1.15, active: 0.16, recover: 1.25,
+      damage: 38, poise: 0,
+      shape: 'circle', radius: 5.4, offset: 0,
+      step: 0, knock: 11,
+      phase: 2,
+      weight: 0.22, minRange: 0, maxRange: 6.5,
+    },
+  },
+};
+
 export const FOES = {
   slagbound: SLAGBOUND, cinderbone: CINDERBONE,
-  husk: HUSK, tallowman: TALLOWMAN,
+  husk: HUSK, tallowman: TALLOWMAN, masterwork: MASTERWORK,
   boltbone: BOLTBONE, kilnwarden: KILNWARDEN,
   skimmer: SKIMMER, blackdamp: BLACKDAMP, gaffer: GAFFER,
 };
@@ -1494,6 +1616,20 @@ export const ENCOUNTERS = {
     spawn: [[0, -4.4, 'slagbound'],
             [-5.8, -4.0, 'kilnwarden'], [5.8, -4.0, 'kilnwarden'],
             [-3.2, 1.8, null, { atRemaining: 2 }]],
+  },
+  /* THE POURING FLOOR. The end of the run, and the only room in it with one
+     thing in it. Everything before this has been about managing a crowd; this
+     is the exam on the duel the opening taught. */
+  masterwork: {
+    id: 'masterwork', name: 'The Pouring Floor', short: 'WORK',
+    blurb: 'The last pour never got cleaned up, and neither did what came ' +
+           'out of it. Fourteen thousand names, and every one of them is on ' +
+           'the plate.',
+    foe: 'masterwork', theme: 'works',
+    hpMul: 1.0,
+    rocks: 0,
+    boss: true,
+    spawn: [[0, -6.5, 'masterwork']],
   },
   casting: {
     id: 'casting', name: 'The Casting Hall', short: 'PLATE',
@@ -1974,6 +2110,51 @@ export const BOONS = [
     when: (w) => w.resource === 'heat' },
 ];
 
+
+/* -------------------------------------------------------------------------
+   STANDING — what gold is FOR.
+
+   Gold was a number that went up and then did nothing. A currency with no sink
+   is worse than no currency: it takes up a slot in the reward economy, trains
+   the player to notice it, and then never pays out — which reads as an
+   unfinished game, because it is one.
+
+   So the Keeper sells STANDING: your name in the roll, and what the works owes
+   you for it. It is bought once, it is permanent, and it is deliberately NOT
+   power in the way a boon is. The three currencies now do three different
+   jobs, which is the only reason to have three:
+
+     GOLD      permanent, small, and about the SHAPE of a run — where you
+               start, how many cards you see, what you keep when you die
+     BOONS     temporary, large, and about how THIS run plays
+     MASTERY   permanent, structural, and about what the WEAPON is
+
+   Nothing here sells damage. A shop that sells damage makes every earlier run
+   retroactively a grind, and this one has to stay a game you get better at.
+   ---------------------------------------------------------------------- */
+export const STANDING = [
+  { id: 'entered', cost: 120, name: 'Entered in the Roll',
+    text: 'The Keeper writes you down. You start every run with one boon ' +
+          'already taken.',
+    line: 'It is only a name. Names are what this place ran on.' },
+  { id: 'secondlook', cost: 260, name: 'A Second Look',
+    text: 'Four cards on the table after a room instead of three.',
+    line: 'You are allowed to want something specific.' },
+  { id: 'account', cost: 400, name: 'The Long Account',
+    text: 'Keep three quarters of your gold when you die instead of half.',
+    line: 'The works never forgave a debt. It did keep good books.' },
+  { id: 'ration', cost: 560, name: 'The Ration',
+    text: 'Twenty more vigour, permanently. The works fed the ones it ' +
+          'meant to use.',
+    line: 'You are being kept, not helped.' },
+  { id: 'quenchtrough', cost: 820, name: 'The Quenching Trough',
+    text: 'Heal to full when you walk out of a cleared room.',
+    line: 'Everything that came off the line went through it first.' },
+  { id: 'foreman', cost: 1200, name: "The Foreman's Word",
+    text: 'One card in every offer is drawn from the rare tier.',
+    line: 'He decided what each man was worth. He is still deciding.' },
+];
+
 export const RUN = {
   offer: 3,             // cards on the table after a room
   // Gold is deliberately not a pickup. Coins on the floor after a fight turn
@@ -2003,7 +2184,10 @@ export const DEFAULT_ENCOUNTER = 'duel';
    should teach you the shape of a run by being one. */
 export const UNDERCROFT_ORDER = ['passage', 'sump'];
 
-export const ROOM_ORDER = ['ossuary', 'yard', 'gallery', 'kiln', 'casting'];
+/* The run's chain. The Masterwork is its own room rather than an extra body
+   in the casting hall: a boss that shares a floor with five other things is a
+   difficulty spike, and a boss you walk to through a door is an ENDING. */
+export const ROOM_ORDER = ['ossuary', 'yard', 'gallery', 'kiln', 'casting', 'masterwork'];
 
 export const EXIT = {
   bearing: 0,             // rad; which way the road runs, 0 = away from spawn

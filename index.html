@@ -440,6 +440,38 @@
     .of-text{font-size:10px;line-height:1.45}
   }
 
+  /* ===================== THE KEEPER'S BOOK ============================= */
+  .std-root{max-width:760px;margin:0 auto;padding:0 20px 40px}
+  .std-title{font-family:Cormorant Garamond,Georgia,serif;font-size:30px;
+       letter-spacing:.14em;color:#e9dcc4;text-align:center;margin-top:6px}
+  .std-sub{margin-top:8px;font-size:11px;letter-spacing:.16em;color:var(--faint);
+       text-align:center;text-transform:uppercase}
+  .std-purse{margin:20px 0 4px;text-align:center;font-size:10px;letter-spacing:.3em;
+       color:var(--faint);text-transform:uppercase}
+  .std-purse b{display:block;font-family:Cormorant Garamond,Georgia,serif;
+       font-size:34px;color:var(--hot);font-weight:400;letter-spacing:.04em;
+       margin-bottom:3px}
+  .std-list{margin-top:22px;display:flex;flex-direction:column;gap:10px}
+  .std-row{display:block;width:100%;text-align:left;padding:14px 16px;
+       border:1px solid var(--edge);background:rgba(14,12,10,.8);transition:.16s}
+  .std-row:hover{border-color:rgba(255,179,71,.65);background:rgba(212,85,42,.12);
+       transform:translateX(3px)}
+  .std-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .std-name{font-family:Cormorant Garamond,Georgia,serif;font-size:20px;color:#e9dcc4}
+  .std-cost{font-size:13px;letter-spacing:.14em;color:var(--hot);
+       font-family:ui-monospace,Consolas,monospace;white-space:nowrap}
+  .std-text{margin-top:6px;font-size:12px;line-height:1.6;color:var(--dim)}
+  .std-line{margin-top:6px;font-family:Cormorant Garamond,Georgia,serif;
+       font-size:13px;font-style:italic;color:var(--faint)}
+  /* Owned reads as SETTLED rather than as disabled: it is a thing you have,
+     not a thing you cannot have. Unaffordable is dimmed and inert. */
+  .std-row.owned{border-color:rgba(255,179,71,.34);background:rgba(255,179,71,.05)}
+  .std-row.owned .std-cost{color:var(--ember);letter-spacing:.26em;font-size:10px}
+  .std-row.owned:hover{transform:none}
+  .std-row.short{opacity:.42;cursor:default}
+  .std-row.short:hover{border-color:var(--edge);background:rgba(14,12,10,.8);transform:none}
+  .std-back{display:block;margin:26px auto 0}
+
   /* The run's gold, always visible under the resource bars. */
   #purse{position:absolute;left:calc(26px + var(--safe-l));top:calc(74px + var(--safe-t));
        font-size:11px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase}

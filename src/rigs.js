@@ -2337,6 +2337,235 @@ export function buildTallowman(actor) {
   };
 }
 
+
+/* ------------------------------------------------------------------------
+   THE MASTERWORK. A suit of plate with nobody in it.
+
+   The silhouette problem is the reverse of the Tallowman's. He had to break a
+   cast full of thin skeletons by being enormous and round; this has to break a
+   cast full of BONE by being the only thing in the game with hard, straight,
+   manufactured edges. So nothing on it is organic: every mass is a bevelled
+   plate, the shoulders are angular pauldrons rather than joints, and the
+   proportions are a knight's rather than a monster's — because the horror of
+   it is that it is exactly the shape of a person and there is no person there.
+
+   Two things carry the read at seven metres:
+
+     THE GAP. The helm has no face, only a slot, and there is a light burning
+     behind the slot. On a camera this far out an empty helm and a full one are
+     the same shape, so the emptiness has to be a LIGHT.
+
+     THE SEAMS. Every plate is separated by a hairline of the same fire. In
+     phase two they open — the same meshes, brighter and wider — which is the
+     one visual change the fight needs and costs nothing to animate.
+   --------------------------------------------------------------------- */
+export function buildMasterwork(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  // Dark, hard, and barely reflective. A shiny boss under this game's
+  // environment map renders as a white blob - see the ingot stacks.
+  const plate = new THREE.MeshStandardMaterial({
+    color: 0x4b5058, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.16 });
+  const plateD = new THREE.MeshStandardMaterial({
+    color: 0x2c3036, roughness: 0.72, metalness: 0.0, envMapIntensity: 0.12 });
+  const gilt = new THREE.MeshStandardMaterial({
+    color: 0x6a5327, roughness: 0.55, metalness: 0.0, envMapIntensity: 0.2 });
+  // The fire inside. Collected so the phase change can open every seam at once.
+  const seamMat = new THREE.MeshStandardMaterial({
+    color: 0x1a0a03, emissive: 0xff6a1c, emissiveIntensity: 2.2, roughness: 1 });
+  const seams = [];
+  const seam = (w, hh, d, x, y, z, rot) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), seamMat);
+    m.position.set(x, y, z);
+    if (rot) m.rotation.set(rot[0] || 0, rot[1] || 0, rot[2] || 0);
+    seams.push(m);
+    return m;
+  };
+
+  const tumble = new THREE.Group();
+  tumble.position.y = h * 0.46;
+  g.add(tumble);
+  const tumbleInner = new THREE.Group();
+  tumbleInner.position.y = -h * 0.46;
+  tumble.add(tumbleInner);
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.46;
+  tumbleInner.add(hips);
+
+  // FAULD: a skirt of overlapping lames rather than a pelvis. Straight
+  // horizontal bands, which is the most manufactured shape there is.
+  for (let i = 0; i < 3; i++) {
+    const lame = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * (0.66 + i * 0.07), r * (0.72 + i * 0.07),
+                                 h * 0.055, 10), i % 2 ? plateD : plate);
+    lame.position.y = -i * h * 0.05;
+    lame.castShadow = true;
+    hips.add(lame);
+  }
+  hips.add(seam(r * 1.5, 0.022, r * 1.5, 0, -h * 0.026, 0));
+
+  // LEGS: greaves and sabatons, straight and hard.
+  const legGeo = new THREE.CylinderGeometry(r * 0.19, r * 0.15, h * 0.20, 7);
+  const legL = limb(legGeo, plate, 0);
+  const legR = limb(legGeo, plate, 0);
+  legL.position.x = -r * 0.36;
+  legR.position.x = r * 0.36;
+  for (const leg of [legL, legR]) {
+    const knee = new THREE.Mesh(new THREE.BoxGeometry(r * 0.32, r * 0.24, r * 0.3), plateD);
+    knee.position.y = -h * 0.21;
+    knee.castShadow = true;
+    leg.add(knee);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.16, r * 0.13, h * 0.17, 7), plate);
+    shin.position.y = -h * 0.31;
+    shin.castShadow = true;
+    leg.add(shin);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.3, r * 0.13, r * 0.6), plateD);
+    foot.position.set(0, -h * 0.41, r * 0.16);
+    foot.castShadow = true;
+    leg.add(foot);
+    const toe = new THREE.Mesh(new THREE.ConeGeometry(r * 0.14, r * 0.3, 4), plateD);
+    toe.rotation.set(Math.PI / 2, 0, Math.PI / 4);
+    toe.position.set(0, -h * 0.41, r * 0.5);
+    leg.add(toe);
+  }
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.46;
+  tumbleInner.add(chest);
+
+  /* THE CUIRASS. One tapered box with a raised keel down the front — the
+     single hardest, straightest mass in the game, which is the entire point
+     of putting it in a cast full of ribcages. */
+  const cuirass = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.72, r * 0.84, h * 0.32, 8), plate);
+  cuirass.position.y = h * 0.16;
+  cuirass.castShadow = true;
+  chest.add(cuirass);
+  const keel = new THREE.Mesh(new THREE.BoxGeometry(r * 0.13, h * 0.3, r * 0.3), plateD);
+  keel.position.set(0, h * 0.16, r * 0.66);
+  keel.castShadow = true;
+  chest.add(keel);
+  // Chased names, as fine gilt bands. Fourteen thousand of them, suggested.
+  for (let i = 0; i < 5; i++) {
+    const band = new THREE.Mesh(
+      new THREE.TorusGeometry(r * (0.76 - i * 0.012), r * 0.018, 3, 12), gilt);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = h * (0.06 + i * 0.05);
+    chest.add(band);
+  }
+  // The seams that open.
+  chest.add(seam(r * 1.7, 0.03, r * 0.06, 0, h * 0.115, r * 0.5));
+  chest.add(seam(r * 1.7, 0.03, r * 0.06, 0, h * 0.215, r * 0.5));
+  chest.add(seam(r * 0.05, h * 0.3, r * 0.05, r * 0.7, h * 0.16, r * 0.2));
+  chest.add(seam(r * 0.05, h * 0.3, r * 0.05, -r * 0.7, h * 0.16, r * 0.2));
+
+  // PAULDRONS: angular, and the widest thing on it.
+  for (const sx of [-1, 1]) {
+    const pauld = new THREE.Mesh(new THREE.ConeGeometry(r * 0.46, r * 0.5, 5), plate);
+    pauld.rotation.x = Math.PI;
+    pauld.rotation.y = Math.PI / 5;
+    pauld.position.set(sx * r * 0.78, h * 0.335, 0);
+    pauld.castShadow = true;
+    chest.add(pauld);
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(r * 0.1, r * 0.42, 4), plateD);
+    spike.position.set(sx * r * 0.86, h * 0.42, -r * 0.1);
+    spike.rotation.z = -sx * 0.5;
+    chest.add(spike);
+  }
+
+  /* THE HELM. A great helm with no face and a light behind the slot. On this
+     camera a full helm and an empty one are the same silhouette, so the
+     emptiness has to be something you can SEE. */
+  const neck = new THREE.Group();
+  // Set high and slightly forward: on this camera a helm sunk between two
+  // pauldrons is a shape you never see, and the empty slot is the whole read.
+  neck.position.set(0, h * 0.40, r * 0.06);
+  chest.add(neck);
+  const helm = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.36, r * 0.42, h * 0.21, 8), plate);
+  helm.position.y = h * 0.075;
+  helm.castShadow = true;
+  neck.add(helm);
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(r * 0.35, r * 0.34, 8), plateD);
+  crown.position.y = h * 0.185;
+  crown.castShadow = true;
+  neck.add(crown);
+  // The slot, and what is behind it.
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.52, h * 0.022, r * 0.06), seamMat);
+  slot.position.set(0, h * 0.085, r * 0.37);
+  seams.push(slot);
+  neck.add(slot);
+  const eyes = [];
+  const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.13, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffb060 }));
+  core.position.set(0, h * 0.085, r * 0.22);
+  neck.add(core);
+  eyes.push(core);
+  const inner = new THREE.PointLight(0xff7a24, 5, 5, 2);
+  inner.position.copy(core.position);
+  neck.add(inner);
+
+  /* ARMS. Vambraces and gauntlets, and a long straight-bladed sword — the
+     only weapon in the game that is not a tool. Everything else down here was
+     made for work; this was made for THIS. */
+  const armGeo = new THREE.CylinderGeometry(r * 0.16, r * 0.13, h * 0.17, 7);
+  const armBits = (parent) => {
+    parent.add(limb(armGeo, plate, 0));
+    const elbow = new THREE.Mesh(new THREE.BoxGeometry(r * 0.26, r * 0.22, r * 0.26), plateD);
+    elbow.position.y = -h * 0.175;
+    parent.add(elbow);
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.14, r * 0.11, h * 0.15, 7), plate);
+    fore.position.y = -h * 0.26;
+    fore.castShadow = true;
+    parent.add(fore);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(r * 0.22, r * 0.2, r * 0.26), plateD);
+    hand.position.y = -h * 0.34;
+    parent.add(hand);
+  };
+
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.74, h * 0.315, 0);
+  chest.add(pivot);
+  armBits(pivot);
+
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.5, 6), plateD);
+  grip.rotation.x = Math.PI / 2;
+  grip.position.set(0, -h * 0.34, 0.2);
+  pivot.add(grip);
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.09, 0.11), gilt);
+  cross.position.set(0, -h * 0.34, 0.46);
+  pivot.add(cross);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 2.5), plate);
+  blade.position.set(0, -h * 0.34, 1.72);
+  blade.castShadow = true;
+  pivot.add(blade);
+  const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 2.1), seamMat);
+  fuller.position.set(0, -h * 0.335, 1.66);
+  seams.push(fuller);
+  pivot.add(fuller);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 4), plate);
+  tip.rotation.x = Math.PI / 2;
+  tip.position.set(0, -h * 0.34, 3.12);
+  pivot.add(tip);
+
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.74, h * 0.315, 0);
+  chest.add(offArm);
+  armBits(offArm);
+
+  g.add(makeNose(r, 0xffc088));
+
+  return {
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
+    body: cuirass, head: helm, blade, shield: null,
+    mat: plate, core, eyes, seams,
+    tipScale: 1.3,
+    swingArc: { rest: -0.26, wind: -2.6, end: 1.7 },
+    baseLean: 0.06, stride: 0, flash: 0, spin: 0, isPlayer: false,
+  };
+}
+
 export function buildEffigy(actor) {
   const g = new THREE.Group();
   const r = actor.radius, h = actor.height;
@@ -2672,6 +2901,23 @@ export function animateRig(rig, actor, dt, clock) {
     roll = damp(rig._rollRest || 0, 0, 12, dt);
     rig._rollRest = roll;
   }
+  /* A BOSS'S SEAMS. Driven straight off the actor's health rather than off an
+     event, so the rig cannot get out of step with the fight it is drawing —
+     and so the change is a RAMP rather than a switch. */
+  if (rig.seams && actor.def && actor.def.phase2) {
+    const t = 1 - Math.min(1, (actor.hp / actor.maxHp) / actor.def.phase2.at);
+    rig.seamT = damp(rig.seamT || 0, t, 3, dt);
+    const k = rig.seamT;
+    for (const sm of rig.seams) {
+      // BRIGHTER, barely wider. Scaling a seam uniformly turns a hairline into
+      // a glowing plank: the read is "there is a fire in there", and a fire you
+      // can see the shape of is a lamp.
+      sm.material.emissiveIntensity = 2.2 + k * 7.5;
+      sm.scale.set(1, 1 + k * 0.5, 1 + k * 0.5);
+    }
+    if (rig.core) rig.core.scale.setScalar(1 + k * 0.9);
+  }
+
   rig.tumble.rotation.z = roll;
   rig.tumble.rotation.x = rig.pitch || 0;
   rig.tilt = 0;

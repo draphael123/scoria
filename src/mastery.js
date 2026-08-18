@@ -1,4 +1,4 @@
-import { MASTERY, MASTERY_ABILITIES, BOON_MODS, WEAPONS } from './config.js';
+import { MASTERY, MASTERY_ABILITIES, BOON_MODS, WEAPONS, STANDING } from './config.js';
 
 /* ---------------------------------------------------------------------------
    MASTERY — what the weapon keeps.
@@ -137,4 +137,40 @@ export function countRite(weaponId, events, player) {
     }
   }
   return n;
+}
+
+
+/* ---------------------------------------------------------------------------
+   STANDING. Bought with gold, kept forever, and stored beside mastery because
+   the two are the same KIND of thing: the parts of a character that outlive a
+   run. Gold itself is banked here too — it has to survive the browser being
+   closed, or the shop is a thing you can only use in the session you earned in.
+   ------------------------------------------------------------------------ */
+const BANK_KEY = 'scoria.bank.v1';
+
+export function loadBank() {
+  try {
+    const raw = localStorage.getItem(BANK_KEY);
+    const d = { gold: 0, owned: [] };
+    if (!raw) return d;
+    const b = JSON.parse(raw);
+    return { gold: Math.max(0, +b.gold || 0),
+             owned: Array.isArray(b.owned) ? b.owned.filter(
+               (id) => STANDING.some((x) => x.id === id)) : [] };
+  } catch { return { gold: 0, owned: [] }; }
+}
+
+export function saveBank(b) {
+  try { localStorage.setItem(BANK_KEY, JSON.stringify(b)); } catch { /* private mode */ }
+}
+
+export function owns(bank, id) { return !!bank && bank.owned.includes(id); }
+
+export function buyStanding(bank, id) {
+  const item = STANDING.find((x) => x.id === id);
+  if (!item || !bank || owns(bank, id) || bank.gold < item.cost) return false;
+  bank.gold -= item.cost;
+  bank.owned.push(id);
+  saveBank(bank);
+  return true;
 }

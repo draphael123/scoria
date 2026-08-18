@@ -69,7 +69,9 @@ export class Foe extends Actor {
      rule can survive. */
   _rollHesitate() {
     const { hesitateMin: a, hesitateMax: b } = this.def;
-    return (a + this.rng() * (b - a)) * (this.tempoMul || 1);
+    const p2 = this.def.phase2;
+    const gear = (p2 && this.phaseNum >= 2) ? (p2.hesitateMul ?? 1) : 1;
+    return (a + this.rng() * (b - a)) * (this.tempoMul || 1) * gear;
   }
 
   stagger(duration) {
@@ -282,9 +284,41 @@ export class Foe extends Actor {
     }
   }
 
+  /* ---- BOSS PHASES ------------------------------------------------------
+     A boss may hold part of its moveset back and change gear partway down.
+     Written declaratively on the foe (`def.phase2`) and resolved here, because
+     a phase implemented as a special case ends up spread across three files
+     and then nobody dares add a second boss.
+
+     Two things change and no more: what it is ALLOWED to throw, and how fast
+     it winds up. Neither removes a telegraph — the second phase is meant to be
+     harder to answer, not harder to see. */
+  get phaseNum() {
+    const p2 = this.def.phase2;
+    if (!p2) return 1;
+    return (this.hp / this.maxHp) <= p2.at ? 2 : 1;
+  }
+
+  /* Attacks are read straight off `this.atk` by the clock, so a faster windup
+     has to be a different OBJECT. Cloned once and cached, never per swing. */
+  _phased(a) {
+    const p2 = this.def.phase2;
+    if (!p2 || this.phaseNum < 2 || !p2.windupMul) return a;
+    this._p2cache = this._p2cache || new Map();
+    let out = this._p2cache.get(a);
+    if (!out) {
+      out = { ...a, windup: a.windup * p2.windupMul };
+      this._p2cache.set(a, out);
+    }
+    return out;
+  }
+
   _chooseAttack(gap) {
+    const ph = this.phaseNum;
     const list = Object.values(this.def.attacks)
-      .filter((a) => gap >= a.minRange && gap <= a.maxRange);
+      .filter((a) => (a.phase || 1) <= ph)
+      .filter((a) => gap >= a.minRange && gap <= a.maxRange)
+      .map((a) => this._phased(a));
     if (!list.length) return null;
     const total = list.reduce((s, a) => s + a.weight, 0);
     let r = this.rng() * total;

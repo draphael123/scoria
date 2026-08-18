@@ -1,7 +1,7 @@
 import { Player } from './player.js';
 import { Effigy } from './tutorial.js';
 import { loadMastery, saveMastery, masteryMods, masteryAbilities,
-         countRite, rankFor } from './mastery.js';
+         countRite, rankFor, loadBank, saveBank, owns } from './mastery.js';
 import { Foe } from './enemy.js';
 import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
@@ -40,7 +40,10 @@ export class Game {
   newRun() {
     // The BANK is what has survived past runs. The run's purse is separate,
     // and dying only hands half of it over — see main.js.
-    if (this.bank === undefined) this.bank = 0;
+    // The bank is gold + what it has been spent on, and it outlives the
+    // browser being closed: a shop you can only use in the session you earned
+    // in is a shop nobody reaches.
+    if (!this.bankState) this.bankState = loadBank();
     this.run = {
       gold: 0,
       boons: [],
@@ -49,6 +52,14 @@ export class Game {
       kills: 0,
     };
     this.offer = null;
+
+    /* ENTERED IN THE ROLL. You start every run with one boon already taken.
+       Rolled from the same pool and through the same takeBoon(), so a bought
+       standing cannot produce a boon the game could not otherwise give you. */
+    if (owns(this.bankState, 'entered') && this.player) {
+      this.rollOffer();
+      if (this.offer && this.offer.length) this.takeBoon(this.offer[0]);
+    }
     return this.run;
   }
 
@@ -65,7 +76,9 @@ export class Game {
     const weight = (b) => (b.tier === 1 ? 5 : b.tier === 2 ? 3 : 1);
     const bag = [];
     for (const b of pool) for (let i = 0; i < weight(b); i++) bag.push(b);
-    while (out.length < RUN.offer && bag.length) {
+    // A SECOND LOOK puts a fourth card on the table.
+    const want = RUN.offer + (owns(this.bankState, 'secondlook') ? 1 : 0);
+    while (out.length < want && bag.length) {
       const pick = bag[(this.rng() * bag.length) | 0];
       if (out.includes(pick)) {
         // Drop every copy of it and try again, so a heavy-weighted boon
@@ -76,6 +89,17 @@ export class Game {
       out.push(pick);
       for (let i = bag.length - 1; i >= 0; i--) if (bag[i] === pick) bag.splice(i, 1);
     }
+    /* THE FOREMAN'S WORD guarantees one rare in every offer. Applied by
+       SWAPPING the last card rather than by adding one, so the choice stays
+       three (or four) wide and the standing changes what is on the table
+       rather than how much of it there is. */
+    if (owns(this.bankState, 'foreman') && out.length) {
+      const rares = pool.filter((b) => b.tier === 3 && !out.includes(b));
+      if (rares.length && !out.some((b) => b.tier === 3)) {
+        out[out.length - 1] = rares[(this.rng() * rares.length) | 0];
+      }
+    }
+
     this.offer = out;
     return out;
   }
@@ -189,6 +213,8 @@ export class Game {
     // an empty bar is a death sentence you cannot see coming.
     if (this.player.resource !== 'heat') this.player.stamina = carried.stamina;
     this.roomsCleared = cleared;
+    // THE QUENCHING TROUGH. Everything that came off the line went through it.
+    if (owns(this.bankState, 'quenchtrough')) this.player.hp = this.player.maxHp;
     this.bankMastery();
     return true;
   }
@@ -221,6 +247,14 @@ export class Game {
       mods: this.composedMods(),
       abilities: masteryAbilities(wid, this.mastery),
     });
+
+    // THE RATION. Applied after construction because vigour is derived from
+    // the build's stats, and a standing is not a stat — it is what the works
+    // spent on keeping you.
+    if (owns(this.bankState, 'ration')) {
+      this.player.maxHp += 20;
+      this.player.hp += 20;
+    }
 
     // A ZONE is a place, not a fight: nobody spawns, nothing can be won or
     // lost, and the only things in it are the ones you can walk up to.
@@ -561,6 +595,22 @@ export class Game {
     if (this.enemies.some((e) => !e.isEffigy) || (this.pending && this.pending.length)) {
       this._hadEnemies = true;
     }
+    /* A boss changing gear is an EVENT, not a quiet stat swap. Announced once,
+       from here rather than from the foe, because the foe should not have to
+       know that anything is watching it. */
+    for (const e of this.enemies) {
+      if (e.dead || !e.def.phase2) continue;
+      const now = e.phaseNum;
+      if (e._seenPhase === undefined) e._seenPhase = now;
+      if (now !== e._seenPhase) {
+        e._seenPhase = now;
+        if (now >= 2) {
+          this.events.push({ type: 'phase', result: 'phase',
+                             foe: e, label: e.def.phase2.label || 'IT CHANGES' });
+        }
+      }
+    }
+
     this._releaseWaves(dt);
     this._updateAggro(dt);
 

@@ -9,6 +9,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
+import { saveBank, owns, buyStanding } from './mastery.js';
 import { WEAPONS, WEAPON_ORDER, ZONES, INTERACT, ROOM_ORDER, DOMAINS,
          MASTERY } from './config.js';
 import { markSeen } from './archive.js';
@@ -139,6 +140,17 @@ function syncWeaponUI() {
    Menus
    ---------------------------------------------------------------------- */
 const menu = new Menu(settings, {
+  // The Keeper's book reads the LIVE bank and spends through one path, so a
+  // purchase can never be recorded without the gold having actually left.
+  bank: () => game.bankState,
+  onBuyStanding: (id) => {
+    if (buyStanding(game.bankState, id)) {
+      cui.flash('WRITTEN IN THE ROLL', 'good');
+      audio.victory();
+      return true;
+    }
+    return false;
+  },
   onBegin(build) {
     game.previewMode = false;
     // Coming out of the rack IN TOWN just re-arms you and puts you back — the
@@ -439,6 +451,9 @@ function doZoneAction(action) {
     const prop = game.near && game.near.prop;
     showPlacard('THE ROLL', prop && prop.text ? prop.text : '');
     audio.uiClick();
+  } else if (action === 'standing') {
+    menu.showStanding();
+    audio.uiClick();
   } else if (action === 'archive') {
     // The record, opened by walking to the building that holds it.
     menu.showArchive ? menu.showArchive() : menu.showCreator();
@@ -450,13 +465,15 @@ function doZoneAction(action) {
        machinery for none of the information. */
     const prop = game.near && game.near.prop;
     const lines = (prop && prop.lines) || [];
-    if (lines.length) {
-      keeperLine = Math.min(keeperLine, lines.length - 1);
-      const [who, what] = lines[keeperLine];
-      showPlacard(who, what);
-      if (keeperLine < lines.length - 1) keeperLine++;
-      audio.uiClick();
-    }
+    /* He says his piece once, and after that talking to him opens the book.
+       An NPC who repeats his fourth line forever is furniture; an NPC who
+       stops explaining and starts trading is a shopkeeper, which is what he
+       has been for as long as gold has existed. */
+    if (keeperLine >= lines.length) { menu.showStanding(); audio.uiClick(); return; }
+    const [who, what] = lines[keeperLine];
+    showPlacard(who, what);
+    keeperLine++;
+    audio.uiClick();
   } else if (action === 'depart') {
     enterZone('circle');
   } else if (action === 'begin') {
@@ -490,6 +507,12 @@ function onEvents(events) {
   // A rank is the only thing in this game that survives dying, so it gets the
   // loudest announcement the HUD has.
   for (const ev of events) {
+    if (ev.type === 'phase') {
+      cui.flash(ev.label, 'bad');
+      view.addShake(0.9);
+      audio.guardBreak();
+      continue;
+    }
     if (ev.type !== 'mastery') continue;
     const rite = MASTERY.rites[ev.weapon];
     const rank = rite && rite.ranks[ev.rank - 1];
@@ -604,6 +627,7 @@ let exitAnnounced = false;
 let lastRoom = 0;
 let previewT = 0;
 let deathHandled = false;
+let winBanked = false;
 
 function frame(now) {
   const dtReal = Math.min((now - last) / 1000, 0.25);
@@ -648,18 +672,33 @@ function frame(now) {
   if (started && game.outcome === 'lose' && !game.zone && !deathHandled) {
     deathHandled = true;
     setTimeout(() => {
-      const kept = Math.floor((game.run.gold || 0) * 0.5);
-      const lost = (game.run.gold || 0) - kept;
-      const banked = (game.bank || 0) + kept;
+      // THE LONG ACCOUNT raises what survives a death from a half to three
+      // quarters. It is the one standing that is purely about the sting.
+      const rate = owns(game.bankState, 'account') ? 0.75 : 0.5;
+      const purse = game.run.gold || 0;
+      const kept = Math.floor(purse * rate);
+      game.bankState.gold += kept;
+      saveBank(game.bankState);
       game.newRun();
-      game.bank = banked;
       game.run.gold = 0;
       enterZone('town');
-      cui.flash(`YOU KEPT ${kept} OF ${kept + lost} GOLD`, 'bad');
+      cui.flash(`YOU KEPT ${kept} OF ${purse} GOLD`, 'bad');
       deathHandled = false;
     }, 2600);
   }
   if (game.outcome !== 'lose') deathHandled = false;
+
+  /* Finishing the run banks the whole purse. Until now the only path that paid
+     into the account was DYING, which meant the best way to get rich was to
+     lose — an economy that rewards failing at the game is not an economy. */
+  if (started && game.outcome === 'win' && !winBanked) {
+    winBanked = true;
+    const purse = game.run.gold || 0;
+    game.bankState.gold += purse;
+    saveBank(game.bankState);
+    cui.flash(`${purse} GOLD INTO THE ACCOUNT`, 'good');
+  }
+  if (game.outcome !== 'win') winBanked = false;
 
   if (started && (!paused || stepOnce)) {
     game.step(stepOnce ? 1 / 120 : dtReal, input, basis, onEvents);
