@@ -848,9 +848,13 @@ export class Forest {
   }
 
   /* -------------------------------------------------------------------- */
+  /* Returns the record, so a caller can tag it — the boulders need to be
+     removable when the room changes and the trees do not. */
   _registerOccluder(mesh, mat, height) {
     mat.transparent = true;
-    this.occluders.push({ mesh, mat, height, cur: 1 });
+    const rec = { mesh, mat, height, cur: 1 };
+    this.occluders.push(rec);
+    return rec;
   }
 
   /* Fade any tall prop that has come between the camera and the duel. Done in

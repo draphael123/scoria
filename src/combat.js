@@ -65,6 +65,7 @@ export function resolveActive(attacker, targets, out) {
 export function applyDamage(attacker, target, atk, out) {
   const ev = { type: 'hit', attacker, target, atk, result: 'clean', damage: 0, x: target.x, z: target.z };
 
+  // Nothing can be hit on its way out of the ground — see Actor.invulnerable.
   if (target.invulnerable) {
     ev.result = 'iframe';
     out.push(ev);

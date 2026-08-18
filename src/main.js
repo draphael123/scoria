@@ -9,6 +9,7 @@ import { TouchControls, isTouchDevice } from './touch.js';
 import { PHASE, STATE } from './actor.js';
 import { Tutorial, TutorialUI } from './tutorial.js';
 import { loadBuild } from './character.js';
+import { WEAPONS, WEAPON_ORDER } from './config.js';
 import { markSeen } from './archive.js';
 import { isTouchDevice as _isTouch } from './touch.js';
 
@@ -99,6 +100,9 @@ function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); s
 const keyOffhand = document.getElementById('keyOffhand');
 const keyCombo = document.getElementById('keyCombo');
 const keyAbility = document.getElementById('keyAbility');
+const kitWeapon = document.getElementById('kitWeapon');
+const kitOff = document.getElementById('kitOff');
+const kitAbility = document.getElementById('kitAbility');
 function syncWeaponUI() {
   const w = game.player.weapon;
   if (keyOffhand) keyOffhand.textContent = (w.offhandLabel || 'guard').toLowerCase();
@@ -112,6 +116,18 @@ function syncWeaponUI() {
     const a = (w.abilities || [])[0];
     keyAbility.textContent = a ? a.name.toLowerCase() : 'none with this weapon';
     keyAbility.parentElement.style.opacity = a ? '' : '0.4';
+  }
+  // The kit cluster. Same question Souls answers bottom-left with equipment
+  // slots: what is in each hand, and what does the ability key do right now.
+  const ab = (w.abilities || [])[0];
+  if (kitWeapon) kitWeapon.querySelector('b').textContent = w.name;
+  if (kitOff) {
+    kitOff.querySelector('b').textContent = w.offhandLabel || 'GUARD';
+    kitOff.querySelector('span').textContent = w.offhand === 'guard' ? 'hold' : 'press';
+  }
+  if (kitAbility) {
+    kitAbility.querySelector('b').textContent = ab ? ab.name : 'EMPTY';
+    kitAbility.classList.toggle('empty', !ab);
   }
   const tb = touch && touch.btnGuard;
   if (tb) tb.textContent = w.offhandLabel || 'GUARD';
@@ -195,6 +211,39 @@ if (isTouchDevice()) {
 }
 
 /* Audio cannot start without a gesture, so unlock on the first one. */
+/* The training weapon rack. Swapping rebuilds the player, so health and the
+   effigy's state are restored afterwards — you are changing what is in your
+   hands, not restarting the lesson. */
+const swapRow = document.getElementById('trainSwapRow');
+function buildTrainSwap() {
+  if (!swapRow) return;
+  swapRow.innerHTML = '';
+  WEAPON_ORDER.filter((id) => !WEAPONS[id].stub).forEach((id, i) => {
+    const b = document.createElement('button');
+    b.className = 'ts-btn';
+    b.innerHTML = `<i>${i + 1}</i>${WEAPONS[id].name}`;
+    b.onclick = () => swapTrainingWeapon(id);
+    b.dataset.weapon = id;
+    swapRow.appendChild(b);
+  });
+}
+function swapTrainingWeapon(id) {
+  if (!tutorial.active) return;
+  const keep = { hp: game.player.hp, x: game.player.x, z: game.player.z, facing: game.player.facing };
+  game.build = { ...(game.build || loadBuild()), weapon: id };
+  menu.build.weapon = id;
+  menu.creator.refresh();
+  tutorial.swapWeapon(keep);
+  view.reap(new Set([game.player, ...game.enemies]));
+  syncWeaponUI();
+  for (const b of swapRow.querySelectorAll('.ts-btn')) {
+    b.classList.toggle('on', b.dataset.weapon === id);
+  }
+  audio.uiClick();
+  cui.flash(WEAPONS[id].name.toUpperCase(), 'good');
+}
+buildTrainSwap();
+
 const pauseBtn = document.getElementById('pauseBtn');
 if (pauseBtn) pauseBtn.onclick = () => { menu.togglePause(); audio.uiClick(); };
 
@@ -209,13 +258,25 @@ function onEvents(events) {
   if (tutorial.active) tutorial.noteEvents(events);
   for (const ev of events) {
     const byPlayer = ev.attacker === game.player;
+    if (ev.result === 'blocked') {
+      // A bolt hitting a rock. Sparks off the stone, no number, no shake —
+      // it is a non-event for the player and should read as one.
+      view.burst(ev.x, ev.z, 0xbfc6cc, 7, 0.55);
+      continue;
+    }
+    if (ev.result === 'rise') {
+      cui.flash('SOMETHING IS COMING UP', 'bad');
+      audio.stagger();
+      continue;
+    }
     if (ev.result === 'iframe') {
       // A clean dodge deserves to be felt, not merely survived.
       view.burst(ev.x, ev.z, 0xcfe8ff, 5, 0.5);
       cui.fromEvent(ev, byPlayer);
       continue;
     }
-    view.flashActor(ev.target, ev.result === 'guarded' ? 0.5 : 1.1);
+    view.flashActor(ev.target, ev.result === 'guarded' ? 0.5 : 1.1,
+      ev.attacker ? ev.attacker.x : undefined, ev.attacker ? ev.attacker.z : undefined);
     cui.fromEvent(ev, byPlayer);
 
     if (ev.result === 'guarded') {
@@ -310,6 +371,18 @@ function frame(now) {
   if (!menu.open) {
     if (input.takeEdge('lock')) game.toggleLock();
     if (input.takeEdge('cycleNext')) { game.cycleLock(1); audio.uiClick(); }
+    // In training the number keys are the rack rather than ability slots —
+    // there is nothing to use an ability on but an effigy, and comparing
+    // weapons is the entire point of the room.
+    if (tutorial.active) {
+      const forged = WEAPON_ORDER.filter((id) => !WEAPONS[id].stub);
+      for (let i = 0; i < forged.length; i++) {
+        if (input.peek('ability' + (i + 1))) {
+          input.take('ability' + (i + 1));
+          swapTrainingWeapon(forged[i]);
+        }
+      }
+    }
     if (input.takeEdge('cyclePrev')) { game.cycleLock(-1); audio.uiClick(); }
     if (input.takeEdge('pause')) paused = !paused;
     if (input.takeEdge('stepOne')) stepOnce = true;
@@ -367,6 +440,7 @@ function frame(now) {
     view.syncTelegraph(e);
     view.syncDebugHitbox(e);
   }
+  view.setBlockers(started ? (game.blockers || []) : []);
   view.syncShots(started ? game.shots : []);
   view.setReticle(started ? game.player.lockTarget : null);
   view.setTheme(game.encounter.theme || 'clearing');

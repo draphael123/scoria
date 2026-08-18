@@ -4,6 +4,9 @@ import { COMMIT } from './config.js';
 export const STATE = {
   IDLE: 'idle', MOVE: 'move', ATTACK: 'attack',
   ROLL: 'roll', GUARD: 'guard', STAGGER: 'stagger', DEAD: 'dead',
+  // Clawing out of the ground. Cannot act, cannot be hit, cannot hold the
+  // aggro token — a body halfway out is not yet part of the fight.
+  EMERGE: 'emerge',
 };
 
 export const PHASE = { WINDUP: 'windup', ACTIVE: 'active', RECOVER: 'recover' };
@@ -57,6 +60,7 @@ export class Actor {
 
     // Seconds for which a frontal plate is thrown wide. Ticked by the owner.
     this.guardOpen = 0;
+    this.emergeT = 0;
 
     // Seconds for which a frontal plate is thrown wide. Ticked by the owner.
     this.guardOpen = 0;
@@ -142,7 +146,8 @@ export class Actor {
   gapTo(o) { return this.distanceTo(o) - this.radius - o.radius; }
   angleTo(o) { return Math.atan2(o.x - this.x, o.z - this.z); }
 
-  get invulnerable() { return this.invuln > 0; }
+  get invulnerable() { return this.invuln > 0 || this.state === STATE.EMERGE; }
+  get emerging() { return this.state === STATE.EMERGE; }
 
   /* Shove this actor away from a point. Applied on top of its own movement,
      so being hit interrupts where you were going. */

@@ -1029,6 +1029,28 @@ export const FOES = {
    FACING, which means they actively work around behind you rather than queue
    up in front. That is what gives the greataxe's 360 sweep a reason to exist.
    ---------------------------------------------------------------------- */
+/* THE RISING. Skeletons come UP, and slowly. It is a tell as much as a piece
+   of theatre: a body clawing out of the ash announces itself a second and a
+   half before it can hurt you, which is what makes staggered arrivals fair.
+
+   An emerging body cannot act, cannot be hit, and CANNOT HOLD THE AGGRO TOKEN
+   — a thing halfway out of the ground holding the right to swing would be the
+   one-telegraph rule leaking. */
+export const RISE = {
+  duration: 1.55,
+  shudder: 0.28,       // how long the ground shakes before anything appears
+  sink: 1.0,           // fraction of its own height it starts buried
+  dust: 22,            // motes thrown up on arrival
+};
+
+/* COVER. Props that actually stop a bolt. Rocks that only look different are
+   dressing; rocks that break line of sight turn the archers from a timing
+   problem into a positional one, which is the whole reason to have them. */
+export const COVER = {
+  archerPatience: 0.7,   // seconds an archer will wait for a clear line before
+                         // giving up and repositioning instead
+};
+
 export const AGGRO = {
   handoff: 0.35,      // silence between one commit ending and the next beginning
   maxHold: 2.3,       // a holder that cannot close loses it to one that can
@@ -1083,13 +1105,17 @@ export const ENCOUNTERS = {
   },
   ossuary: {
     id: 'ossuary', name: 'The Sorting Floor', short: 'BONES',
+    // Two come up out of the floor once the first three are engaged, so the
+    // room escalates rather than arriving all at once.
+    rocks: 5,
     blurb: 'Where they picked the good iron out of the slag, and where the ' +
            'ones who picked it are still standing. Five, and quick.',
     foe: 'cinderbone', theme: 'ossuary',
     hpMul: 1.0,
     // A ring, so you arrive already surrounded and the first decision of the
     // fight is which way to break rather than which one to hit.
-    spawn: [[0, -5.2], [-4.6, -2.4], [4.6, -2.4], [-3.4, 2.6], [3.4, 2.6]],
+    spawn: [[0, -5.2], [-4.6, -2.4], [4.6, -2.4],
+            [-3.4, 2.6, null, { at: 6.5 }], [3.4, 2.6, null, { at: 10.0 }]],
   },
   yard: {
     id: 'yard', name: 'The Long Yard', short: 'BOLTS',
@@ -1098,6 +1124,9 @@ export const ENCOUNTERS = {
            'not stand anywhere at all.',
     foe: 'cinderbone', theme: 'yard',
     hpMul: 1.0,
+    // Boulders on the yard, which is the room where cover MATTERS — the two
+    // archers cannot shoot through them.
+    rocks: 8,
     // The archers are placed DEEP and apart, so no single break gets you both.
     spawn: [[-2.6, -3.0], [2.6, -3.0], [0, 3.4],
             [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone'],
@@ -1113,8 +1142,10 @@ export const ENCOUNTERS = {
            'do anything about the rest.',
     foe: 'cinderbone', theme: 'ossuary',
     hpMul: 1.0,
+    rocks: 7,
     spawn: [[0, -4.2, 'blackdamp'], [-4.8, -1.6, 'blackdamp'],
-            [-2.8, 2.6], [2.8, 2.6], [5.0, -1.6]],
+            [-2.8, 2.6, null, { at: 5.0 }], [2.8, 2.6, null, { at: 9.0 }],
+            [5.0, -1.6, null, { atRemaining: 2 }]],
   },
   kiln: {
     id: 'kiln', name: 'The Kiln Mouth', short: 'KILN',
@@ -1134,8 +1165,11 @@ export const ENCOUNTERS = {
            'the damp coming up through the floor.',
     foe: 'cinderbone', theme: 'kiln',
     hpMul: 1.0,
+    rocks: 6,
     spawn: [[0, -3.6, 'skimmer'], [0, -9.0, 'gaffer'],
-            [-5.4, -1.0, 'blackdamp'], [4.6, 1.4], [-4.2, 3.0]],
+            [-5.4, -1.0, 'blackdamp', { at: 7.0 }],
+            [4.6, 1.4, null, { atRemaining: 3 }],
+            [-4.2, 3.0, null, { atRemaining: 2 }]],
   },
 };
 export const DEFAULT_ENCOUNTER = 'duel';
@@ -1216,6 +1250,26 @@ export const SHOT = {
   trailEvery: 0.03,     // seconds between trail motes
   fadeOnMiss: 0.18,     // how long a spent shot lingers before it is recycled
   hitRadiusPad: 0.06,   // slop, so a graze that LOOKS like a hit is one
+};
+
+/* SOFT TARGETING. Unlocked, the knight only turned while a direction was
+   HELD — so standing still and swinging sent the blade wherever you happened
+   to be facing, and unlocked play read as a handicap rather than as a choice.
+
+   Every action game solves this the same way: on the frame an attack begins,
+   acquire the most plausible target and turn toward it through the windup.
+   The player is still steering; they are steering a fighter who is looking at
+   somebody, which is the thing that was missing.
+
+   Deliberately NOT a lock: it is chosen fresh per swing, it never holds you,
+   and it loses to your own input the moment you give one. */
+export const SOFT = {
+  range: 5.2,           // beyond this you are swinging at air on purpose
+  cone: 1.15,           // rad, half-angle of the "clearly meant that" cone
+  coneBonus: 4.0,       // score bonus for being inside it
+  turnRate: 9.0,        // rad/s of assisted turn during windup — brisk, since
+                        // the whole point is that it resolves before the hit
+  inputYield: 0.55,     // how much a held direction overrides the assist
 };
 
 export const LOCK = {

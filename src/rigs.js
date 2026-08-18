@@ -424,9 +424,15 @@ export function buildKnight(actor, build, weapon) {
   const shadowMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 1 });
 
   // Hips carry the legs so the whole lower body can dip and sway as one.
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.44;
-  g.add(hips);
+  tumble.add(hips);
 
   const legL = buildLeg(D, h, steel, steelD, fit.legs);
   const legR = buildLeg(D, h, steel, steelD, fit.legs);
@@ -438,7 +444,7 @@ export function buildKnight(actor, build, weapon) {
   // waist together instead of shearing the model.
   const chest = new THREE.Group();
   chest.position.y = h * 0.44;
-  g.add(chest);
+  tumble.add(chest);
 
   // The cuirass. A lathe gives the breastplate its actual profile — wide over
   // the chest, drawn in hard at the waist — and flattening z turns a barrel
@@ -759,7 +765,7 @@ export function buildKnight(actor, build, weapon) {
   g.add(nose);
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm, swordArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm, swordArm,
     body: torso, head: helm, blade, shield, nose, mat: steel,
     tipScale: built.tipScale,
     twoHand,
@@ -810,9 +816,15 @@ export function buildSlagbound(actor) {
   const molten = new THREE.MeshStandardMaterial({
     color: 0x1a0a04, emissive: PAL.crack, emissiveIntensity: 2.6, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.4;
-  g.add(hips);
+  tumble.add(hips);
 
   // Pelvis: a heavy ring, half swallowed by slag.
   const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.74, r * 0.22, 5, 10), boneD);
@@ -844,7 +856,7 @@ export function buildSlagbound(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.4;
-  g.add(chest);
+  tumble.add(chest);
 
   const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.17, r * 0.21, h * 0.34, 7), boneD);
   spine.position.set(0, h * 0.16, -r * 0.16);
@@ -1006,7 +1018,7 @@ export function buildSlagbound(actor) {
   g.add(makeNose(r, PAL.ember));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: spine, head: skull, blade: headSlab, shield: null,
     mat: bone, core, tip,
     // Bone sits nearly unlit at rest — see the material note above. The
@@ -1044,9 +1056,15 @@ export function buildCinderbone(actor) {
   const socket = new THREE.MeshStandardMaterial({
     color: 0x120904, emissive: PAL.crack, emissiveIntensity: 2.2, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.46;
-  g.add(hips);
+  tumble.add(hips);
 
   // Pelvis: a flat ring, so from above it reads as a hollow socket rather
   // than as a solid hip.
@@ -1088,7 +1106,7 @@ export function buildCinderbone(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.46;
-  g.add(chest);
+  tumble.add(chest);
 
   // A segmented spine rather than one tube: it catches the light in bands,
   // which is what makes a back read as vertebrae from directly above.
@@ -1240,7 +1258,7 @@ export function buildCinderbone(actor) {
   g.add(makeNose(r, 0xd8c9a8));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: spine, head: skull, blade: hook, shield: null,
     mat: bone, core: eyes[0], eyes,
     tipScale: 1.22,
@@ -1270,9 +1288,15 @@ export function buildBoltbone(actor) {
   const socket = new THREE.MeshStandardMaterial({
     color: 0x120904, emissive: 0xffb347, emissiveIntensity: 2.0, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.46;
-  g.add(hips);
+  tumble.add(hips);
   const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.5, r * 0.13, 5, 10), boneD);
   pelvis.rotation.x = Math.PI / 2;
   pelvis.scale.z = 0.7;
@@ -1292,7 +1316,7 @@ export function buildBoltbone(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.46;
-  g.add(chest);
+  tumble.add(chest);
 
   const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.09, r * 0.11, h * 0.28, 6), boneD);
   spine.position.y = h * 0.14;
@@ -1388,7 +1412,7 @@ export function buildBoltbone(actor) {
   g.add(makeNose(r, 0xffd9a0));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: spine, head: skull, blade: bow, shield: null,
     mat: bone, core: eyes[0], eyes, muzzle: nock,
     tipScale: 1.1,
@@ -1420,9 +1444,15 @@ export function buildKilnwarden(actor) {
   const molten = new THREE.MeshStandardMaterial({
     color: 0x1a0a04, emissive: PAL.crack, emissiveIntensity: 2.4, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.42;
-  g.add(hips);
+  tumble.add(hips);
 
   // The robe: one solid cone to the floor. It has no legs to animate and that
   // is the point — it does not walk so much as ARRIVE, which sets it apart
@@ -1442,7 +1472,7 @@ export function buildKilnwarden(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.42;
-  g.add(chest);
+  tumble.add(chest);
 
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.60, r * 0.78, h * 0.30, 12), robe);
   torso.position.y = h * 0.15;
@@ -1515,7 +1545,7 @@ export function buildKilnwarden(actor) {
   g.add(makeNose(r, PAL.ember));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: torso, head: skull, blade: flame, shield: null,
     mat: robe, core: coals, grate, flame,
     tipScale: 1.0,
@@ -1553,9 +1583,15 @@ export function buildSkimmer(actor) {
   const molten = new THREE.MeshStandardMaterial({
     color: 0x1a0a04, emissive: PAL.crack, emissiveIntensity: 2.2, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.40;
-  g.add(hips);
+  tumble.add(hips);
   const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.68, r * 0.20, 5, 10), boneD);
   pelvis.rotation.x = Math.PI / 2;
   pelvis.scale.z = 0.72;
@@ -1583,7 +1619,7 @@ export function buildSkimmer(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.40;
-  g.add(chest);
+  tumble.add(chest);
 
   const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.15, r * 0.19, h * 0.30, 7), boneD);
   spine.position.set(0, h * 0.15, -r * 0.14);
@@ -1673,7 +1709,7 @@ export function buildSkimmer(actor) {
   g.add(makeNose(r, PAL.ember));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: spine, head: skull, blade: hook, shield: plate,
     mat: bone, core, plate, plateBack,
     tipScale: 1.15,
@@ -1705,16 +1741,22 @@ export function buildBlackdamp(actor) {
   const eyeMat = new THREE.MeshStandardMaterial({
     color: 0x0a1418, emissive: 0x64d8e8, emissiveIntensity: 1.8, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.34;
-  g.add(hips);
+  tumble.add(hips);
   const legL = new THREE.Group();
   const legR = new THREE.Group();
   hips.add(legL, legR);
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.34;
-  g.add(chest);
+  tumble.add(chest);
 
   // The mass: a wide, low, shapeless bulk.
   const bulk = new THREE.Mesh(new THREE.SphereGeometry(r * 1.15, 14, 10), shroud);
@@ -1786,7 +1828,7 @@ export function buildBlackdamp(actor) {
   g.add(makeNose(r, 0x8fd8e8));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: bulk, head: hood, blade: claw, shield: null,
     mat: shroud, core: eyes[0], eyes, haze,
     tipScale: 1.0,
@@ -1815,9 +1857,15 @@ export function buildGaffer(actor) {
   const lampMat = new THREE.MeshStandardMaterial({
     color: 0x1a1206, emissive: 0xffc257, emissiveIntensity: 2.6, roughness: 1 });
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.46;
-  g.add(hips);
+  tumble.add(hips);
 
   const legGeo = new THREE.CapsuleGeometry(r * 0.15, h * 0.34, 3, 6);
   const legL = limb(legGeo, coatD, 0);
@@ -1834,7 +1882,7 @@ export function buildGaffer(actor) {
 
   const chest = new THREE.Group();
   chest.position.y = h * 0.46;
-  g.add(chest);
+  tumble.add(chest);
 
   // A long coat: narrow, straight, buttoned. The only tidy thing left here.
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.52, r * 0.62, h * 0.34, 12), coat);
@@ -1918,7 +1966,7 @@ export function buildGaffer(actor) {
   g.add(makeNose(r, 0xffd9a0));
 
   return {
-    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    group: g, tumble, hips, chest, neck, legL, legR, pivot, offArm,
     body: torso, head: skull, blade: board, shield: null,
     mat: coat, core: flame, lampLight,
     tipScale: 1.0,
@@ -1945,12 +1993,18 @@ export function buildEffigy(actor) {
   post.castShadow = true;
   g.add(post);
 
+  // The tumble group. Facing lives on the root (rotation.y) and PITCH lives
+  // here, so a roll can revolve the whole body without fighting the yaw. The
+  // ground decals stay on the root, because they must not tumble with it.
+  const tumble = new THREE.Group();
+  g.add(tumble);
+
   const hips = new THREE.Group();
   hips.position.y = h * 0.4;
-  g.add(hips);
+  tumble.add(hips);
   const chest = new THREE.Group();
   chest.position.y = h * 0.4;
-  g.add(chest);
+  tumble.add(chest);
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.72, h * 0.26, 4, 10), straw);
   body.position.y = h * 0.16;
@@ -1997,7 +2051,7 @@ export function buildEffigy(actor) {
   g.add(makeNose(r, 0xd8c07a));
 
   return {
-    group: g, hips, chest, neck, legL: legStub, legR: new THREE.Group(),
+    group: g, tumble, hips, chest, neck, legL: legStub, legR: new THREE.Group(),
     pivot, offArm, body, head, blade: weight, shield: null,
     mat: straw, swingArc: { rest: -0.25, wind: -2.35, end: 1.35 },
     baseLean: 0, stride: 0, flash: 0, spin: 0, isPlayer: false, isEffigy: true,
@@ -2167,13 +2221,35 @@ export function animateRig(rig, actor, dt, clock) {
     legAmp = 0.32;
     legPhase = Math.PI * 0.5;
   } else if (actor.state === STATE.ROLL) {
+    // A ROLL THAT ROLLS. The previous version leaned and crouched and never
+    // revolved, which is why it read as a crouch-slide rather than as a dodge
+    // — there was no axis in the rig to turn about. `tumble` is that axis.
+    //
+    // A BACKSTEP is deliberately not a tumble: it is a short hop away, and
+    // making both the same animation was most of why the dodge looked wrong
+    // in the first place.
     const t = clamp(actor.stateT / rollDur, 0, 1);
     const arc = Math.sin(Math.PI * t);
-    lean = -1.15 * arc;
-    crouch = 0.5 * arc;
-    legAmp = 1.25 * arc;              // tuck the knees in
-    legPhase = 0;
-    swing = A.rest - 0.5 * arc;
+    if (actor.backstep) {
+      lean = -0.55 * arc;
+      crouch = 0.30 * arc;
+      legAmp = 0.75 * arc;
+      legPhase = Math.PI * 0.5;
+      swing = A.rest - 0.35 * arc;
+      rig.pitch = -0.35 * arc;
+    } else {
+      // Ease-in-out through a full forward revolution, so the tuck happens
+      // fast and the landing settles rather than the body spinning at a
+      // constant rate like a wheel.
+      const spun = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      rig.pitch = -Math.PI * 2 * spun;
+      lean = -0.30 * arc;
+      crouch = 0.72 * arc;            // tuck hard
+      legAmp = 1.45 * arc;
+      legPhase = 0;
+      swing = A.rest - 0.9 * arc;
+      armCounter = 0;
+    }
   } else if (actor.state === STATE.STAGGER) {
     // Recoil hard, then sag. Reads as "that hurt" rather than "paused".
     const k = clamp(actor.staggerT || 0, 0, 1);
@@ -2181,6 +2257,7 @@ export function animateRig(rig, actor, dt, clock) {
     swing = A.rest + 0.75;
     legAmp = 0.42;
     legPhase = Math.PI * 0.5;
+    twist = 0.3 * k;
   } else if (moving) {
     legAmp = 0.62;
     legPhase = rig.stride;
@@ -2205,6 +2282,20 @@ export function animateRig(rig, actor, dt, clock) {
 
   rig.spin = spin;
   g.rotation.y = actor.facing + spin;
+
+  // A DIRECTIONAL FLINCH. `hitFrom` is the world bearing the last blow came
+  // from; the body rocks away from it and settles. Every hit used to produce
+  // a colour flash and a shove and no MOVEMENT of the body itself, which is
+  // why blows landed on something that never reacted.
+  rig.flinch = Math.max(0, (rig.flinch || 0) - dt * 6.0);
+  if (rig.flinch > 0) {
+    const rel = (rig.hitFrom || 0) - actor.facing;
+    lean += Math.cos(rel) * rig.flinch * 0.34;
+    rig.tumble.rotation.z = -Math.sin(rel) * rig.flinch * 0.30;
+  } else {
+    rig.tumble.rotation.z = damp(rig.tumble.rotation.z || 0, 0, 12, dt);
+  }
+  rig.tumble.rotation.x = rig.pitch || 0;
 
   rig.pivot.rotation.x = swing;
   rig.chest.rotation.x = rig.baseLean + lean;
@@ -2252,8 +2343,25 @@ export function animateRig(rig, actor, dt, clock) {
     ? Math.sin(Math.PI * clamp(actor.stateT / rollDur, 0, 1)) * 0.4 : 0;
   g.position.y = -rollDip;
 
+  // DEATH. It used to tip over as a rigid board in a single frame. Now it
+  // buckles: the legs go, the body folds forward, and it settles — over most
+  // of a second, so the kill has a beat rather than a cut.
   if (actor.dead) {
-    g.rotation.z = Math.PI * 0.44;
-    g.position.y = -0.4;
+    rig.deathT = Math.min(1, (rig.deathT || 0) + dt * 1.5);
+    const d = rig.deathT;
+    const fall = d < 0.35 ? (d / 0.35) * 0.35 : 0.35 + (1 - Math.pow(1 - (d - 0.35) / 0.65, 3)) * 0.65;
+    rig.tumble.rotation.x = fall * Math.PI * 0.46;
+    rig.tumble.rotation.z = fall * 0.30;
+    rig.tumble.position.y = -fall * h * 0.34;
+    rig.chest.rotation.x = rig.baseLean + fall * 0.7;
+    rig.neck.rotation.x = fall * 0.5;
+    rig.legL.rotation.x = fall * 1.5;
+    rig.legR.rotation.x = fall * 1.2;
+    rig.pivot.rotation.x = A.rest + fall * 1.1;
+    g.rotation.z = 0;
+    g.position.y = 0;
+  } else {
+    rig.deathT = 0;
+    rig.tumble.position.y = 0;
   }
 }

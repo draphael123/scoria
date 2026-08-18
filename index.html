@@ -19,6 +19,7 @@
     --panel:rgba(12,10,9,.92);
     --edge:rgba(230,220,203,.14);
     --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-t:env(safe-area-inset-top,0px);
     --safe-l:env(safe-area-inset-left,0px);
     --safe-r:env(safe-area-inset-right,0px);
   }
@@ -36,6 +37,7 @@
   .hud{position:fixed;pointer-events:none;user-select:none;z-index:5;
        text-shadow:0 1px 10px rgba(0,0,0,.85);opacity:0;transition:opacity .35s}
   body.hud-on .hud{opacity:1}
+
 
   #bars{left:calc(30px + var(--safe-l));bottom:calc(30px + var(--safe-b));width:min(300px,42vw)}
   .bar{position:relative;height:15px;border:1px solid rgba(0,0,0,.7);
@@ -217,6 +219,81 @@
        padding-top:12px;border-top:1px solid rgba(230,220,203,.08)}
   .settings-body > .set-group:first-child{margin-top:0;padding-top:0;border-top:0}
   body.no-keys #keys{display:none}
+  /* ======================= THE HUD, SOULS LAYOUT =========================
+     Your own state sits TOP-LEFT: it is what you check between exchanges and
+     the eye starts there. The target's health sits BOTTOM-CENTRE, under the
+     fight rather than over it, so reading it never means looking away from
+     the floor — and the floor is where the telegraph lives.
+
+     The bars are chunky and framed because the previous ones were 15px of
+     flat colour on a dark scene and genuinely hard to read at a glance.
+     ------------------------------------------------------------------- */
+  #bars{left:calc(26px + var(--safe-l));top:calc(24px + var(--safe-t));
+        bottom:auto;width:min(342px,46vw)}
+  .bar{position:relative;height:20px;
+       border:1px solid rgba(0,0,0,.85);
+       box-shadow:0 2px 12px rgba(0,0,0,.75), inset 0 0 0 1px rgba(230,220,203,.14);
+       background:linear-gradient(180deg,rgba(6,5,4,.9),rgba(18,14,11,.86));
+       overflow:hidden}
+  .bar + .bar{margin-top:6px;height:15px}
+  .bar i{position:absolute;inset:0 auto 0 0;display:block;width:100%}
+  /* A sheen across every fill, so a bar reads as a VOLUME rather than as a
+     rectangle of colour — most of why the old one was hard to parse. */
+  .bar::after{content:'';position:absolute;inset:0;pointer-events:none;
+       background:linear-gradient(180deg,rgba(255,255,255,.20),rgba(255,255,255,.03) 46%,
+                  rgba(0,0,0,.28))}
+  #hpChip{background:#8d2a1e}
+  #hpFill{background:linear-gradient(180deg,#e05a48,#a32e22 60%,#7d2018)}
+  #stFill{background:linear-gradient(180deg,#e8d489,#b79b41 60%,#8a7430)}
+  #stBar.guarding #stFill{background:linear-gradient(180deg,#a8cde0,#4d7186)}
+  #stBar.locked{animation:pulse .45s ease-in-out infinite alternate}
+  @keyframes pulse{from{box-shadow:0 0 0 rgba(212,85,42,0)}to{box-shadow:0 0 16px rgba(212,85,42,.9)}}
+  /* Notches every 25%, which is what actually makes a bar readable at a
+     glance — you stop measuring a length and start counting segments. */
+  .bar u.ticks{position:absolute;inset:0;display:block;pointer-events:none;
+       background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),
+                  rgba(0,0,0,.55) calc(25% - 1px) 25%)}
+  .barlbl{display:none}
+
+  /* The roll-cost ghost: a notch showing where the bar lands if you dodge. */
+  #stGhost{position:absolute;top:0;bottom:0;background:rgba(255,255,255,.10);
+       border-left:1px solid rgba(255,255,255,.55);border-right:0}
+
+  #foe{top:auto;bottom:calc(46px + var(--safe-b));left:50%;
+       transform:translateX(-50%);width:min(600px,64vw)}
+  #foe .name{text-align:center;font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+             color:var(--dim);margin-bottom:0;margin-top:7px;order:2}
+  #foe{display:flex;flex-direction:column}
+  #foe .bar{order:0;height:13px}
+  #foe #poiseBar{order:1}
+  #foeFill{background:linear-gradient(180deg,#d0663a,#8a3a1a 60%,#5f2410)}
+
+
+  /* The kit cluster, bottom-left: what is in each hand and what 1 does. Souls
+     puts equipment here and it is the same question — "what am I holding". */
+  #kit{left:calc(26px + var(--safe-l));bottom:calc(26px + var(--safe-b));
+       display:flex;gap:8px;align-items:flex-end}
+  .kitslot{min-width:52px;padding:7px 9px 6px;border:1px solid var(--edge);
+       background:rgba(8,7,6,.62);text-align:center}
+  .kitslot b{display:block;font-size:10px;letter-spacing:.14em;color:var(--ink);
+       font-weight:400;text-transform:uppercase;white-space:nowrap}
+  .kitslot span{display:block;font-size:8px;letter-spacing:.22em;color:var(--faint);
+       margin-top:3px;text-transform:uppercase}
+  .kitslot.empty{opacity:.32}
+  body.is-touch #kit{display:none}
+
+  #trainSwap{position:absolute;right:calc(24px + var(--safe-r));top:calc(24px + var(--safe-t));
+       display:none;text-align:right;z-index:7}
+  body.tutorial #trainSwap{display:block}
+  .ts-lbl{font-size:9px;letter-spacing:.3em;color:var(--ember);margin-bottom:7px}
+  .ts-row{display:flex;gap:6px;flex-direction:column;align-items:flex-end}
+  .ts-btn{padding:7px 12px;border:1px solid var(--edge);background:rgba(8,7,6,.6);
+       font-size:10px;letter-spacing:.14em;color:var(--faint);transition:.15s;min-width:132px;
+       text-align:right}
+  .ts-btn:hover{color:var(--ink);border-color:rgba(212,85,42,.7)}
+  .ts-btn.on{color:var(--ink);border-color:rgba(255,179,71,.7);background:rgba(212,85,42,.16)}
+  .ts-btn i{font-style:normal;color:var(--ember);margin-right:8px}
+
 
   /* A pause control that does not need a keyboard. Deliberately small, low
      contrast and top-right, away from the fight and away from the bars. */
@@ -237,7 +314,9 @@
   #stBar.heat.locked{animation:overheat .5s ease-in-out infinite alternate}
   @keyframes overheat{from{filter:none}to{filter:brightness(1.9) saturate(1.4)}}
 
-  #roomTag{position:absolute;left:50%;top:calc(92px + var(--safe-t));
+  /* Under the target's health, bottom-centre — it belongs to the same block
+     of information and should not be a second thing to look at. */
+  #roomTag{position:absolute;left:50%;top:auto;bottom:calc(16px + var(--safe-b));
        transform:translateX(-50%);text-align:center;font-size:10px;
        letter-spacing:.34em;color:var(--faint);text-transform:uppercase;white-space:nowrap}
   #roomTag b{color:var(--ember);font-weight:400;margin-right:12px}
@@ -517,6 +596,21 @@
 </div>
 
 <div id="lowhp"></div>
+
+<!-- Training only: swap weapons without leaving the effigy. Learning a
+     moveset means comparing it against the others, and walking back out to
+     the rack to do that is the difference between trying all four and trying
+     the one you picked. -->
+<div id="trainSwap">
+  <div class="ts-lbl">TRY ANOTHER</div>
+  <div class="ts-row" id="trainSwapRow"></div>
+</div>
+
+<div class="hud" id="kit">
+  <div class="kitslot" id="kitWeapon"><b>—</b><span>right</span></div>
+  <div class="kitslot" id="kitOff"><b>—</b><span>left</span></div>
+  <div class="kitslot" id="kitAbility"><b>—</b><span>1</span></div>
+</div>
 
 <div class="hud" id="lockPip">LOCKED</div>
 

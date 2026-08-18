@@ -1,5 +1,5 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { PLAYER, WEAPONS, BLEED, COMBO_WINDOW } from './config.js';
+import { PLAYER, WEAPONS, BLEED, COMBO_WINDOW, SOFT } from './config.js';
 import { derive, defaultBuild } from './character.js';
 import { clamp, damp, turnToward, angleDelta } from './util.js';
 
@@ -104,10 +104,42 @@ export class Player extends Actor {
   }
   get armorDamageMul() { return this.weapon.armorDamageMul ?? 1; }
 
+  /* Every attack the player can throw funnels through here — light, heavy,
+     combo, off-hand and ability alike — so the soft target is acquired in ONE
+     place rather than at five call sites that would drift apart. */
+  startAttack(def, label, aim) {
+    this.softAim = (this.lockTarget && !this.lockTarget.dead)
+      ? null : this.softTarget(this._foes);
+    // Snap a fraction of the way immediately: waiting for the whole turn to
+    // play out over a 0.11s knife windup would mean the assist never arrived.
+    if (this.softAim) {
+      const want = this.angleTo(this.softAim);
+      this.facing = turnToward(this.facing, want, Math.abs(angleDelta(this.facing, want)) * 0.35);
+    }
+    super.startAttack(def, label, aim);
+  }
+
   /* A heat weapon stores `stamina` as HEADROOM — how much heat it can still
      take — so the arithmetic below is identical for both economies and only
      the numbers that feed it differ. A negative cost (VENT) therefore refunds
      headroom, which is exactly what venting is. */
+  /* The most plausible thing this swing was aimed at. Scored on distance,
+     with a large bonus for being inside the cone you are already facing —
+     because a player who has lined something up should never have the game
+     pick the thing behind them just for being a metre closer. */
+  softTarget(enemies) {
+    let best = null, bestScore = -Infinity;
+    for (const e of (enemies || [])) {
+      if (e.dead) continue;
+      const d = this.distanceTo(e);
+      if (d > SOFT.range + e.radius) continue;
+      let score = -d;
+      if (Math.abs(angleDelta(this.facing, this.angleTo(e))) <= SOFT.cone) score += SOFT.coneBonus;
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+    return best;
+  }
+
   spendStamina(n) {
     this.stamina = clamp(this.stamina - n, 0, this.maxStamina);
     this.staminaDelay = this.isHeat ? PLAYER.heatDecayDelay : PLAYER.staminaRegenDelay;
@@ -129,6 +161,8 @@ export class Player extends Actor {
   update(dt, ctx) {
     if (this.dead) return;
     const { input, basis, events } = ctx;
+    // Re-acquired on the frame an attack begins, and only then.
+    this._foes = ctx.enemies || [];
 
     // --- timers ---------------------------------------------------------
     this.invuln = Math.max(0, this.invuln - dt);
@@ -202,6 +236,15 @@ export class Player extends Actor {
       const s = this.attackStepSpeed();
       this.vx = Math.sin(this.facing) * s;
       this.vz = Math.cos(this.facing) * s;
+
+      // SOFT TARGETING. Turn toward whatever this swing was aimed at, unless
+      // you are locked on (which is stronger) or actively steering (which is
+      // your call and beats the assist). Runs through the windup only — once
+      // the blade is out, commitment is commitment.
+      if (!locked && this.softAim && this.phase === PHASE.WINDUP && !this.softAim.dead) {
+        const yieldToInput = hasInput ? SOFT.inputYield : 1;
+        this.faceToward(this.softAim.x, this.softAim.z, SOFT.turnRate * yieldToInput, dt);
+      }
 
       // Combo buffering — only inside recovery, only past the cancel point.
       const a = this.atk;
@@ -366,6 +409,8 @@ export class Player extends Actor {
       this.rollDistance = R.backstepDistance * this.rollScale.distance;
     }
     if (!locked) this.facing = this.rollDir;
+    // A backstep is a hop, not a tumble. The renderer needs to know which.
+    this.backstep = !hasInput;
     this.lastAction = hasInput ? 'roll' : 'backstep';
   }
 }

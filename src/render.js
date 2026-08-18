@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { CAMERA, AGGRO, LOCK, TELEGRAPH, EXIT } from './config.js';
+import { CAMERA, AGGRO, LOCK, TELEGRAPH, EXIT, RISE } from './config.js';
 import { STATE, PHASE } from './actor.js';
 import { clamp, damp, lerp } from './util.js';
 import { buildTextures } from './textures.js';
@@ -346,6 +346,29 @@ export class View {
   syncActor(actor, isPlayer, dt = 0.016) {
     const rig = this.ensureRig(actor, isPlayer);
 
+    // COMING UP. The body is buried and hauls itself out, and for the first
+    // fraction of it nothing shows at all but the ground shaking — so the
+    // player gets a beat of "something is about to happen HERE" before there
+    // is anything to look at.
+    if (actor.emerging) {
+      const t = clamp(actor.emergeT / RISE.duration, 0, 1);
+      const shudder = clamp(actor.emergeT / RISE.shudder, 0, 1);
+      const out = t <= (RISE.shudder / RISE.duration) ? 0
+        : Math.pow((t - RISE.shudder / RISE.duration) / (1 - RISE.shudder / RISE.duration), 0.7);
+      rig.group.visible = out > 0.001;
+      rig.group.position.y = -actor.height * RISE.sink * (1 - out);
+      // It claws up: hunched hard at first, straightening as it clears.
+      rig.chest.rotation.x = rig.baseLean + (1 - out) * 1.05;
+      rig.pivot.rotation.x = -2.2 + out * 1.9;
+      rig.offArm.rotation.x = -1.9 + out * 1.6;
+      rig.group.rotation.y = actor.facing + Math.sin(actor.emergeT * 26) * 0.05 * (1 - out);
+      if (!rig.burstDone && shudder >= 1) { rig.burstDone = true; this.riseBurst(actor.x, actor.z); }
+      this.fx.syncShadow(actor, rig);
+      return;
+    }
+    rig.group.visible = true;
+    rig.burstDone = false;
+
     // All posing lives in rigs.js and is driven off frame data.
     animateRig(rig, actor, dt, this._clock);
 
@@ -497,6 +520,66 @@ export class View {
     }
   }
 
+
+  /* ---- cover ------------------------------------------------------------
+     The boulders the Game generated, made visible. Built from the SAME list
+     the projectile test reads, so what stops a bolt and what you can see are
+     guaranteed to be the same rock — the alternative is cover that lies, and
+     cover that lies is worse than no cover.
+
+     They are registered as occluders too, because they are tall enough to
+     stand between this fixed camera and the fight.
+     ------------------------------------------------------------------- */
+  setBlockers(list) {
+    const key = list.map((b) => `${b.x.toFixed(1)},${b.z.toFixed(1)},${b.r.toFixed(1)}`).join('|');
+    if (key === this._blockerKey) return;
+    this._blockerKey = key;
+
+    if (this.rocks) {
+      this.scene.remove(this.rocks);
+      this.rocks.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      this.forest.occluders = this.forest.occluders.filter((o) => !o.isRock);
+    }
+    const g = new THREE.Group();
+    this.rocks = g;
+    this.scene.add(g);
+
+    for (const b of list) {
+      const mat = new THREE.MeshStandardMaterial({
+        map: this.tex.stone, roughness: 0.95, metalness: 0.02 });
+      // Two lumps rather than one, so a boulder does not read as a ball. The
+      // silhouette has to be obviously SOLID at a glance, because the player
+      // is about to make positional decisions based on it.
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(b.r, 0), mat);
+      rock.scale.set(1, b.h / (b.r * 1.6), 1);
+      rock.rotation.set(b.seed * 2, b.seed * 5, b.seed * 1.4);
+      rock.position.set(b.x, b.h * 0.36, b.z);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      g.add(rock);
+
+      const shard = new THREE.Mesh(new THREE.DodecahedronGeometry(b.r * 0.52, 0), mat);
+      shard.position.set(b.x + b.r * 0.7, b.h * 0.16, b.z - b.r * 0.5);
+      shard.rotation.set(b.seed * 3, b.seed, b.seed * 2);
+      shard.castShadow = true;
+      g.add(shard);
+
+      const rec = this.forest._registerOccluder(rock, mat, b.h);
+      if (rec) rec.isRock = true;
+    }
+  }
+
+  /* Dirt and bone thrown up by something coming out of the ground. */
+  riseBurst(x, z) {
+    this.burst(x, z, 0x6b6255, 16, 0.9);
+    this.burst(x, z, 0x2a221e, 10, 0.6);
+    this.scorch(x, z, 1.3);
+    this.addShake(0.4);
+  }
+
   /* ---- feedback -------------------------------------------------------- */
   burst(x, z, color, n = 10, power = 1) {
     for (let i = 0; i < n; i++) {
@@ -577,9 +660,16 @@ export class View {
   }
 
   /* Called when a blow connects, so the struck body pops white. */
-  flashActor(actor, amount = 1) {
+  flashActor(actor, amount = 1, fromX, fromZ) {
     const rig = this.rigs.get(actor);
-    if (rig) rig.flash = Math.min(1.4, amount);
+    if (!rig) return;
+    rig.flash = Math.min(1.4, amount);
+    // Where it came FROM, so the body can rock away from it rather than
+    // flashing in place.
+    if (fromX !== undefined) {
+      rig.hitFrom = Math.atan2(fromX - actor.x, fromZ - actor.z);
+      rig.flinch = Math.min(1, amount);
+    }
   }
 
   scorch(x, z, scale) { this.fx.hitDecal(x, z, scale); }

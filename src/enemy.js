@@ -1,5 +1,5 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { SLAGBOUND, AGGRO } from './config.js';
+import { SLAGBOUND, AGGRO, RISE } from './config.js';
 import { damp, lerp, clamp, TAU } from './util.js';
 
 /* The Slagbound — a foundry hand that never stopped working.
@@ -88,6 +88,22 @@ export class Foe extends Actor {
   update(dt, ctx) {
     if (this.dead) return;
     const target = ctx.player;
+
+    // ================= RISING ===========================================
+    // It comes up, and it cannot do anything on the way. The whole duration
+    // is the tell for an arrival the player did not choose the timing of.
+    if (this.state === STATE.EMERGE) {
+      this.emergeT += dt;
+      this.vx = this.vz = 0;
+      this.intent = 'rising';
+      if (target && !target.dead) this.faceToward(target.x, target.z, 1.4, dt);
+      if (this.emergeT >= RISE.duration) {
+        this.state = STATE.IDLE;
+        this.hesitate = this._rollHesitate() + 0.25;
+        this.intent = 'wait';
+      }
+      return;
+    }
 
     this.invuln = Math.max(0, this.invuln - dt);
     this.staggerResist = Math.max(0, this.staggerResist - dt);
@@ -233,6 +249,21 @@ export class Foe extends Actor {
     }
 
     // Commit only once the hesitation runs out AND something is in range.
+    // COVER. An archer that fires into a rock has been beaten by the room,
+    // and it should act like it: it holds, then gives up and repositions.
+    // Without this the boulders would be scenery that eats bolts.
+    if (this.def.attacks.loose && ctx.game && !ctx.game.hasLineOfSight(this, target)) {
+      this.blocked = (this.blocked || 0) + dt;
+      this.intent = 'no shot';
+      if (this.blocked > AGGRO.slotDrift) {
+        // Slide along the ring to find an angle rather than standing there.
+        this.slotWander = clamp(this.slotWander + 2.2 * this.circleDir * dt,
+                                -AGGRO.slotSwing * 2, AGGRO.slotSwing * 2);
+      }
+      return;
+    }
+    this.blocked = 0;
+
     this.hesitate -= dt;
     if (this.hesitate <= 0) {
       const pick = this._chooseAttack(gap);

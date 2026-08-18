@@ -237,6 +237,29 @@ export class Tutorial {
 
   get step() { return this.index >= 0 ? STEPS[this.index] : null; }
 
+  /* Swap what is in the player's hands without restarting the lesson. The
+     Player resolves its weapon in the constructor — reach, roll weight and the
+     whole moveset come off it — so this has to rebuild the actor and then put
+     back everything the lesson was in the middle of. */
+  swapWeapon(keep) {
+    const g = this.game;
+    const eff = this.effigy;
+    g.previewMode = false;
+    g.reset();
+    g.enemies.length = 0;
+    if (eff) {
+      g.enemies.push(eff);
+      this.effigy = eff;
+    }
+    if (keep) {
+      g.player.hp = keep.hp;
+      g.player.x = keep.x;
+      g.player.z = keep.z;
+      g.player.facing = keep.facing;
+    }
+    g.player.lockTarget = eff || null;
+  }
+
   spawnEffigy() {
     if (this.effigy) return;
     this.effigy = new Effigy({ x: 0, z: -2.0, facing: 0 });

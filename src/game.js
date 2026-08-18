@@ -2,7 +2,7 @@ import { Player } from './player.js';
 import { Foe } from './enemy.js';
 import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
-import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT,
+import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT, RISE,
          ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
@@ -98,15 +98,41 @@ export class Game {
     // A spawn entry may name its own foe. Mixed rooms are the point from the
     // Long Yard onward — an archer is only interesting next to something that
     // wants you standing still.
-    this.enemies = enc.spawn.map(([x, z, foeKey], i) => new Foe({
-      def: (foeKey && FOES[foeKey]) || fallback,
-      x, z,
-      facing: Math.atan2(this.player.x - x, this.player.z - z),
-      rng: this.rng,
-      hpMul: enc.hpMul,
-      slot: i, slotCount: n,
-    }));
+    // Anything with a schedule is held back and rises later. Everything else
+    // is standing there when you arrive.
+    this.enemies = [];
+    this.pending = [];
+    enc.spawn.forEach(([x, z, foeKey, when], i) => {
+      const make = () => new Foe({
+        def: (foeKey && FOES[foeKey]) || fallback,
+        x, z,
+        facing: Math.atan2(this.player.x - x, this.player.z - z),
+        rng: this.rng,
+        hpMul: enc.hpMul,
+        slot: i, slotCount: n,
+      });
+      if (when) this.pending.push({ make, when });
+      else this.enemies.push(make());
+    });
     this.player.lockTarget = null;
+
+    // Cover. Built from the same seed as the room, so a given room's boulders
+    // are in the same place every time you walk into it — cover you cannot
+    // learn is not cover.
+    this.blockers = [];
+    const rocks = enc.rocks || 0;
+    for (let i = 0; i < rocks; i++) {
+      const a = this.rng() * Math.PI * 2;
+      // Kept out of the middle: a boulder in the duelling circle would block
+      // the fight rather than shape it.
+      const rad = ARENA.radius * 0.42 + this.rng() * ARENA.radius * 0.44;
+      this.blockers.push({
+        x: Math.sin(a) * rad, z: Math.cos(a) * rad,
+        r: 0.85 + this.rng() * 0.75,
+        h: 1.5 + this.rng() * 1.5,
+        seed: this.rng(),
+      });
+    }
 
     // --- rooms ----------------------------------------------------------
     // Cleared but not finished: the tree line opens and you walk out. Held
@@ -248,7 +274,8 @@ export class Game {
     if (p.dead) return;
     let best = null, bestScore = -Infinity;
     for (const e of this.livingEnemies) {
-      if (e.state === STATE.STAGGER) continue;
+      // A body still coming out of the ground is not part of the fight yet.
+      if (e.state === STATE.STAGGER || e.state === STATE.EMERGE) continue;
       let s = -e.gapTo(p) * AGGRO.gapWeight;
       // Prefer a threat you can see. A blow from off-camera is not difficulty,
       // it is a missing tell — the threat arc covers the rest.
@@ -268,6 +295,42 @@ export class Game {
     // The grant itself must never be the commit: you always get a beat to see
     // which body has stepped up before its windup begins.
     best.hesitate = Math.max(best.hesitate, 0.18);
+  }
+
+  /* Staggered arrivals. A wave is either on a CLOCK or on a COUNT — "after
+     six seconds" or "once only two are left" — and the second is the one that
+     actually shapes a fight, because it responds to how well you are doing
+     rather than to how long you have taken. */
+  _releaseWaves(dt) {
+    if (!this.pending || !this.pending.length) return;
+    const alive = this.livingEnemies.length;
+    for (let i = this.pending.length - 1; i >= 0; i--) {
+      const p = this.pending[i];
+      const due = (p.when.at !== undefined && this.time >= p.when.at)
+               || (p.when.atRemaining !== undefined && alive <= p.when.atRemaining);
+      if (!due) continue;
+      this.pending.splice(i, 1);
+      const foe = p.make();
+      foe.state = STATE.EMERGE;
+      foe.emergeT = 0;
+      this.enemies.push(foe);
+      this.events.push({ type: 'rise', target: foe, x: foe.x, z: foe.z, result: 'rise' });
+    }
+  }
+
+  /* Is there anything solid between these two? Segment against circle, which
+     is all the geometry a boulder needs to be. */
+  hasLineOfSight(from, to) {
+    if (!this.blockers || !this.blockers.length) return true;
+    const dx = to.x - from.x, dz = to.z - from.z;
+    const len2 = dx * dx + dz * dz;
+    if (len2 < 1e-6) return true;
+    for (const b of this.blockers) {
+      const t = clamp(((b.x - from.x) * dx + (b.z - from.z) * dz) / len2, 0, 1);
+      const cx = from.x + dx * t, cz = from.z + dz * t;
+      if (Math.hypot(b.x - cx, b.z - cz) < b.r) return false;
+    }
+    return true;
   }
 
   _dropToken() {
@@ -291,9 +354,11 @@ export class Game {
     const evStart = this.events.length;
     this.time += dt;
     this._validateLock();
+    this._releaseWaves(dt);
     this._updateAggro(dt);
 
-    const ctx = { input, basis, events: this.events, player: this.player, enemies: this.enemies };
+    const ctx = { input, basis, events: this.events, player: this.player,
+                  enemies: this.enemies, game: this };
 
     this.player.update(dt, ctx);
     for (const e of this.enemies) e.update(dt, ctx);
@@ -324,7 +389,7 @@ export class Game {
     if (this.events.length > evStart) this._tally(evStart);
 
     if (this.player.dead && !this.outcome) { this.outcome = 'lose'; this.outcomeT = 0; }
-    else if (!this.livingEnemies.length) {
+    else if (!this.livingEnemies.length && !(this.pending && this.pending.length)) {
       // A cleared room is only a WIN if it was the last one. Otherwise the
       // tree line opens and the fight is not over, it has moved.
       this.roomDone = true;
@@ -384,6 +449,7 @@ export class Game {
       for (let j = i + 1; j < all.length; j++) {
         const a = all[i], b = all[j];
         if (a.dead || b.dead) continue;
+        if (a.emerging || b.emerging) continue;   // it is still in the ground
         const dx = b.x - a.x, dz = b.z - a.z;
         const min = a.radius + b.radius;
         const d = Math.hypot(dx, dz);
@@ -455,6 +521,20 @@ export class Game {
       // skeletons would be funny exactly once and would then quietly dismantle
       // the aggro token, because a body killed by its own archer never took a
       // turn.
+      // Cover stops a bolt. This is what makes the boulders matter rather than
+      // being scenery, and it cuts both ways — the player's casts are stopped
+      // by the same rocks, which is the point.
+      let blocked = false;
+      for (const b of (this.blockers || [])) {
+        if (Math.hypot(b.x - s.x, b.z - s.z) < b.r) { blocked = true; break; }
+      }
+      if (blocked) {
+        this.events.push({ type: 'hit', attacker: s.owner, target: null,
+                           atk: s.atk, result: 'blocked', damage: 0, x: s.x, z: s.z });
+        this.shots.splice(i, 1);
+        continue;
+      }
+
       const targets = s.fromPlayer ? this.livingEnemies : [this.player];
       let hit = null;
       for (const t of targets) {
