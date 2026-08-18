@@ -1,5 +1,5 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { PLAYER, WEAPONS, BLEED } from './config.js';
+import { PLAYER, WEAPONS, BLEED, COMBO_WINDOW } from './config.js';
 import { derive, defaultBuild } from './character.js';
 import { clamp, damp, turnToward, angleDelta } from './util.js';
 
@@ -46,6 +46,7 @@ export class Player extends Actor {
 
     this.lockTarget = null;
     this.lastAction = '—';
+    this.comboFlash = null;   // set for one frame when a combo fires
   }
 
   get invulnerable() { return this.iframeActive || this.invuln > 0; }
@@ -218,6 +219,32 @@ export class Player extends Actor {
           }
         }
       }
+      // COMBO. A heavy pressed while finishing the right link of the light
+      // chain comes out as something else entirely. It is not a new button,
+      // which is why it costs nothing to discover and everything to use: you
+      // have to commit to two swings before the third is even offered.
+      if (a && this.phase === PHASE.RECOVER && (this.weapon.combos || []).length) {
+        const intoRecovery = this.atkT - (a.windup + a.active);
+        const idx = this.weapon.light.indexOf(a);
+        // A combo has its OWN window and does not borrow the chain's. The last
+        // link of a chain has no cancelFrom by definition, and three of the
+        // four weapons hang their combo off exactly that link.
+        const win = a.cancelFrom ?? COMBO_WINDOW;
+        if (intoRecovery >= win && idx >= 0) {
+          for (const c of (this.weapon.combos || [])) {
+            if (c.from !== idx || !input.peek(c.input)) continue;
+            if (!this.canSpend(c.atk.stamina)) continue;
+            input.take(c.input);
+            this.spendStamina(c.atk.stamina);
+            this.startAttack(c.atk, c.label);
+            this.comboIndex = 0;
+            this.lastAction = c.label;
+            this.comboFlash = c.label;
+            return;
+          }
+        }
+      }
+
       // Roll cancels recovery — the classic Souls escape, at full stamina price.
       if (this.phase === PHASE.RECOVER && input.peek('roll') && this.canSpend(this.rollStamina)) {
         input.take('roll');
@@ -258,6 +285,21 @@ export class Player extends Actor {
         this.spendStamina(a.stamina);
         this.startAttack(a, a.id);
         this.lastAction = a.id;
+        return;
+      }
+      this.lastAction = this.isHeat ? 'too hot' : 'no stam';
+    }
+
+    // ABILITIES (1..4). Stamina like everything else — there is no mana here,
+    // and a second pool would undo the reason stamina is the single economy:
+    // that every choice trades against every other choice.
+    for (const ab of (this.weapon.abilities || [])) {
+      if (!input.peek('ability' + ab.key)) continue;
+      input.take('ability' + ab.key);
+      if (this.canSpend(ab.atk.stamina)) {
+        this.spendStamina(ab.atk.stamina);
+        this.startAttack(ab.atk, ab.name);
+        this.lastAction = ab.name;
         return;
       }
       this.lastAction = this.isHeat ? 'too hot' : 'no stam';

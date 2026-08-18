@@ -30,6 +30,13 @@ export class Input {
       switch (k) {
         case 'Space':      press('roll'); e.preventDefault(); break;
         case 'KeyJ':       press('light'); break;
+        // Ability slots. Buffered like every other action, so a press during
+        // recovery still lands — abilities are not a separate input system,
+        // they are more of the same one.
+        case 'Digit1':     press('ability1'); break;
+        case 'Digit2':     press('ability2'); break;
+        case 'Digit3':     press('ability3'); break;
+        case 'Digit4':     press('ability4'); break;
         case 'KeyK':       press('heavy'); break;
         case 'Tab':        this.edges.lock = true; e.preventDefault(); break;
         case 'KeyQ':       this.edges.lock = true; break;

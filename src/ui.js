@@ -203,6 +203,8 @@ export class Debug {
       ['shots', String(game.shots.length)],
       ['armour', p.armored ? 'HYPERARMOUR' : '—'],
       ['off hand', `${p.weapon.offhandLabel || 'GUARD'}  (${p.offhand})`],
+      ['combo', (p.weapon.combos || []).map((c) => `${c.label} @L${c.from + 1}`).join(', ') || '—'],
+      ['ability 1', (p.weapon.abilities || [])[0]?.name || '—'],
       ['stamina', p.stamina.toFixed(0) + '/' + p.maxStamina + (p.staminaLock > 0 ? '  LOCKED' : '')],
       ['hp', p.hp.toFixed(0) + '/' + p.maxHp],
       ['lock', p.lockTarget && !p.lockTarget.dead ? 'on' : 'off'],

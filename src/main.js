@@ -87,9 +87,22 @@ function resetHudSmoothing() { hud._hpChip = 1; hud._foeChip = 1; cui.clear(); s
 /* The off-hand key is one binding with a different verb per weapon, so the
    control hint has to follow the rack rather than being written once. */
 const keyOffhand = document.getElementById('keyOffhand');
+const keyCombo = document.getElementById('keyCombo');
+const keyAbility = document.getElementById('keyAbility');
 function syncWeaponUI() {
   const w = game.player.weapon;
   if (keyOffhand) keyOffhand.textContent = (w.offhandLabel || 'guard').toLowerCase();
+  // Both of these are per-weapon, so the hints have to follow the rack rather
+  // than being written once. An empty slot says so instead of lying.
+  if (keyCombo) {
+    const c = (w.combos || [])[0];
+    keyCombo.textContent = c ? `${'L'.repeat(c.from + 1).split('').join(',')},H — ${c.label}` : 'no combo';
+  }
+  if (keyAbility) {
+    const a = (w.abilities || [])[0];
+    keyAbility.textContent = a ? a.name.toLowerCase() : 'none with this weapon';
+    keyAbility.parentElement.style.opacity = a ? '' : '0.4';
+  }
   const tb = touch && touch.btnGuard;
   if (tb) tb.textContent = w.offhandLabel || 'GUARD';
 }
@@ -354,6 +367,14 @@ function frame(now) {
   if (pauseBtn) pauseBtn.style.display = (started && !menu.open) ? '' : 'none';
   hud.update(game, dtReal);
   cui.update(game, dtReal, view.camera, view.w, view.h, started && !menu.open);
+
+  // A combo landing is worth naming. It is the one thing in the moveset a
+  // player can execute without knowing it exists, so the game says what they
+  // just did rather than letting it read as a random big hit.
+  if (game.player.comboFlash) {
+    cui.flash(game.player.comboFlash, 'good');
+    game.player.comboFlash = null;
+  }
 
   // The way on. Announced once when it opens, because a column of light at
   // the tree line is easy to miss while you are still watching the last body

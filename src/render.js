@@ -204,13 +204,22 @@ export class View {
   setTheme(name) {
     if (this._theme === name) return;
     this._theme = name;
-    const ossuary = name === 'ossuary';
     this.forest.setTheme(name);
-    this.scene.fog.color.setHex(ossuary ? 0x0c1016 : 0x0b0e13);
-    this.scene.background.setHex(ossuary ? 0x05070a : 0x06080b);
-    this.moon.color.setHex(ossuary ? 0xcfe0f2 : 0xbdd2ea);
-    this.moon.intensity = ossuary ? 2.35 : 1.9;
-    this.renderer.toneMappingExposure = ossuary ? 1.05 : 1.15;
+    // Four rooms, four skies. The run reads as a descent: warm clearing, two
+    // progressively colder and emptier rooms, then the kiln, where the heat is
+    // back on and the moon barely matters.
+    const LOOK = {
+      clearing: { fog: 0x0b0e13, bg: 0x06080b, moon: 0xbdd2ea, lit: 1.90, exp: 1.15 },
+      ossuary:  { fog: 0x0c1016, bg: 0x05070a, moon: 0xcfe0f2, lit: 2.35, exp: 1.05 },
+      yard:     { fog: 0x0a0d12, bg: 0x04060a, moon: 0xdae8fa, lit: 2.60, exp: 1.00 },
+      kiln:     { fog: 0x140a06, bg: 0x0a0503, moon: 0x8fa0bc, lit: 1.05, exp: 1.22 },
+    };
+    const L = LOOK[name] || LOOK.clearing;
+    this.scene.fog.color.setHex(L.fog);
+    this.scene.background.setHex(L.bg);
+    this.moon.color.setHex(L.moon);
+    this.moon.intensity = L.lit;
+    this.renderer.toneMappingExposure = L.exp;
   }
 
 

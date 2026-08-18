@@ -1056,15 +1056,33 @@ export function buildCinderbone(actor) {
   pelvis.castShadow = true;
   hips.add(pelvis);
 
-  const legGeo = new THREE.CapsuleGeometry(r * 0.115, h * 0.30, 3, 6);
+  // Legs with a knee, a shin and toes. Five of these share a room, so this is
+  // the most-looked-at body in the game and the cheapest place to spend
+  // detail — one bare capsule per leg was reading as a stick figure in exactly
+  // the room that has the most of them.
+  const legGeo = new THREE.CapsuleGeometry(r * 0.115, h * 0.15, 3, 6);
   const legL = limb(legGeo, bone, 0);
   const legR = limb(legGeo, bone, 0);
   legL.position.x = -r * 0.34;
   legR.position.x = r * 0.34;
   for (const leg of [legL, legR]) {
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.28, r * 0.12, r * 0.5), boneD);
-    foot.position.set(0, -h * 0.42, r * 0.12);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(r * 0.125, 7, 5), boneD);
+    knee.position.y = -h * 0.185;
+    leg.add(knee);
+    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.10, h * 0.14, 3, 6), bone);
+    shin.position.y = -h * 0.275;
+    shin.castShadow = true;
+    leg.add(shin);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.26, r * 0.12, r * 0.44), boneD);
+    foot.position.set(0, -h * 0.395, r * 0.12);
+    foot.castShadow = true;
     leg.add(foot);
+    for (let t = -1; t <= 1; t++) {
+      const toe = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.032, r * 0.12, 2, 4), bone);
+      toe.rotation.x = Math.PI / 2;
+      toe.position.set(t * r * 0.075, -h * 0.40, r * 0.32);
+      leg.add(toe);
+    }
   }
   hips.add(legL, legR);
 
@@ -1072,10 +1090,17 @@ export function buildCinderbone(actor) {
   chest.position.y = h * 0.46;
   g.add(chest);
 
-  // Spine.
-  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.09, r * 0.11, h * 0.30, 6), boneD);
-  spine.position.y = h * 0.15;
+  // A segmented spine rather than one tube: it catches the light in bands,
+  // which is what makes a back read as vertebrae from directly above.
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.085, r * 0.10, h * 0.30, 6), boneD);
+  spine.position.set(0, h * 0.15, -r * 0.12);
   chest.add(spine);
+  for (let i = 0; i < 5; i++) {
+    const vert = new THREE.Mesh(new THREE.SphereGeometry(r * 0.095, 6, 5), bone);
+    vert.position.set(0, h * (0.05 + i * 0.062), -r * 0.14);
+    vert.scale.set(1.2, 0.7, 1);
+    chest.add(vert);
+  }
 
   // RIBCAGE. Five open hoops of falling size — the read that says skeleton
   // from any angle, and the one shape in the game you can see through.
@@ -1098,9 +1123,17 @@ export function buildCinderbone(actor) {
 
   // Collarbones and a soot-stained apron of hide — what is left of the kit
   // they were sorting slag in.
-  const clav = new THREE.Mesh(new THREE.BoxGeometry(r * 1.05, r * 0.10, r * 0.12), bone);
-  clav.position.y = h * 0.275;
-  chest.add(clav);
+  // Two swept collarbones and a pair of shoulder blades, rather than one bar.
+  for (const sx of [-1, 1]) {
+    const clav = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.05, r * 0.40, 2, 5), bone);
+    clav.rotation.z = Math.PI / 2 + sx * 0.20;
+    clav.position.set(sx * r * 0.25, h * 0.275, r * 0.14);
+    chest.add(clav);
+    const scap = new THREE.Mesh(new THREE.BoxGeometry(r * 0.30, r * 0.28, r * 0.06), boneD);
+    scap.position.set(sx * r * 0.28, h * 0.235, -r * 0.22);
+    scap.rotation.z = -sx * 0.28;
+    chest.add(scap);
+  }
   const apron = new THREE.Mesh(new THREE.BoxGeometry(r * 0.72, h * 0.20, 0.022), soot);
   apron.position.set(0, h * 0.055, r * 0.40);
   chest.add(apron);
@@ -1112,22 +1145,53 @@ export function buildCinderbone(actor) {
   // Skull: cranium, brow, jaw, and two lit sockets. The sockets are the only
   // thing on the whole body that emits, which is what lets the aggro token
   // dim it to nearly nothing.
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 12, 10), bone);
-  skull.scale.set(1, 1.05, 1.16);
-  skull.position.y = r * 0.32;
+  // Neck vertebrae, so the skull is CARRIED rather than balanced on a stalk.
+  for (let i = 0; i < 3; i++) {
+    const v = new THREE.Mesh(new THREE.SphereGeometry(r * 0.07, 6, 5), boneD);
+    v.position.set(0, r * (0.04 + i * 0.10), -r * 0.02);
+    neck.add(v);
+  }
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.40, 13, 11), bone);
+  skull.scale.set(0.95, 1.02, 1.2);
+  skull.position.set(0, r * 0.36, r * 0.02);
   skull.castShadow = true;
   neck.add(skull);
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(r * 0.68, r * 0.14, r * 0.18), boneD);
-  brow.position.set(0, r * 0.42, r * 0.36);
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(r * 0.64, r * 0.14, r * 0.20), bone);
+  brow.position.set(0, r * 0.46, r * 0.28);
   neck.add(brow);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.50, r * 0.16, r * 0.42), boneD);
-  jaw.position.set(0, r * 0.08, r * 0.20);
-  jaw.rotation.x = 0.18;
+  // Cheekbones, a hanging jaw and teeth. Small pieces individually, and
+  // together they are the whole difference between a skull and a pale ball.
+  for (const sx of [-1, 1]) {
+    const zyg = new THREE.Mesh(new THREE.BoxGeometry(r * 0.13, r * 0.11, r * 0.22), boneD);
+    zyg.position.set(sx * r * 0.29, r * 0.30, r * 0.16);
+    zyg.rotation.z = sx * 0.26;
+    neck.add(zyg);
+  }
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.44, r * 0.14, r * 0.42), boneD);
+  jaw.position.set(0, r * 0.15, r * 0.18);
+  jaw.rotation.x = 0.32;
+  jaw.castShadow = true;
   neck.add(jaw);
+  const teeth = new THREE.Mesh(new THREE.BoxGeometry(r * 0.36, r * 0.06, r * 0.07),
+    new THREE.MeshStandardMaterial({ color: 0xe0d8c2, roughness: 0.85 }));
+  teeth.position.set(0, r * 0.235, r * 0.34);
+  neck.add(teeth);
+  const nasal = new THREE.Mesh(new THREE.ConeGeometry(r * 0.065, r * 0.15, 3),
+    new THREE.MeshStandardMaterial({ color: 0x0a0705, roughness: 1 }));
+  nasal.rotation.set(-Math.PI / 2, 0, Math.PI);
+  nasal.position.set(0, r * 0.32, r * 0.32);
+  neck.add(nasal);
   const eyes = [];
   for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.11, 8, 6), socket);
-    eye.position.set(sx * r * 0.17, r * 0.30, r * 0.36);
+    // Sunk into a dark pit, so a BANKED Cinderbone still has eyes — with the
+    // aggro token dimming the coals, an unlit socket was just smooth bone.
+    const pit = new THREE.Mesh(new THREE.ConeGeometry(r * 0.14, r * 0.28, 6),
+      new THREE.MeshStandardMaterial({ color: 0x0a0705, roughness: 1 }));
+    pit.rotation.x = -Math.PI / 2;
+    pit.position.set(sx * r * 0.17, r * 0.38, r * 0.24);
+    neck.add(pit);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.08, 8, 6), socket);
+    eye.position.set(sx * r * 0.17, r * 0.38, r * 0.28);
     eye.scale.z = 0.6;
     neck.add(eye);
     eyes.push(eye);
@@ -1138,8 +1202,21 @@ export function buildCinderbone(actor) {
   const pivot = new THREE.Group();
   pivot.position.set(r * 0.62, h * 0.255, 0);
   chest.add(pivot);
-  const armGeo = new THREE.CapsuleGeometry(r * 0.10, h * 0.20, 3, 6);
-  pivot.add(limb(armGeo, bone, 0));
+  const armGeo = new THREE.CapsuleGeometry(r * 0.10, h * 0.10, 3, 6);
+  const armBits = (parent) => {
+    parent.add(limb(armGeo, bone, 0));
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(r * 0.105, 6, 5), boneD);
+    elbow.position.y = -h * 0.108;
+    parent.add(elbow);
+    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(r * 0.08, h * 0.09, 3, 6), bone);
+    fore.position.y = -h * 0.165;
+    fore.castShadow = true;
+    parent.add(fore);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(r * 0.15, r * 0.13, r * 0.19), boneD);
+    hand.position.y = -h * 0.222;
+    parent.add(hand);
+  };
+  armBits(pivot);
 
   const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 1.15, 5), soot);
   haft.rotation.x = Math.PI / 2;
@@ -1158,7 +1235,7 @@ export function buildCinderbone(actor) {
   const offArm = new THREE.Group();
   offArm.position.set(-r * 0.62, h * 0.255, 0);
   chest.add(offArm);
-  offArm.add(limb(armGeo, bone, 0));
+  armBits(offArm);
 
   g.add(makeNose(r, 0xd8c9a8));
 
@@ -1551,7 +1628,57 @@ export function animateRig(rig, actor, dt, clock) {
 
   const rollDur = actor.rollDuration || 0.6;
 
-  if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'dash') {
+  if (actor.state === STATE.ATTACK && actor.atk &&
+      (actor.atk.pose === 'thrust' || actor.atk.pose === 'bash')) {
+    // A THRUST and a BASH are the same body shape — drive from the back foot,
+    // arm straight, no arc — and neither is a swing, so posing them off the
+    // swing curve made both read as a weak overhead.
+    const a = actor.atk, p = actor.phase;
+    const bash = a.pose === 'bash';
+    if (p === PHASE.WINDUP) {
+      const t = actor.windupProgress;
+      swing = lerp(A.rest, A.rest - 0.42, t);
+      lean = lerp(0, -0.20, t);
+      twist = lerp(0, bash ? 0.34 : -0.34, t);
+      crouch = lerp(0, 0.14, t);
+    } else if (p === PHASE.ACTIVE) {
+      const t = (actor.atkT - a.windup) / a.active;
+      // Straight out and HELD, rather than swept through.
+      swing = lerp(A.rest - 0.42, -0.05, Math.min(1, t * 2.4));
+      lean = 0.30;
+      twist = lerp(bash ? 0.34 : -0.34, bash ? -0.30 : 0.30, t);
+      crouch = 0.10;
+    } else {
+      const t = clamp((actor.atkT - a.windup - a.active) / Math.max(0.001, a.recover), 0, 1);
+      swing = lerp(-0.05, A.rest, t * t);
+      lean = lerp(0.30, 0, t);
+      twist = lerp(bash ? -0.30 : 0.30, 0, t);
+      crouch = lerp(0.10, 0, t);
+    }
+    legAmp = 0.55;
+    legPhase = Math.PI * 0.5;
+  } else if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'upheaval') {
+    // UPHEAVAL comes UP. Wound low behind the heel and driven skyward, which
+    // is the one arc the greataxe has not already used.
+    const a = actor.atk, p = actor.phase;
+    if (p === PHASE.WINDUP) {
+      const t = actor.windupProgress;
+      swing = lerp(A.rest, 1.55, t * t);
+      lean = lerp(0, 0.30, t);
+      crouch = lerp(0, 0.24, t);
+    } else if (p === PHASE.ACTIVE) {
+      const t = (actor.atkT - a.windup) / a.active;
+      swing = lerp(1.55, -2.85, t);
+      lean = lerp(0.30, -0.36, t);
+      crouch = lerp(0.24, 0, t);
+    } else {
+      const t = clamp((actor.atkT - a.windup - a.active) / Math.max(0.001, a.recover), 0, 1);
+      swing = lerp(-2.85, A.rest, t * t);
+      lean = lerp(-0.36, 0, t);
+    }
+    legAmp = 0.4;
+    legPhase = Math.PI * 0.5;
+  } else if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'dash') {
     // SLIP. Low, forward and knives-first. It is a roll that cuts, so it is
     // posed off the ROLL rather than off a swing — the player should read it
     // as a dodge they aimed, not as a lunge attack.
@@ -1691,10 +1818,14 @@ export function animateRig(rig, actor, dt, clock) {
     rig.offArm.rotation.x = swing * 0.86 - 0.18;
     rig.offArm.rotation.z = 0.34;
   } else if (rig.shield) {
+    // A bash is the shield's own attack, so it goes to the guard pose
+    // instantly rather than damping toward it.
+    if (actor.atk && actor.atk.pose === 'bash') rig.shieldT = 1;
     // The shield is carried at rest and BROUGHT UP to guard, damped so the
     // transition is a movement rather than a snap. It stays on the arm either
     // way — kit that appears only while a button is held reads as UI.
-    const up = actor.state === STATE.GUARD ? 1 : 0;
+    const up = (actor.state === STATE.GUARD ||
+                (actor.atk && actor.atk.pose === 'bash')) ? 1 : 0;
     rig.shieldT = damp(rig.shieldT || 0, up, 16, dt);
     const t = rig.shieldT;
     rig.offArm.rotation.x = lerp(0.30, -0.62, t)

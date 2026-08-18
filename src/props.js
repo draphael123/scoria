@@ -126,6 +126,13 @@ class Motes {
     this.vel = new Float32Array(count);
     this.seed = new Float32Array(count);
     this.rng = makeRng(opts.seed || 7);
+    // Set BEFORE the placement loop. _place() reads this.top, and assigning it
+    // afterwards meant every mote spawned at `random * undefined` = NaN — and
+    // because `NaN > this.top` is false the recycle test never fired, so those
+    // motes stayed NaN forever and were silently never drawn. It surfaced only
+    // as a computeBoundingSphere warning, which is the kind of thing it is
+    // very easy to keep deferring.
+    this.top = opts.top;
 
     for (let i = 0; i < count; i++) {
       this._place(pos, i, true);
@@ -142,7 +149,6 @@ class Motes {
     }));
     this.points.frustumCulled = false;
     this.pos = pos;
-    this.top = opts.top;
     this.t = 0;
   }
 
@@ -399,6 +405,180 @@ export class Forest {
     }
   }
 
+
+  /* THE LONG YARD. Where the ore came in and the slag went out, so it is built
+     out of the things that MOVE material: rails, tipped carts, ingot stacks
+     and a standing crane frame.
+
+     It matters that these are tall and hard-edged where the ossuary's bone is
+     low and soft. The two rooms share a clearing, and if the only difference
+     between them is which pile of debris is switched on then the run reads as
+     one room with a reskin. Height is what makes it read as somewhere else. */
+  _buildYard() {
+    const rng = makeRng(51515);
+    const g = new THREE.Group();
+    const iron = new THREE.MeshStandardMaterial({ color: 0x37302a, roughness: 0.78, metalness: 0.5 });
+    const rust = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.92, metalness: 0.25 });
+    const timber = new THREE.MeshStandardMaterial({ color: 0x3a2f22, roughness: 0.98 });
+    const ingot = new THREE.MeshStandardMaterial({ color: 0x6a6f76, roughness: 0.5, metalness: 0.7 });
+
+    // Rails, running out along the haul road's bearing and across it.
+    for (const [ang, len, n] of [[EXIT.bearing, 34, 2], [EXIT.bearing + Math.PI / 2, 26, 2]]) {
+      const sn = Math.sin(ang), cs = Math.cos(ang);
+      for (let k = 0; k < n; k++) {
+        const off = (k - (n - 1) / 2) * 1.3;
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, len), iron);
+        rail.position.set(sn * 2 + cs * off, 0.06, cs * 2 - sn * off);
+        rail.rotation.y = -ang;
+        g.add(rail);
+      }
+      for (let s = 0; s < 16; s++) {
+        const d = -len / 2 + (s / 15) * len;
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.34), timber);
+        tie.position.set(sn * (2 + d), 0.03, cs * (2 + d));
+        tie.rotation.y = -ang;
+        g.add(tie);
+      }
+    }
+
+    // Tipped ore carts. Boxes on their sides with a wheel showing — the wheel
+    // is what stops them reading as crates.
+    for (let i = 0; i < 5; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.84 + rng() * 5;
+      const cart = new THREE.Group();
+      cart.position.set(Math.sin(a) * rad, 0.5, Math.cos(a) * rad);
+      cart.rotation.set((rng() - 0.5) * 1.1, rng() * Math.PI, (rng() - 0.5) * 0.9);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.1), rust);
+      body.castShadow = true;
+      cart.add(body);
+      for (const sx of [-1, 1]) {
+        const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.08, 5, 12), iron);
+        wheel.position.set(sx * 0.8, -0.3, 0);
+        wheel.rotation.y = Math.PI / 2;
+        cart.add(wheel);
+      }
+      g.add(cart);
+    }
+
+    // Ingot stacks, low and neat — the one tidy thing left in the works.
+    for (let i = 0; i < 7; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.9 + rng() * 6;
+      const stack = new THREE.Group();
+      stack.position.set(Math.sin(a) * rad, 0, Math.cos(a) * rad);
+      stack.rotation.y = rng() * Math.PI;
+      const rows = 2 + (rng() * 3 | 0);
+      for (let r2 = 0; r2 < rows; r2++) {
+        for (let c = 0; c < 3 - (r2 % 2); c++) {
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.26), ingot);
+          bar.position.set((c - 1) * 0.3 + (r2 % 2) * 0.15, 0.09 + r2 * 0.17, 0);
+          bar.rotation.y = (r2 % 2) * Math.PI / 2;
+          bar.castShadow = true;
+          stack.add(bar);
+        }
+      }
+      g.add(stack);
+    }
+
+    // Two crane frames at the tree line. The only tall man-made things in the
+    // game, and the reason this room has a skyline the others do not.
+    for (const a of [EXIT.bearing + 1.9, EXIT.bearing - 2.1]) {
+      const rad = ARENA.radius + 1.2;
+      const crane = new THREE.Group();
+      crane.position.set(Math.sin(a) * rad, 0, Math.cos(a) * rad);
+      crane.rotation.y = -a;
+      for (const sx of [-1, 1]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 6.4, 0.22), timber);
+        leg.position.set(sx * 1.5, 3.2, 0);
+        leg.rotation.z = -sx * 0.07;
+        leg.castShadow = true;
+        crane.add(leg);
+      }
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.26, 0.26), timber);
+      beam.position.y = 6.3;
+      beam.castShadow = true;
+      crane.add(beam);
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 4), iron);
+      chain.position.set(0.6, 5.0, 0);
+      crane.add(chain);
+      const hookMass = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), iron);
+      hookMass.position.set(0.6, 3.6, 0);
+      hookMass.castShadow = true;
+      crane.add(hookMass);
+      g.add(crane);
+      this._registerOccluder(beam, timber, 6.5);
+    }
+
+    g.visible = false;
+    this.yard = g;
+    this.scene.add(g);
+  }
+
+  /* THE KILN MOUTH. The heat is back on, so this one is built out of LIGHT
+     rather than out of objects: seams of molten slag running through the
+     floor, and the ground pool going hot. It is the only warm room in the run
+     and it arrives after two cold ones, which is most of the effect. */
+  _buildKiln() {
+    const rng = makeRng(31337);
+    const g = new THREE.Group();
+    const molten = new THREE.MeshBasicMaterial({ color: 0xff7a24, transparent: true, opacity: 0.85 });
+    const crust = new THREE.MeshStandardMaterial({ color: 0x1b1512, roughness: 1 });
+
+    // Seams. Thin bright strips just under the fighting circle, so the floor
+    // itself is a light source and the fight is lit from below.
+    this.seams = [];
+    for (let i = 0; i < 9; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * (0.35 + rng() * 0.75);
+      const len = 2.5 + rng() * 5;
+      const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.3 + rng() * 0.3, len), molten.clone());
+      seam.rotation.x = -Math.PI / 2;
+      seam.rotation.z = rng() * Math.PI;
+      seam.position.set(Math.sin(a) * rad, 0.02, Math.cos(a) * rad);
+      g.add(seam);
+      this.seams.push({ mesh: seam, phase: rng() * 7 });
+
+      // Crust lips either SIDE of the seam, not over it. A single slab centred
+      // on the crack covered the light it was supposed to be framing, and read
+      // as a black plank lying on a glowing stripe.
+      const w = 0.30 + rng() * 0.22;
+      for (const sx of [-1, 1]) {
+        const lip = new THREE.Mesh(new THREE.BoxGeometry(w, 0.13, len * 1.02), crust);
+        lip.position.set(
+          seam.position.x + Math.cos(-seam.rotation.z) * sx * (0.28 + w * 0.5),
+          0.06,
+          seam.position.z - Math.sin(-seam.rotation.z) * sx * (0.28 + w * 0.5));
+        lip.rotation.y = -seam.rotation.z;
+        lip.castShadow = true;
+        g.add(lip);
+      }
+      const light = new THREE.PointLight(0xff7020, 3.2, 7, 2);
+      light.position.set(seam.position.x, 0.5, seam.position.z);
+      g.add(light);
+    }
+
+    // Slag heaps, still glowing at the core.
+    for (let i = 0; i < 6; i++) {
+      const a = rng() * Math.PI * 2;
+      const rad = ARENA.radius * 0.86 + rng() * 4;
+      const heap = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8 + rng() * 0.7, 0), crust);
+      heap.position.set(Math.sin(a) * rad, 0.3, Math.cos(a) * rad);
+      heap.rotation.set(rng(), rng(), rng());
+      heap.castShadow = true;
+      g.add(heap);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff9a3c }));
+      glow.position.copy(heap.position);
+      glow.position.y += 0.35;
+      g.add(glow);
+    }
+
+    g.visible = false;
+    this.kiln = g;
+    this.scene.add(g);
+  }
+
   /* ---------------------------------------------------------------------
      THE HAUL ROAD. The way out of the clearing, and a real thing in the world
      rather than a beam of light: this is the track they carted the good iron
@@ -536,7 +716,8 @@ export class Forest {
   setTheme(name) {
     if (this.theme === name) return;
     this.theme = name;
-    const ossuary = name === 'ossuary';
+    // Cold rooms are everything that is not the clearing or the kiln.
+    const ossuary = name === 'ossuary' || name === 'yard';
 
     // The forge is the heart of the clearing. On the sorting floor it is
     // somewhere behind you, so its light goes out and the room goes cold.
@@ -550,8 +731,36 @@ export class Forest {
     }
     if (this.embers) this.embers.points.visible = !ossuary;
 
-    if (ossuary && !this.bones) this._buildBones();
-    if (this.bones) this.bones.visible = ossuary;
+    // Each room switches its OWN dressing on, built lazily the first time it
+    // is needed. The bones are shared between the two cold rooms because the
+    // sorting floor and the yard are the same place doing different jobs; the
+    // yard adds height on top, and the kiln adds light instead of objects.
+    const bonesOn = ossuary || name === 'yard';
+    if (bonesOn && !this.bones) this._buildBones();
+    if (this.bones) this.bones.visible = bonesOn;
+
+    if (name === 'yard' && !this.yard) this._buildYard();
+    if (this.yard) this.yard.visible = name === 'yard';
+
+    if (name === 'kiln' && !this.kiln) this._buildKiln();
+    if (this.kiln) this.kiln.visible = name === 'kiln';
+
+    // The kiln is the one warm room, and it arrives after two cold ones.
+    if (name === 'kiln') {
+      if (this.forgeMouth) this.forgeMouth.visible = true;
+      if (this.forgeLight) this.forgeLight.intensity = 26;
+      for (const f of this.fires) f.group.visible = true;
+      if (this.pool) {
+        this.pool.material.color.setHex(0xffb070);
+        this.pool.material.opacity = 0.62;
+      }
+      if (this.embers) this.embers.points.visible = true;
+    }
+    // The yard is colder and emptier than the sorting floor, not warmer.
+    if (name === 'yard' && this.pool) {
+      this.pool.material.color.setHex(0x8fa2bc);
+      this.pool.material.opacity = 0.28;
+    }
   }
 
   /* What the sorting floor is covered in. Deliberately LOW and pushed to the
@@ -668,6 +877,15 @@ export class Forest {
   }
 
   update(dt) {
+    // The kiln's floor seams pulse slowly and out of phase with each other, so
+    // the room is never evenly lit twice and the fight reads differently
+    // depending on where in the circle it has drifted.
+    if (this.kiln && this.kiln.visible && this.seams) {
+      this._seamT = (this._seamT || 0) + dt;
+      for (const s of this.seams) {
+        s.mesh.material.opacity = 0.62 + 0.3 * Math.sin(this._seamT * 1.1 + s.phase);
+      }
+    }
     this.t += dt;
     const t = this.t;
 

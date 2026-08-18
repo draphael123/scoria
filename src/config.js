@@ -171,7 +171,7 @@ const emberAttack = (o) => {
     // The aim line: a long, very thin wedge. Purely a telegraph — the
     // projectile does the damage — and it reuses the wedge geometry the whole
     // game already draws, so there is no new shape to learn or to render.
-    shape: 'arc', reach: 9.5, arc: 0.16,
+    shape: 'arc', reach: 6.2, arc: 0.19,
     step: 0,
     projectile: { speed: 19, radius: 0.30, damage: 15, life: 1.3, color: 0xff8a2c },
     heavy: false, armor: false,
@@ -226,6 +226,35 @@ export const WEAPONS = {
       stamina: 34, damage: 42, poise: 34, reach: 2.6, arc: 1.3, step: 1.6,
       heavy: true, cancelFrom: null, next: null,
     }),
+
+    // RUN THROUGH. Light, light, heavy. A committed thrust rather than a
+    // swing: narrow, long, and it hits harder than the standing heavy for the
+    // same stamina, because you paid for it with two swings of exposure first.
+    combos: [{
+      id: 'C1', label: 'RUN THROUGH', from: 1, input: 'heavy',
+      atk: swordAttack({
+        id: 'C1', windup: 0.24, active: 0.13, recover: 0.62,
+        stamina: 30, damage: 54, poise: 40,
+        reach: 3.1, arc: 0.62, step: 2.4,
+        heavy: true, pose: 'thrust', cancelFrom: null, next: null,
+      }),
+    }],
+
+    // SHIELD BASH, on 1. The only thing in the game that trades damage away
+    // entirely for TEMPO: almost no damage, enormous poise, and it comes out
+    // fast enough to interrupt a commitment you misread. It needs a shield,
+    // which is why it lives on the weapon rather than on the character.
+    abilities: [{
+      id: 'bash', key: 1, name: 'SHIELD BASH',
+      blurb: 'Fast, almost no damage, breaks poise. Needs a shield.',
+      atk: swordAttack({
+        id: 'A1', windup: 0.20, active: 0.10, recover: 0.44,
+        stamina: 22, damage: 9, poise: 30,
+        reach: 2.0, arc: 1.45, step: 1.2,
+        knock: 6.5, pose: 'bash', heavy: true,
+        cancelFrom: null, next: null,
+      }),
+    }],
   },
 
   greataxe: {
@@ -298,6 +327,19 @@ export const WEAPONS = {
       shape: 'circle', radius: 2.0, offset: 2.3, step: 2.0,
       cancelFrom: null, next: null,
     }),
+
+    // UPHEAVAL. Cleave, Sweep, heavy. Comes UP out of the spin rather than
+    // down, so it is the only greataxe attack with no step at all — it lands
+    // where the sweep left you, which is the price of reaching it.
+    combos: [{
+      id: 'C1', label: 'UPHEAVAL', from: 1, input: 'heavy',
+      atk: axeAttack({
+        id: 'C1', windup: 0.34, active: 0.16, recover: 0.74,
+        stamina: 34, damage: 70, poise: 54,
+        reach: 3.2, arc: 1.7, step: 0.2,
+        knock: 8.5, pose: 'upheaval', cancelFrom: null, next: null,
+      }),
+    }],
   },
 
 
@@ -359,6 +401,19 @@ export const WEAPONS = {
       stamina: 22, damage: 26, poise: 14, reach: 2.0, arc: 1.1, step: 1.5,
       bleed: 3, heavy: true, cancelFrom: null, next: null,
     }),
+
+    // FLENSE. Three lights then a heavy — a link deeper than everyone else's,
+    // because this chain is four long. It pays in STACKS, so it detonates the
+    // bleed on the spot rather than doing the damage itself.
+    combos: [{
+      id: 'C1', label: 'FLENSE', from: 2, input: 'heavy',
+      atk: knifeAttack({
+        id: 'C1', windup: 0.16, active: 0.12, recover: 0.48,
+        stamina: 20, damage: 20, poise: 10,
+        reach: 2.1, arc: 1.9, step: 1.9,
+        bleed: 4, heavy: true, pose: 'thrust', cancelFrom: null, next: null,
+      }),
+    }],
     // SLIP. Invulnerable through the dash, so it is a dodge you are allowed to
     // aim. Cheap enough to use as movement, which is the point — this weapon's
     // spacing tool and its damage are the same button.
@@ -389,14 +444,19 @@ export const WEAPONS = {
     id: 'tome',
     name: 'Bellows Codex',
     klass: 'Stoker',
-    reach: 9.5,
+    // 9.5 out-ranged the entire game, including the archers, so the Stoker
+    // could stand outside every problem and solve it. 6.2 still beats every
+    // melee attack (the overhead tops out at 4.02) but sits INSIDE a
+    // Boltbone's 7.0 — so the one enemy that also plays at range now out-
+    // ranges you, and the tome has to enter the fight to answer it.
+    reach: 6.2,
     moveScale: 0.92,
     twoHand: false,
     resource: 'heat',
     tagline: 'Range, paid for in heat you have to get rid of.',
     lines: [
       'No stamina — every cast adds HEAT, and 100 roots you',
-      'The only weapon that reaches across the clearing',
+      'Outranges every melee attack \u2014 but not an archer',
       'Off hand: VENT. Dumps the bar as a ring of fire',
       'Rolling is expensive and it will not save you twice',
     ],
@@ -423,6 +483,19 @@ export const WEAPONS = {
       projectile: { speed: 13, radius: 0.62, damage: 34, life: 1.8, color: 0xffc257 },
       cancelFrom: null, next: null,
     }),
+    // FLASHOVER. Two casts then a heavy. Enormous heat for a shot that breaks
+    // poise outright — the Stoker's answer to something that has closed, and
+    // the fastest way in the game to root yourself if you misjudge the bar.
+    combos: [{
+      id: 'C1', label: 'FLASHOVER', from: 1, input: 'heavy',
+      atk: emberAttack({
+        id: 'C1', windup: 0.34, active: 0.10, recover: 0.58,
+        heat: 42, poise: 44, arc: 0.30, heavy: true,
+        projectile: { speed: 15, radius: 0.85, damage: 46, life: 1.5, color: 0xfff0c0 },
+        cancelFrom: null, next: null,
+      }),
+    }],
+
     // VENT. Cost is negative — it GIVES heat back, which is the only entry in
     // the whole weapon table that does.
     vent: emberAttack({
@@ -437,6 +510,32 @@ export const WEAPONS = {
     }),
   },
 };
+
+
+/* -------------------------------------------------------------------------
+   COMBOS and ABILITIES — the two ways a weapon grows past its four buttons.
+
+   A COMBO is not a new button. It is the heavy you already have, thrown at a
+   specific moment in the light chain, and it comes out as something else. Two
+   lights then a heavy is the shape; `from` is which link of the chain you must
+   be finishing when the heavy lands. That means it costs nothing to discover —
+   a player mashing light-light-heavy finds it — and everything to USE, because
+   reaching link two means committing to two swings first.
+
+   An ABILITY is a real extra button (1..4). Abilities cost STAMINA like
+   everything else: there is no mana in this game, and adding a second pool
+   would undo the whole reason stamina is the single economy — that every
+   choice trades against every other choice.
+
+   Only the sword has one for now. The rest of the slots are deliberately empty
+   rather than filled with filler.
+   ---------------------------------------------------------------------- */
+
+// How far into a link's recovery a COMBO input is accepted, for links that do
+// not chain onward and therefore have no cancelFrom of their own. Without this
+// a combo could only ever hang off a MIDDLE link, which quietly excluded three
+// of the four weapons — every one whose combo comes off the end of its chain.
+export const COMBO_WINDOW = 0.10;
 
 export const WEAPON_ORDER = ['sword', 'greataxe', 'daggers', 'tome'];
 
