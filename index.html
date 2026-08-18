@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SCORIA — Slice 0</title>
+<meta name="description" content="Isometric souls-like combat prototype. One room, one blade, one Slagbound.">
+<style>
+  :root{
+    --ink:#e6dccb;
+    --dim:#9a9084;
+    --faint:#6a6158;
+    --ember:#d4552a;
+    --hot:#ffb347;
+    --steel:#8fb4c8;
+    --panel:rgba(12,10,9,.90);
+    --edge:rgba(230,220,203,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#0b0a09;overflow:hidden}
+  body{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    color:var(--ink);-webkit-font-smoothing:antialiased;
+  }
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+  .hud{position:fixed;pointer-events:none;user-select:none;z-index:5;
+       text-shadow:0 1px 10px rgba(0,0,0,.85)}
+
+  /* ------------------------------- player bars ------------------------- */
+  #bars{left:34px;bottom:34px;width:300px}
+  .bar{position:relative;height:15px;border:1px solid rgba(0,0,0,.65);
+       background:rgba(0,0,0,.55);box-shadow:0 2px 10px rgba(0,0,0,.6);overflow:hidden}
+  .bar + .bar{margin-top:7px;height:10px}
+  .bar i{position:absolute;inset:0 auto 0 0;display:block;width:100%}
+  #hpChip{background:#7a2118;transition:none}
+  #hpFill{background:linear-gradient(180deg,#c8443a,#8e2820)}
+  #stFill{background:linear-gradient(180deg,#c9b46a,#8d7a36)}
+  #stBar.guarding #stFill{background:linear-gradient(180deg,#8fb4c8,#4d7186)}
+  #stBar.locked{animation:pulse .45s ease-in-out infinite alternate}
+  @keyframes pulse{from{box-shadow:0 0 0 rgba(212,85,42,0)}to{box-shadow:0 0 14px rgba(212,85,42,.85)}}
+  .barlbl{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+
+  /* ------------------------------- foe bar ----------------------------- */
+  #foe{top:38px;left:50%;transform:translateX(-50%);width:min(560px,58vw);opacity:0;
+       transition:opacity .35s}
+  #foe.on{opacity:1}
+  #foe .name{text-align:center;font-size:12px;letter-spacing:.34em;text-transform:uppercase;
+             color:var(--dim);margin-bottom:7px}
+  #foe.stag .name{color:var(--hot)}
+  #foeChip{background:#5c2a12}
+  #foeFill{background:linear-gradient(180deg,#b8552c,#6f2f14)}
+  #poiseBar{height:4px;margin-top:4px;background:rgba(0,0,0,.5);border:1px solid rgba(0,0,0,.6)}
+  #foePoise{background:linear-gradient(180deg,#d9d2c2,#8e8779);height:100%;display:block}
+  #foe.stag #foePoise{background:var(--hot)}
+
+  /* ------------------------------- misc -------------------------------- */
+  #lockPip{top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;letter-spacing:.3em;
+           color:var(--faint);opacity:0;transition:opacity .2s}
+  #lockPip.on{opacity:0}
+
+  #keys{right:26px;bottom:28px;text-align:right;font-size:11px;line-height:1.85;color:var(--faint);
+        letter-spacing:.04em}
+  #keys b{color:var(--dim);font-weight:400;display:inline-block;min-width:74px;text-align:right;
+          margin-right:9px;font-variant-numeric:tabular-nums}
+
+  #flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:4}
+
+  .banner{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+          font-size:min(64px,9vw);letter-spacing:.2em;opacity:0;pointer-events:none;z-index:6;
+          transition:opacity .7s;text-shadow:0 4px 40px rgba(0,0,0,.9)}
+  .banner.on{opacity:1}
+  .banner.lose{color:#b33a2a}
+  .banner.win{color:#e2c68a}
+
+  /* ------------------------------- debug ------------------------------- */
+  #debug{position:fixed;top:0;right:0;width:308px;max-height:100vh;overflow:auto;z-index:8;
+         background:var(--panel);border-left:1px solid var(--edge);padding:14px 16px 18px;
+         font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11px;
+         display:none;line-height:1.55}
+  #debug.on{display:block}
+  #debug h1{font-size:10px;letter-spacing:.28em;color:var(--ember);font-weight:400;
+            font-family:inherit;margin-bottom:10px}
+  .dbg-row{display:flex;justify-content:space-between;gap:10px;color:var(--faint)}
+  .dbg-row b{color:var(--ink);font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
+  .dbg-head{color:var(--ember);letter-spacing:.2em;margin:2px 0 3px}
+  .dbg-sep{height:1px;background:var(--edge);margin:8px 0}
+  .tl-label{color:var(--faint);margin:10px 0 4px;letter-spacing:.16em}
+  .timeline{position:relative;display:flex;height:20px;border:1px solid var(--edge);
+            background:rgba(0,0,0,.45);overflow:hidden}
+  .tl-seg{display:flex;align-items:center;justify-content:center;font-size:9px;color:rgba(0,0,0,.75);
+          min-width:0;overflow:hidden}
+  .tl-seg.w{background:#6b5a2e}
+  .tl-seg.a{background:#d4552a;color:#fff}
+  .tl-seg.r{background:#3a3a42}
+  .tl-head{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 6px #fff}
+  .tl-empty{width:100%;text-align:center;color:var(--faint);line-height:20px}
+
+  #boot{position:fixed;inset:0;display:none;place-items:center;background:#0b0a09;z-index:50;
+        padding:40px;text-align:center;font-size:14px;line-height:1.7;color:var(--ember)}
+  #boot.on{display:grid}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="flash"></div>
+
+<div class="hud" id="foe">
+  <div class="name">The Slagbound</div>
+  <div class="bar"><i id="foeChip"></i><i id="foeFill"></i></div>
+  <div id="poiseBar"><i id="foePoise"></i></div>
+</div>
+
+<div class="hud" id="bars">
+  <div class="barlbl">Vigour · Stamina</div>
+  <div class="bar"><i id="hpChip"></i><i id="hpFill"></i></div>
+  <div class="bar" id="stBar"><i id="stFill"></i></div>
+</div>
+
+<div class="hud" id="lockPip">LOCKED</div>
+
+<div class="hud" id="keys">
+  <div><b>WASD</b>move</div>
+  <div><b>LMB / J</b>light · 3-hit chain</div>
+  <div><b>RMB / K</b>heavy</div>
+  <div><b>Shift / F</b>guard</div>
+  <div><b>Space</b>roll · backstep</div>
+  <div><b>Tab / Q</b>lock-on</div>
+  <div><b>F1</b>frame data</div>
+  <div><b>P · .</b>pause · step</div>
+  <div><b>R</b>restart</div>
+</div>
+
+<div class="banner" id="banner"></div>
+
+<aside id="debug">
+  <h1>FRAME DATA</h1>
+  <div id="dbgBody"></div>
+  <div class="tl-label">PLAYER</div>
+  <div class="timeline" id="pTimeline"><div class="tl-empty">—</div></div>
+  <div class="tl-label">SLAGBOUND</div>
+  <div class="timeline" id="eTimeline"><div class="tl-empty">—</div></div>
+</aside>
+
+<div id="boot"><div>
+  <div style="letter-spacing:.3em;margin-bottom:14px">SCORIA FAILED TO START</div>
+  <div id="bootMsg" style="color:#9a9084;font-family:ui-monospace,Consolas,monospace;font-size:12px"></div>
+  <div style="color:#6a6158;margin-top:16px;font-size:12px">
+    Must be served over http:// — file:// blocks ES modules.
+  </div>
+</div></div>
+
+<script type="module" src="./src/main.js"></script>
+<script>
+  // Boot watchdog. A silent module failure otherwise leaves a black screen
+  // with no explanation, which has cost real debugging time before.
+  function bootFail(msg){
+    document.getElementById('bootMsg').textContent = msg || 'unknown error';
+    document.getElementById('boot').classList.add('on');
+  }
+  window.addEventListener('error', (e) => {
+    if (!window.__SCORIA_BOOTED__) bootFail(e.message + '  —  ' + (e.filename||''));
+  });
+  setTimeout(() => { if (!window.__SCORIA_BOOTED__) bootFail('module did not finish loading in 4s'); }, 4000);
+</script>
+</body>
+</html>
