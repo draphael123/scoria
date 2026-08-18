@@ -25,6 +25,13 @@ export const DEFAULTS = {
   threatArc: true,
   frameData: false,
   showKeys: true,
+  roomTag: true,
+  // Readability, which in this game is not a nicety — the ground telegraph IS
+  // the mechanic, so being able to turn it up is closer to a difficulty
+  // setting than to a graphics one.
+  telegraphBoost: 1.0,
+  reduceFlash: false,
+  previewSpin: true,
 };
 
 export function loadSettings() {
@@ -133,11 +140,21 @@ export class Menu {
       [['high', 'High'], ['low', 'Low']],
       'Low drops shadows and thins the wood. Takes effect on reload.');
 
-      b.appendChild(el('div', 'set-group', 'INTERFACE'));
-      this._toggle(body, 'Damage numbers', 'damageNumbers');
+      b.appendChild(el('div', 'set-group', 'READABILITY'));
+      this._slider(body, 'Telegraph strength', 'telegraphBoost',
+      'how hard enemy attacks paint the floor. The floor IS the tell, so this ' +
+      'is nearer a difficulty setting than a graphics one');
       this._toggle(body, 'Threat indicator', 'threatArc',
       'the arc pointing at whatever is winding up at you');
+      this._toggle(body, 'Reduce flashing', 'reduceFlash',
+      'caps bloom, hit flashes and the stagger slow-motion');
+
+      b.appendChild(el('div', 'set-group', 'INTERFACE'));
+      this._toggle(body, 'Damage numbers', 'damageNumbers');
+      this._toggle(body, 'Room counter', 'roomTag');
       this._toggle(body, 'Control hints', 'showKeys');
+      this._toggle(body, 'Turntable in the armoury', 'previewSpin',
+      'slowly rotates your knight while you edit');
       this._toggle(body, 'Frame-data overlay', 'frameData', 'the tuning instrument — also bound to F1');
 
     };
@@ -186,7 +203,8 @@ export class Menu {
     const wrap = el('div', 'sctl');
     const input = el('input');
     input.type = 'range';
-    input.min = 0; input.max = 100; input.step = 1;
+    const max = key === 'telegraphBoost' ? 200 : 100;
+    input.min = 0; input.max = max; input.step = 1;
     input.value = Math.round(this.s[key] * 100);
     const val = el('span', 'sval', input.value + '%');
     input.oninput = () => {

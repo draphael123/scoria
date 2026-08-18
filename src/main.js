@@ -55,6 +55,14 @@ function applySetting(key, value) {
     case 'damageNumbers': cui.showNumbers = value; break;
     case 'threatArc': cui.showThreat = value; break;
     case 'showKeys': document.body.classList.toggle('no-keys', !value); break;
+    case 'roomTag': document.body.classList.toggle('no-roomtag', !value); break;
+    case 'telegraphBoost': view.telegraphBoost = value; break;
+    case 'reduceFlash':
+      view.reduceFlash = value;
+      view.post.setBloom((view.quality === 'high' ? 0.9 : 0.6) * settings.bloom * (value ? 0.45 : 1));
+      game.allowSlowMo = settings.slowMo && !value;
+      break;
+    case 'previewSpin': view.allowPreviewSpin = value; break;
     case 'frameData':
       if (debug.on !== value) { debug.toggle(); view.setDebug(debug.on); }
       break;
@@ -91,6 +99,7 @@ function syncWeaponUI() {
    ---------------------------------------------------------------------- */
 const menu = new Menu(settings, {
   onBegin(build) {
+    game.previewMode = false;
     if (build) {
       game.build = build;
       if (build.encounter) game.encounterId = build.encounter;
@@ -100,11 +109,14 @@ const menu = new Menu(settings, {
     game.reset(); resetHudSmoothing();
   },
   onTrain() {
+    game.previewMode = false;
     if (menu.build) game.build = menu.build;
     started = true; paused = false;
     tutorial.start(); resetHudSmoothing();
   },
   onPreview(build) {
+    // Preview spawns NO enemies — see Game.reset. The creator is not a fight.
+    game.previewMode = true;
     // Rebuild the knight so appearance changes are visible behind the menu.
     // The weapon is resolved in the Player's constructor — reach, roll weight
     // and moveset all come off it — so picking off the rack has to rebuild the
@@ -128,6 +140,18 @@ const menu = new Menu(settings, {
   },
   onScreen(name) {
     paused = name !== null;
+    // Entering the armoury turns the clearing into a stage; leaving it any way
+    // other than INTO THE CLEARING has to put the world back.
+    const creating = name === 'creator';
+    if (creating && !game.previewMode) {
+      game.previewMode = true;
+      game.reset();
+      view.reap(new Set([game.player]));
+    } else if (!creating && game.previewMode && name !== null) {
+      game.previewMode = false;
+      game.reset();
+    }
+    view.setPreview(creating);
     input.releaseAll();
     audio.duck(name !== null);
     if (touch) touch.setEnabled(name === null && started);
@@ -147,6 +171,9 @@ if (isTouchDevice()) {
 }
 
 /* Audio cannot start without a gesture, so unlock on the first one. */
+const pauseBtn = document.getElementById('pauseBtn');
+if (pauseBtn) pauseBtn.onclick = () => { menu.togglePause(); audio.uiClick(); };
+
 const unlockAudio = () => { audio.unlock(); audio.resume(); };
 window.addEventListener('pointerdown', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
@@ -241,6 +268,7 @@ let lastFrameAt = last;
 let lastRefusal = -1;
 let exitAnnounced = false;
 let lastRoom = 0;
+let previewT = 0;
 
 function frame(now) {
   const dtReal = Math.min((now - last) / 1000, 0.25);
@@ -279,6 +307,27 @@ function frame(now) {
     }
   }
 
+  // --- the armoury turntable ---------------------------------------------
+  // The knight turns slowly and demonstrates the weapon every few seconds,
+  // because "what does the greataxe do" is a question the rack should answer
+  // by showing you rather than by listing it.
+  if (view.preview) {
+    const p = game.player;
+    p.x = 0; p.z = 0;
+    if (view.allowPreviewSpin !== false) p.facing += dtReal * 0.5;
+    previewT += dtReal;
+    if (p.state !== STATE.ATTACK && previewT > 2.6) {
+      previewT = 0;
+      p.stamina = p.maxStamina;
+      const a = p.weapon.light[0];
+      p.startAttack(a, a.id);
+    }
+    if (p.state === STATE.ATTACK) {
+      p.atkT += dtReal;
+      if (p.atkT >= p.attackDuration) { p.state = STATE.IDLE; p.atk = null; }
+    }
+  }
+
   // --- draw -------------------------------------------------------------
   view.reap(new Set([game.player, ...game.enemies]));
   view.syncActor(game.player, true, dtReal);
@@ -302,6 +351,7 @@ function frame(now) {
   tutUI.setVisible(tutorial.active && started && !menu.open);
   document.body.classList.toggle('tutorial', tutorial.active && started);
   hud.setVisible(started && !menu.open);
+  if (pauseBtn) pauseBtn.style.display = (started && !menu.open) ? '' : 'none';
   hud.update(game, dtReal);
   cui.update(game, dtReal, view.camera, view.w, view.h, started && !menu.open);
 

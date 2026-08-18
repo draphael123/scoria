@@ -10,7 +10,7 @@ import { WEAPONS, WEAPON_ORDER, ENCOUNTERS, DEFAULT_ENCOUNTER } from './config.j
 
 // Bumped from v1: a saved build now carries a weapon and an encounter, and a
 // v1 save that lacks them is merged against the defaults rather than rejected.
-const KEY = 'scoria.character.v2';
+const KEY = 'scoria.character.v3';
 
 export const STATS = [
   { key: 'vigour',    name: 'Vigour',
@@ -23,6 +23,60 @@ export const STATS = [
     blurb: 'Roll distance and the length of your i-frames.',
     effect: (n) => `${(0.29 + n * 0.03).toFixed(2)}s i-frames` },
 ];
+
+
+/* OUTFITS. What you are wearing, as distinct from what you are carrying.
+
+   Four weapons already change the silhouette from the waist up; the outfit
+   changes it from the waist DOWN and changes the material read entirely, so a
+   robed Stoker and a plated Bladebearer are two different characters rather
+   than one knight holding two things.
+
+   Purely cosmetic on purpose. The hook is that the WEAPON is your class — if
+   the coat also carried stats there would be two character sheets, and the one
+   the game is named for would be the less interesting of them. Each entry only
+   describes SHAPE and MATERIAL, and buildKnight reads it. */
+export const OUTFITS = [
+  {
+    id: 'plate', name: 'Full Plate',
+    blurb: 'Everything a forge could hang on a man.',
+    body: 'plate',      // lathe cuirass, fauld, tassets
+    legs: 'plate',      // cuisse + poleyn + greave + sabaton
+    rough: 0.44, metal: 0.66,
+    fauld: true, surcoat: true, pauldrons: 'lames',
+  },
+  {
+    id: 'mail', name: 'Chainmail',
+    blurb: 'A hauberk and a coif. Older, and it moves.',
+    body: 'mail',       // a longer, softer, near-cylindrical hauberk
+    legs: 'mail',
+    rough: 0.78, metal: 0.52,
+    fauld: false, surcoat: true, pauldrons: 'cape',
+    hemLong: true,
+  },
+  {
+    id: 'robe', name: "Stoker's Robe",
+    blurb: 'Kiln cloth, layered against the heat.',
+    body: 'robe',       // a solid tapering skirt to the floor
+    legs: 'none',
+    rough: 0.98, metal: 0.02,
+    fauld: false, surcoat: false, pauldrons: 'cape',
+    hood: true, skirt: true,
+  },
+  {
+    id: 'leather', name: 'Skinner\u2019s Kit',
+    blurb: 'Boiled leather, strapping, and nothing that rattles.',
+    body: 'leather',
+    legs: 'wrap',       // narrow wrapped legs, no plate
+    rough: 0.88, metal: 0.08,
+    fauld: false, surcoat: false, pauldrons: 'strap',
+    belted: true,
+  },
+];
+
+export function outfitOf(build) {
+  return OUTFITS.find((o) => o.id === build.outfit) || OUTFITS[0];
+}
 
 export const APPEARANCE = {
   plate: [
@@ -56,6 +110,7 @@ export function defaultBuild() {
     // The weapon IS the class, so it belongs to the build alongside the stats
     // rather than being chosen somewhere else afterwards.
     weapon: 'sword',
+    outfit: 'plate',
     encounter: DEFAULT_ENCOUNTER,
     stats: { vigour: 2, endurance: 2, strength: 2, agility: 2 },
     plate: 'steel',
@@ -83,6 +138,7 @@ export function loadBuild() {
     // starting you with a class that does not exist yet.
     if (!WEAPONS[b.weapon] || WEAPONS[b.weapon].stub) b.weapon = d.weapon;
     if (!ENCOUNTERS[b.encounter]) b.encounter = d.encounter;
+    if (!OUTFITS.some((o) => o.id === b.outfit)) b.outfit = d.outfit;
     return b;
   } catch { return defaultBuild(); }
 }
@@ -187,6 +243,7 @@ export class Creator {
     nameRow.appendChild(this.nameInput);
     right.appendChild(nameRow);
 
+    this._outfits(right);
     this._swatches(right, 'Plate', 'plate', APPEARANCE.plate, true);
     this._swatches(right, 'Heraldry', 'heraldry', APPEARANCE.heraldry, true);
     this._swatches(right, 'Helm', 'helm', APPEARANCE.helm, false);
@@ -207,6 +264,32 @@ export class Creator {
     go.onclick = () => { this._save(); this.h.onConfirm?.(this.b); };
 
     this.refresh();
+  }
+
+  /* Outfits. Cosmetic on purpose: the WEAPON is the character sheet, and if
+     the coat carried stats there would be two of them competing. What it does
+     carry is silhouette and material, which is what you actually read. */
+  _outfits(parent) {
+    const r = el('div', 'cr-row cr-outfits');
+    r.appendChild(el('div', 'cr-sub', 'Outfit'));
+    const wrap = el('div', 'cr-swatches seg wide');
+    this.outfitNodes = [];
+    for (const o of OUTFITS) {
+      const b = el('button', 'toggle', o.name);
+      b.title = o.blurb;
+      b.onclick = () => {
+        this.b.outfit = o.id;
+        this._save();
+        this.refresh();
+        this.h.onPreview?.(this.b);
+      };
+      wrap.appendChild(b);
+      this.outfitNodes.push([o.id, b]);
+    }
+    r.appendChild(wrap);
+    parent.appendChild(r);
+    this.outfitBlurb = el('div', 'cr-outfitblurb');
+    parent.appendChild(this.outfitBlurb);
   }
 
   /* The rack. One card per weapon, locked ones included — seeing what is not
@@ -312,6 +395,7 @@ export class Creator {
     const pick = (arr) => arr[(Math.random() * arr.length) | 0][0];
     const forged = WEAPON_ORDER.filter((id) => !WEAPONS[id].stub);
     this.b.weapon = forged[(Math.random() * forged.length) | 0];
+    this.b.outfit = OUTFITS[(Math.random() * OUTFITS.length) | 0].id;
     this.b.plate = pick(APPEARANCE.plate);
     this.b.heraldry = pick(APPEARANCE.heraldry);
     this.b.helm = pick(APPEARANCE.helm);
@@ -347,6 +431,12 @@ export class Creator {
     }
     for (const [id, card] of (this.rackCards || [])) {
       card.classList.toggle('on', this.b.weapon === id);
+    }
+    for (const [id, node] of (this.outfitNodes || [])) {
+      node.classList.toggle('on', this.b.outfit === id);
+    }
+    if (this.outfitBlurb) {
+      this.outfitBlurb.textContent = (OUTFITS.find((o) => o.id === this.b.outfit) || {}).blurb || '';
     }
     for (const [id, node] of (this.encNodes || [])) {
       node.classList.toggle('on', this.b.encounter === id);

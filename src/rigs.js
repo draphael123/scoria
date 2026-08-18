@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { STATE, PHASE } from './actor.js';
 import { clamp, lerp, damp } from './util.js';
-import { plateColor, heraldryColor, defaultBuild } from './character.js';
+import { plateColor, heraldryColor, defaultBuild, outfitOf } from './character.js';
 import { WEAPONS, AGGRO, PLAYER } from './config.js';
 
 /* Character rigs and their animation.
@@ -175,8 +175,42 @@ function buildGreataxe(pivot, mats) {
 
 /* One articulated leg: cuisse, poleyn, greave, sabaton. Returned as a pivot
    that rotates about the hip, so animateRig can swing it as one limb. */
-function buildLeg(D, h, steel, steelD) {
+function buildLeg(D, h, steel, steelD, kind) {
   const pivot = new THREE.Group();
+
+  // A wrapped leg is one tapered shape with strapping — no knee, no sabaton.
+  // It is what makes the Skinner read as quick from the waist down while the
+  // plated knight reads as load-bearing.
+  if (kind === 'wrap') {
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(D.thigh * 0.82, h * 0.30, 3, 7), steelD);
+    leg.position.y = -h * 0.19;
+    leg.castShadow = true;
+    pivot.add(leg);
+    for (let i = 0; i < 3; i++) {
+      const strap = new THREE.Mesh(
+        new THREE.CylinderGeometry(D.thigh * 0.86, D.thigh * 0.8, h * 0.022, 8), steel);
+      strap.position.y = -h * (0.14 + i * 0.085);
+      pivot.add(strap);
+    }
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(D.shin * 1.5, h * 0.05, D.shin * 2.3), steel);
+    boot.position.set(0, -h * 0.40, D.shin * 0.6);
+    boot.castShadow = true;
+    pivot.add(boot);
+    return pivot;
+  }
+
+  // Mail: a soft column, no articulation, slightly heavier at the ankle.
+  if (kind === 'mail') {
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(D.thigh * 0.95, h * 0.32, 3, 8), steelD);
+    leg.position.y = -h * 0.20;
+    leg.castShadow = true;
+    pivot.add(leg);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(D.shin * 1.7, h * 0.055, D.shin * 2.2), steel);
+    boot.position.set(0, -h * 0.40, D.shin * 0.55);
+    boot.castShadow = true;
+    pivot.add(boot);
+    return pivot;
+  }
 
   const cuisse = new THREE.Mesh(new THREE.CapsuleGeometry(D.thigh, h * 0.145, 3, 8), steelD);
   cuisse.position.y = -h * 0.11;
@@ -367,6 +401,7 @@ export function buildKnight(actor, build, weapon) {
     arm:      r * 0.175,
   };
 
+  const fit = outfitOf(b);
   const plate = plateColor(b);
   const herald = heraldryColor(b);
   // Darken the plate slightly for the secondary pieces so the armour still
@@ -374,8 +409,12 @@ export function buildKnight(actor, build, weapon) {
   const dark = new THREE.Color(plate).multiplyScalar(0.62).getHex();
   const bright = new THREE.Color(plate).lerp(new THREE.Color(0xffffff), 0.20).getHex();
 
-  const steel = new THREE.MeshStandardMaterial({ color: plate, roughness: 0.44, metalness: 0.66 });
-  const steelD = new THREE.MeshStandardMaterial({ color: dark, roughness: 0.54, metalness: 0.60 });
+  // The outfit decides the MATERIAL as much as the shape — a mail hauberk and
+  // a kiln robe are not plate in a different colour, they catch light in a
+  // completely different way, and at this camera distance that difference is
+  // most of what the player actually perceives.
+  const steel = new THREE.MeshStandardMaterial({ color: plate, roughness: fit.rough, metalness: fit.metal });
+  const steelD = new THREE.MeshStandardMaterial({ color: dark, roughness: Math.min(1, fit.rough + 0.1), metalness: fit.metal * 0.9 });
   // Highlight steel, for ridges and rims only. Kept well under a mirror
   // finish: at 0.9 metalness a rim on the crown caught the moon and bloomed
   // into a halo, which read as a status effect rather than as polish.
@@ -389,8 +428,8 @@ export function buildKnight(actor, build, weapon) {
   hips.position.y = h * 0.44;
   g.add(hips);
 
-  const legL = buildLeg(D, h, steel, steelD);
-  const legR = buildLeg(D, h, steel, steelD);
+  const legL = buildLeg(D, h, steel, steelD, fit.legs);
+  const legR = buildLeg(D, h, steel, steelD, fit.legs);
   legL.position.x = -D.legX;
   legR.position.x = D.legX;
   hips.add(legL, legR);
@@ -404,21 +443,47 @@ export function buildKnight(actor, build, weapon) {
   // The cuirass. A lathe gives the breastplate its actual profile — wide over
   // the chest, drawn in hard at the waist — and flattening z turns a barrel
   // into a breastplate, which is a body and not a cylinder.
-  const prof = [
-    [0.03, 0.00], [D.waist, 0.02], [D.waist * 1.16, h * 0.06],
-    [D.chest, h * 0.20], [D.chest * 0.97, h * 0.275],
-    [D.chest * 0.72, h * 0.34], [D.neckR * 1.2, h * 0.372], [0.03, h * 0.376],
-  ].map(([x, y]) => new THREE.Vector2(x, y));
+  // Each outfit is a different lathe profile. Plate pinches hard at the waist
+  // because it is fitted; mail hangs, so it barely pinches at all and runs
+  // longer; a robe does not pinch and does not stop.
+  const PROFILES = {
+    plate: [[0.03, 0.00], [D.waist, 0.02], [D.waist * 1.16, h * 0.06],
+            [D.chest, h * 0.20], [D.chest * 0.97, h * 0.275],
+            [D.chest * 0.72, h * 0.34], [D.neckR * 1.2, h * 0.372], [0.03, h * 0.376]],
+    mail:  [[0.03, -h * 0.10], [D.waist * 1.30, -h * 0.095], [D.waist * 1.22, h * 0.02],
+            [D.chest * 0.94, h * 0.20], [D.chest * 0.90, h * 0.275],
+            [D.chest * 0.70, h * 0.34], [D.neckR * 1.3, h * 0.372], [0.03, h * 0.376]],
+    robe:  [[0.03, -h * 0.30], [D.fauld * 1.34, -h * 0.295], [D.chest * 1.02, -h * 0.05],
+            [D.chest * 0.92, h * 0.16], [D.chest * 0.86, h * 0.26],
+            [D.chest * 0.64, h * 0.34], [D.neckR * 1.2, h * 0.372], [0.03, h * 0.376]],
+    leather: [[0.03, 0.00], [D.waist * 0.92, 0.02], [D.waist * 1.02, h * 0.06],
+              [D.chest * 0.88, h * 0.20], [D.chest * 0.84, h * 0.275],
+              [D.chest * 0.66, h * 0.34], [D.neckR * 1.15, h * 0.372], [0.03, h * 0.376]],
+  };
+  const prof = (PROFILES[fit.body] || PROFILES.plate)
+    .map(([x, y]) => new THREE.Vector2(x, y));
   const torso = new THREE.Mesh(new THREE.LatheGeometry(prof, 16), steel);
-  torso.scale.z = 0.74;
+  torso.scale.z = fit.body === 'robe' ? 0.88 : 0.74;
   torso.castShadow = true;
   chest.add(torso);
 
   // The medial ridge down the breastplate. One thin box, and it is the
   // difference between armour and a grey vase.
-  const ridge = new THREE.Mesh(new THREE.BoxGeometry(D.chest * 0.22, h * 0.27, D.chest * 0.3), steelB);
-  ridge.position.set(0, h * 0.165, D.chest * 0.56);
-  chest.add(ridge);
+  if (fit.body === 'plate') {
+    const ridge = new THREE.Mesh(
+      new THREE.BoxGeometry(D.chest * 0.22, h * 0.27, D.chest * 0.3), steelB);
+    ridge.position.set(0, h * 0.165, D.chest * 0.56);
+    chest.add(ridge);
+  } else if (fit.body === 'leather') {
+    // Crossed straps instead of a ridge. Reads as kit rather than as armour.
+    for (const sx of [-1, 1]) {
+      const strap = new THREE.Mesh(
+        new THREE.BoxGeometry(D.chest * 0.16, h * 0.34, D.chest * 0.26), steelD);
+      strap.position.set(sx * D.chest * 0.22, h * 0.16, D.chest * 0.52);
+      strap.rotation.z = sx * 0.34;
+      chest.add(strap);
+    }
+  }
 
   // Gorget: the collar the helm sits into, and the reason the head reads as
   // sitting ON something rather than floating above it.
@@ -443,7 +508,7 @@ export function buildKnight(actor, build, weapon) {
   // visible lames rather than one cone.
   const fauld = new THREE.Group();
   fauld.position.y = -h * 0.014;
-  chest.add(fauld);
+  if (fit.fauld) chest.add(fauld);
   for (let i = 0; i < 3; i++) {
     const top = D.waist * 1.14 + (D.fauld - D.waist * 1.14) * (i / 3);
     const bot = D.waist * 1.14 + (D.fauld - D.waist * 1.14) * ((i + 1) / 3);
@@ -472,18 +537,21 @@ export function buildKnight(actor, build, weapon) {
   // colour kept disappearing to. A cone always presents a face. The lowest
   // fauld lame and the tassets still show beneath it, so both read.
   const surcoat = new THREE.Mesh(
-    new THREE.CylinderGeometry(D.waist * 1.06, D.fauld * 0.99, h * 0.15, 16), cloth);
-  surcoat.position.y = -h * 0.048;
+    new THREE.CylinderGeometry(D.waist * 1.06, D.fauld * (fit.hemLong ? 1.10 : 0.99),
+      h * (fit.hemLong ? 0.22 : 0.15), 16), cloth);
+  surcoat.position.y = -h * (fit.hemLong ? 0.085 : 0.048);
   surcoat.scale.z = 0.86;
   surcoat.castShadow = true;
-  chest.add(surcoat);
+  if (fit.surcoat) chest.add(surcoat);
   // A slit up the front, so it reads as cloth that a man can walk in.
-  const slitDark = new THREE.Mesh(
-    new THREE.BoxGeometry(D.waist * 0.20, h * 0.15, D.fauld * 0.5),
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(herald).multiplyScalar(0.45).getHex(),
-      roughness: 1 }));
-  slitDark.position.set(0, -h * 0.048, D.fauld * 0.62);
-  chest.add(slitDark);
+  if (fit.surcoat) {
+    const slitDark = new THREE.Mesh(
+      new THREE.BoxGeometry(D.waist * 0.20, h * (fit.hemLong ? 0.22 : 0.15), D.fauld * 0.5),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(herald).multiplyScalar(0.45).getHex(), roughness: 1 }));
+    slitDark.position.set(0, -h * (fit.hemLong ? 0.085 : 0.048), D.fauld * 0.62);
+    chest.add(slitDark);
+  }
 
   // PAULDRONS. Flat DOMES capping the shoulder, not balls beside it — this is
   // the single change that stopped the figure reading as stacked spheres.
@@ -496,20 +564,32 @@ export function buildKnight(actor, build, weapon) {
     chest.add(shoulder);
 
     const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(D.pauldron, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.56), steel);
-    cap.scale.set(1.06, 0.62, 1.12);
+      new THREE.SphereGeometry(D.pauldron * (fit.pauldrons === 'strap' ? 0.72 : 1),
+        14, 9, 0, Math.PI * 2, 0, Math.PI * 0.56), steel);
+    cap.scale.set(1.06, fit.pauldrons === 'cape' ? 0.44 : 0.62, 1.12);
     cap.castShadow = true;
     shoulder.add(cap);
 
     // Two lames below the cap. Stacked rings read as articulation from above,
-    // which one smooth sphere never does.
-    for (let i = 0; i < 2; i++) {
+    // which one smooth sphere never does — so only ARMOUR gets them.
+    for (let i = 0; i < (fit.pauldrons === 'lames' ? 2 : 0); i++) {
       const lame = new THREE.Mesh(new THREE.CylinderGeometry(
         D.pauldron * (0.98 - i * 0.16), D.pauldron * (0.86 - i * 0.20), h * 0.026, 12), steelD);
       lame.position.y = -D.pauldron * (0.16 + i * 0.30);
       lame.scale.set(1.06, 1, 1.12);
       lame.castShadow = true;
       shoulder.add(lame);
+    }
+    // A cape/mantle instead: one soft sweep off both shoulders. It is what
+    // makes the robed Stoker read as a caster from directly above.
+    if (fit.pauldrons === 'cape' && sx > 0) {
+      const mantle = new THREE.Mesh(
+        new THREE.CylinderGeometry(D.chest * 0.86, D.chest * 1.30, h * 0.20, 14, 1, true), cloth);
+      mantle.position.set(-D.shoulderX, -h * 0.02, 0);
+      mantle.scale.z = 0.9;
+      mantle.material.side = THREE.DoubleSide;
+      mantle.castShadow = true;
+      shoulder.add(mantle);
     }
     if (twoHand) {
       // A standing haute-piece on the outside of each pauldron — the flange a
@@ -592,6 +672,23 @@ export function buildKnight(actor, build, weapon) {
   helm.castShadow = true;
   neck.add(helm);
 
+  // A hood pulled over whatever helm you chose. The robe is the only outfit
+  // that changes the HEAD, and it is the difference between a knight in a
+  // dress and a Stoker.
+  if (fit.hood) {
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(D.head * 1.35, 12, 10,
+      0, Math.PI * 2, 0, Math.PI * 0.62), cloth);
+    hood.scale.set(1.08, 1.15, 1.3);
+    hood.position.set(0, D.headH * 0.52, -D.head * 0.16);
+    hood.castShadow = true;
+    neck.add(hood);
+    const cowl = new THREE.Mesh(
+      new THREE.CylinderGeometry(D.head * 1.42, D.head * 1.05, D.head * 0.5, 12, 1, true), cloth);
+    cowl.material.side = THREE.DoubleSide;
+    cowl.position.y = D.headH * 0.16;
+    neck.add(cowl);
+  }
+
   // The occularium. Dark, wide, and slightly proud of the face, so from above
   // the head still has a FRONT.
   const visor = new THREE.Mesh(
@@ -666,6 +763,7 @@ export function buildKnight(actor, build, weapon) {
     body: torso, head: helm, blade, shield, nose, mat: steel,
     tipScale: built.tipScale,
     twoHand,
+    outfit: fit.id,
     swingArc: w.swing || { rest: -0.25, wind: -2.35, end: 1.35 },
     weaponId: w.id,
     baseLean: 0, stride: 0, flash: 0, spin: 0, isPlayer: true,

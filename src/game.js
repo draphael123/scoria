@@ -78,6 +78,20 @@ export class Game {
       weapon: this.build?.weapon,
     });
 
+    // In preview the clearing is empty. The creator is not a fight, and a
+    // Slagbound walking into frame while you pick a helm is not a feature.
+    if (this.previewMode) {
+      this.enemies = [];
+      this.player.lockTarget = null;
+      this.token = null; this.aggroCd = 0; this.shots = [];
+      this.exitOpen = false; this.exitT = 0; this.roomDone = false;
+      this.outcome = null; this.outcomeT = 0;
+      this.stats = { swings: 0, hitsDealt: 0, hitsTaken: 0, guarded: 0, rolls: 0,
+                     staggers: 0, iframeDodges: 0, armored: 0, bleedTicks: 0,
+                     shotsFired: 0, maxConcurrentWindup: 0 };
+      return;
+    }
+
     const enc = this.encounter;
     const fallback = FOES[enc.foe] || SLAGBOUND;
     const n = enc.spawn.length;

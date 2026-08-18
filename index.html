@@ -157,9 +157,10 @@
           overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
   /* Once the content is taller than the viewport, centring would clip the top
      and bottom off. Anchor to the start and let it scroll instead. */
-  @media (max-height:900px){
-    .creator-screen{justify-content:flex-start;padding-top:26px;padding-bottom:34px}
-  }
+  /* Centring a flex column that overflows clips its TOP, unrecoverably —
+     there is nothing above the scroll origin to scroll to. The creator always
+     overflows now, so it is anchored to the start at every height. */
+  .creator-screen{justify-content:flex-start;padding-top:24px;padding-bottom:34px}
   @media (max-width:760px){
     .screen{justify-content:flex-start;padding-top:24px;padding-bottom:32px}
     .title-screen{justify-content:center}
@@ -217,6 +218,16 @@
   .settings-body > .set-group:first-child{margin-top:0;padding-top:0;border-top:0}
   body.no-keys #keys{display:none}
 
+  /* A pause control that does not need a keyboard. Deliberately small, low
+     contrast and top-right, away from the fight and away from the bars. */
+  #pauseBtn{position:absolute;top:calc(20px + var(--safe-t));right:calc(22px + var(--safe-r));
+       width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--edge);
+       background:rgba(10,9,8,.5);color:var(--dim);transition:.16s;z-index:6}
+  #pauseBtn:hover{color:var(--ink);border-color:rgba(212,85,42,.7);background:rgba(212,85,42,.14)}
+  #pauseBtn svg{fill:currentColor}
+  body.is-touch #pauseBtn{display:none}
+  body.no-roomtag #roomTag{display:none}
+
   /* The resource bar under two economies. Stamina is a reserve that drains
      toward danger; heat is a pressure that fills toward it, so it is coloured
      as a rising threat rather than as a dwindling supply. */
@@ -235,6 +246,37 @@
   /* THE RACK. It spans the full width and sits above the attributes because
      the weapon decides the class and the attributes only shade it. Cards are
      deliberately wordy: each line is a RULE the weapon owns, not a stat. */
+  /* The creator is a PANEL now, not a full-width sheet: the left of the frame
+     belongs to the knight you are editing, because a character creator whose
+     edits you cannot see is a form. Below 1100px the preview cannot be
+     usefully framed beside it, so it goes back to full width and the knight
+     sits behind. */
+  .creator-screen{align-items:stretch}
+  @media (min-width:1100px){
+    .creator-screen{align-items:flex-end;padding-right:clamp(20px,3vw,44px)}
+    .creator-screen > *{align-self:flex-end}
+    .cr-rack,.cr-cols,.cr-encrow,.cr-encblurb{width:min(660px,54vw)!important}
+    .cr-cols{flex-direction:column;gap:6px}
+    .cr-col{max-width:none;min-width:0;flex:1 1 auto}
+    .creator-screen .panel-title,.creator-screen .btn-row{align-self:flex-end;
+         width:min(660px,54vw);text-align:right}
+    .creator-screen .btn-row{justify-content:flex-end}
+    .cr-racks{gap:7px}
+    .cr-weap{flex:1 1 140px;min-width:0;padding:10px 11px 11px}
+    .cr-weap-name{font-size:14px}
+    .cr-weap-tag{display:none}
+    .cr-weap-lines li{font-size:9.5px}
+  }
+  .cr-preview-tag{position:fixed;left:6vw;bottom:8vh;pointer-events:none;
+       font-size:10px;letter-spacing:.34em;color:var(--faint);text-transform:uppercase;
+       display:none}
+  @media (min-width:1100px){ .creator-screen.on ~ .cr-preview-tag{display:block} }
+
+  .cr-swatches.wide{flex:1 1 auto;justify-content:flex-end}
+  .cr-outfits{align-items:flex-start}
+  .cr-outfitblurb{font-size:11px;color:var(--faint);line-height:1.6;
+       margin:-4px 0 8px;text-align:right}
+
   .cr-rack{width:min(1120px,96vw);margin-top:18px;text-align:left}
   .cr-racks{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
   .cr-weap{flex:1 1 232px;max-width:280px;min-width:min(232px,92vw);
@@ -432,6 +474,13 @@
   <div><b>F1</b>frame data</div>
   <div><b>R</b>restart</div>
 </div>
+
+<button class="hud" id="pauseBtn" title="Pause (Esc)" aria-label="Pause">
+  <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+    <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+    <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+  </svg>
+</button>
 
 <div class="hud" id="roomTag"><b id="roomNum"></b><span id="roomName"></span></div>
 

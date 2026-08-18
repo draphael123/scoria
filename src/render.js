@@ -104,6 +104,7 @@ export class View {
     this.scene.add(this.exit);
 
     this._buildShotPool();
+    this._buildPreviewLights();
 
     this.debugGroup = new THREE.Group();
     this.debugGroup.visible = false;
@@ -438,7 +439,10 @@ export class View {
     // incoming swipe. Orange is the DANGER channel and belongs to the enemy;
     // yours is cold steel — same information, a colour you never react to.
     const mine = actor.isPlayer;
-    const k = mine ? TELEGRAPH.playerAlpha : 1;
+    // The enemy's telegraph can be turned UP by the player. Yours cannot — it
+    // is confirmation, and boosting it would put the noise back that the hue
+    // split removed.
+    const k = mine ? TELEGRAPH.playerAlpha : (this.telegraphBoost ?? 1);
     const cool = mine ? TELEGRAPH.playerColor : C.ember;
     const warm = mine ? TELEGRAPH.playerHot : C.hot;
     tg.outline.material.color.setHex(cool);
@@ -567,8 +571,86 @@ export class View {
     this.fx.update(dt);
   }
 
+
+  /* Lighting for the armoury, and nothing else. The clearing is lit for a
+     FIGHT — one cold key, a dying forge, and a great deal of darkness — which
+     is right for the fight and useless for looking at your own kit. These
+     three come on only in preview: a warm key to read the plate, a cold rim to
+     cut the figure off the background, and a low fill so the fauld is not a
+     black hole.
+
+     Kept as real lights rather than as a brightness lift, because the whole
+     point of the preview is judging how a MATERIAL catches light, and a
+     brightness lift flattens exactly that. */
+  _buildPreviewLights() {
+    this.previewLights = new THREE.Group();
+    this.previewLights.visible = false;
+    this.scene.add(this.previewLights);
+
+    // Held down deliberately. The point of the preview is judging how a
+    // MATERIAL catches light, and at full strength plate, mail and leather all
+    // blow out to the same white and the choice stops meaning anything.
+    const key = new THREE.DirectionalLight(0xffe0b8, 1.45);
+    key.position.set(5, 7, 7);
+    this.previewLights.add(key);
+
+    const rim = new THREE.DirectionalLight(0x9fc8f0, 1.25);
+    rim.position.set(-6, 4, -6);
+    this.previewLights.add(rim);
+
+    const fill = new THREE.PointLight(0xffb070, 3.0, 9, 2);
+    fill.position.set(0, 1.1, 2.2);
+    this.previewLights.add(fill);
+    this._previewFill = fill;
+  }
+
+  /* ---- the character preview --------------------------------------------
+     The creator used to change numbers you could not see the effect of. The
+     knight now stands in the left of the frame while you edit, on a slow
+     turntable, and demonstrates the weapon you picked — because "what does
+     the greataxe look like" is a question the rack should answer by showing
+     you, not by describing it in a list.
+
+     It reuses the game camera rather than a second renderer: the same ortho
+     frustum, pushed off-centre so the figure sits clear of the panel.
+     ------------------------------------------------------------------- */
+  setPreview(on, dt = 0.016) {
+    this.preview = !!on;
+    if (this.previewLights) this.previewLights.visible = this.preview;
+    if (this._previewFill) {
+      // The fill sits just in front of the figure, so it has to follow the
+      // subject rather than the world origin once the creator moves it.
+      this._previewFill.position.set(this.focus.x, 1.1, this.focus.z + 2.2);
+    }
+  }
+
+  /* The camera treatment for it. A hard override rather than a damped target,
+     because the creator opens instantly and a two-second glide to the subject
+     reads as a bug. */
+  _applyPreviewCamera(player) {
+    const hh = (CAMERA.frustumHeight * 0.27) / 2;
+    const aspect = this.w / this.h;
+    const hw = hh * aspect;
+    const c = this.camera;
+    // Push the frustum right, which slides the SUBJECT left, clearing the
+    // right-hand panel. On a narrow screen the panel goes underneath instead,
+    // so the shift is dropped.
+    const shift = aspect > 1.05 ? hw * 0.44 : 0;
+    c.left = -hw + shift; c.right = hw + shift;
+    c.top = hh + hh * 0.34; c.bottom = -hh + hh * 0.34;
+    c.updateProjectionMatrix();
+
+    this.focus.x = player.x; this.focus.z = player.z;
+    this.camera.position.set(
+      this.focus.x + this.camDir.x * CAMERA.distance,
+      this.camDir.y * CAMERA.distance,
+      this.focus.z + this.camDir.z * CAMERA.distance);
+    this.camera.lookAt(this.focus.x, 0.95, this.focus.z);
+  }
+
   /* ---- camera ----------------------------------------------------------- */
   updateCamera(player, lockTarget, dt, enemies) {
+    if (this.preview) { this._applyPreviewCamera(player); this.setPreview(true, dt); return; }
     let fx = player.x, fz = player.z, wantZoom = 1;
     if (lockTarget && !lockTarget.dead) {
       fx = lerp(player.x, lockTarget.x, CAMERA.lockBias);
