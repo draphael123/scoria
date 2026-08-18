@@ -51,6 +51,30 @@ export const PLAYER = {
 
   hitStagger: 0.34,     // every UNARMOURED hit interrupts
   hurtInvuln: 0.25,     // brief mercy window after being hit
+
+  // HEAT — the tome's resource, and the inversion that makes it a class.
+  // Stamina is a pool you drain and wait on; heat is a pool you FILL and have
+  // to dump. Overheating is worse than running out of stamina by design: the
+  // failure state of "I could not get rid of this" has to bite harder than
+  // "I could not afford that".
+  heatMax: 100,
+  heatDecay: 15,        // per second, once the delay is up
+  heatDecayDelay: 0.7,
+  overheatLock: 1.35,   // nearly twice the stamina lockout
+};
+
+/* BLEED. The knives' damage model, and deliberately not poise: poise is a bar
+   you break once for a big opening, bleed is a stack you have to KEEP ALIVE.
+   It decays, so the weapon's whole pressure is on staying in contact — which
+   is the same thing as saying it can never disengage. */
+export const BLEED = {
+  pop: 5,               // stacks at which it detonates
+  popDamage: 26,        // burst on detonation
+  tickDamage: 2.2,      // per stack per tick
+  tickEvery: 0.5,
+  decayAfter: 3.4,      // seconds without a new stack before it starts falling
+  decayEvery: 0.7,
+  maxStacks: 8,
 };
 
 /* -------------------------------------------------------------------------
@@ -124,6 +148,38 @@ const axeAttack = (o) => ({
   armor: true,              // uninterruptible through windup + active
   ...o,
 });
+
+
+// Knives. Small numbers, tiny commitments, and BLEED on every entry — the
+// weapon's damage lives in the stack, not in the hit.
+const knifeAttack = (o) => ({
+  windup: 0.11, active: 0.07, recover: 0.21,
+  stamina: 11, damage: 12, poise: 5,
+  reach: 1.75, arc: 1.55,
+  step: 0.75,
+  bleed: 1,
+  heavy: false, armor: false,
+  ...o,
+});
+
+// Casts. They cost HEAT rather than stamina, and `stamina` is left as the
+// generic cost field so the player's spend path does not need to branch.
+const emberAttack = (o) => {
+  const a = {
+    windup: 0.22, active: 0.06, recover: 0.34,
+    heat: 12, damage: 0, poise: 0,
+    // The aim line: a long, very thin wedge. Purely a telegraph — the
+    // projectile does the damage — and it reuses the wedge geometry the whole
+    // game already draws, so there is no new shape to learn or to render.
+    shape: 'arc', reach: 9.5, arc: 0.16,
+    step: 0,
+    projectile: { speed: 19, radius: 0.30, damage: 15, life: 1.3, color: 0xff8a2c },
+    heavy: false, armor: false,
+    ...o,
+  };
+  a.stamina = a.heat;
+  return a;
+};
 
 export const WEAPONS = {
   sword: {
@@ -244,19 +300,141 @@ export const WEAPONS = {
     }),
   },
 
-  // --- Slice 2+ stubs. Present so the data shape is proven, not yet playable.
+
+  /* -----------------------------------------------------------------------
+     THE SCALING KNIVES. Where the greataxe answered the Slagbound by owning
+     the space outside its reach, the knives answer it by living INSIDE that
+     space and never leaving. Reach 1.75 lands at 2.30u against a swipe that
+     reaches 3.17u, so there is no distance at which you are safe and no
+     version of this fight where you are not being swung at.
+
+     What makes it a class rather than a fast sword:
+
+       BLEED       every hit stacks it, and at BLEED_POP stacks the stack
+                   detonates for a burst. The other weapons kill in commitments;
+                   this one kills in accumulation, and the pressure is on you to
+                   keep the stacks alive before they decay.
+       THE DASH    the off-hand button is not a guard and not a shove. It is a
+                   short invulnerable lunge that strikes on the way through and
+                   pays double behind the target. "The roll IS the attack."
+       NO ARMOUR   and the smallest poise damage in the game. You cannot trade,
+                   you cannot turtle, you can only not be there.
+     -------------------------------------------------------------------- */
   daggers: {
-    id: 'daggers', name: 'Scaling Knives', klass: 'Skinner', stub: true,
-    tagline: 'Not yet forged.',
-    lines: ['Reach under two — you live inside its guard',
-            'The roll IS the attack', 'Bleed, where the others take poise'],
+    id: 'daggers',
+    name: 'Scaling Knives',
+    klass: 'Skinner',
+    reach: 1.75,
+    moveScale: 1.12,
+    twoHand: false,
+    dual: true,
+    tagline: 'No safe distance. Bleed it out before it lands one.',
+    lines: [
+      'Reach 1.75 — you live inside everything it does',
+      'Four-hit chain, and every hit stacks BLEED',
+      'Off hand: SLIP. An invulnerable dash that cuts through',
+      'It cannot trade and it cannot block',
+    ],
+    offhand: 'dash',
+    offhandLabel: 'SLIP',
+    armorDamageMul: 1,
+    // Longer, cheaper, faster. The one weapon whose dodge is an upgrade.
+    roll: { distance: 1.14, duration: 0.88, stamina: 0.72 },
+    swing: { rest: -0.42, wind: -1.95, end: 1.42 },
+    // It has no shield. The guard entry exists only so a stray input cannot
+    // find an undefined, and it is deliberately terrible.
+    guard: { absorb: 0.30, staminaPerHit: 34, chip: 0.40, moveScale: 0.55, turnScale: 0.7 },
+    light: [
+      knifeAttack({ id: 'L1', cancelFrom: 0.05, next: 1 }),
+      knifeAttack({ id: 'L2', windup: 0.10, recover: 0.20, damage: 13, cancelFrom: 0.05, next: 2 }),
+      knifeAttack({ id: 'L3', windup: 0.11, recover: 0.22, damage: 14, bleed: 2, cancelFrom: 0.06, next: 3 }),
+      // The finisher pays in stacks rather than in damage: four hits of the
+      // chain is five stacks, which is the pop.
+      knifeAttack({ id: 'L4', windup: 0.16, active: 0.09, recover: 0.40, damage: 18,
+                    poise: 8, stamina: 16, bleed: 2, arc: 2.2, step: 1.3,
+                    cancelFrom: null, next: null }),
+    ],
+    heavy: knifeAttack({
+      id: 'H1', windup: 0.30, active: 0.10, recover: 0.46,
+      stamina: 22, damage: 26, poise: 14, reach: 2.0, arc: 1.1, step: 1.5,
+      bleed: 3, heavy: true, cancelFrom: null, next: null,
+    }),
+    // SLIP. Invulnerable through the dash, so it is a dodge you are allowed to
+    // aim. Cheap enough to use as movement, which is the point — this weapon's
+    // spacing tool and its damage are the same button.
+    dash: knifeAttack({
+      id: 'D1', windup: 0.08, active: 0.16, recover: 0.30,
+      stamina: 20, damage: 16, poise: 6, reach: 2.1, arc: 1.5, step: 3.6,
+      bleed: 2, pose: 'dash', iframes: [0.02, 0.26],
+      cancelFrom: null, next: null,
+    }),
   },
+
+  /* -----------------------------------------------------------------------
+     THE BELLOWS CODEX. The only weapon that does not spend stamina, and the
+     only one that can hurt something it is not standing next to.
+
+     HEAT is the inversion that makes it a class. Stamina is a pool you drain
+     and wait to refill; heat is a pool you FILL and have to dump. Every cast
+     adds to it, it bleeds off slowly on its own, and at 100 you overheat —
+     rooted, defenceless, for longer than any stamina lockout. So the tome is
+     never asking "can I afford this", it is asking "can I get rid of this in
+     time", which is a different question with a different rhythm.
+
+     And VENT — the off-hand button — is both halves of the answer at once: it
+     dumps the whole bar instantly AND detonates it as a ring of fire around
+     you. Your resource management is your panic button is your crowd clear.
+     -------------------------------------------------------------------- */
   tome: {
-    id: 'tome', name: 'Bellows Codex', klass: 'Stoker', stub: true,
-    resource: 'heat',   // Heat, not mana — see design notes
-    tagline: 'Not yet forged.',
-    lines: ['No stamina — the resource is HEAT',
-            'Vent, or overheat', 'Range, at the cost of every dodge'],
+    id: 'tome',
+    name: 'Bellows Codex',
+    klass: 'Stoker',
+    reach: 9.5,
+    moveScale: 0.92,
+    twoHand: false,
+    resource: 'heat',
+    tagline: 'Range, paid for in heat you have to get rid of.',
+    lines: [
+      'No stamina — every cast adds HEAT, and 100 roots you',
+      'The only weapon that reaches across the clearing',
+      'Off hand: VENT. Dumps the bar as a ring of fire',
+      'Rolling is expensive and it will not save you twice',
+    ],
+    offhand: 'vent',
+    offhandLabel: 'VENT',
+    armorDamageMul: 1,
+    // A dodge that costs the one thing you are trying to get rid of.
+    roll: { distance: 0.9, duration: 1.05, stamina: 1.0 },
+    swing: { rest: -0.55, wind: -1.60, end: 0.95 },
+    guard: { absorb: 0.34, staminaPerHit: 30, chip: 0.36, moveScale: 0.4, turnScale: 0.5 },
+    // Every cast is a projectile. The aim line IS the telegraph — a long thin
+    // wedge, the same shape language the Boltbone shoots along, because the
+    // player and the archers are doing the same thing to each other.
+    light: [
+      emberAttack({ id: 'L1', cancelFrom: 0.14, next: 1 }),
+      emberAttack({ id: 'L2', windup: 0.26, recover: 0.40, heat: 16,
+                    projectile: { speed: 17, radius: 0.34, damage: 20, life: 1.4, color: 0xff9a3c },
+                    cancelFrom: null, next: null }),
+    ],
+    // A slower, fatter bolt that breaks poise. The tome's punish.
+    heavy: emberAttack({
+      id: 'H1', windup: 0.62, active: 0.10, recover: 0.66,
+      heat: 30, poise: 30, arc: 0.20, heavy: true,
+      projectile: { speed: 13, radius: 0.62, damage: 34, life: 1.8, color: 0xffc257 },
+      cancelFrom: null, next: null,
+    }),
+    // VENT. Cost is negative — it GIVES heat back, which is the only entry in
+    // the whole weapon table that does.
+    vent: emberAttack({
+      id: 'V1', windup: 0.22, active: 0.14, recover: 0.52,
+      heat: -100,             // dumps the bar
+      damage: 0, poise: 26,
+      shape: 'arc', reach: 3.4, arc: Math.PI * 2,
+      projectile: null,
+      ventScale: 0.55,        // damage per point of heat dumped
+      knock: 6.0, pose: 'vent', heavy: true,
+      cancelFrom: null, next: null,
+    }),
   },
 };
 
@@ -389,7 +567,145 @@ export const CINDERBONE = {
   },
 };
 
-export const FOES = { slagbound: SLAGBOUND, cinderbone: CINDERBONE };
+
+/* -------------------------------------------------------------------------
+   THE BOLTBONE. A picker with a slag-iron crossbow, and the first enemy in
+   the game that does not want to be near you.
+
+   Everything before this one closed. Because they all closed, the whole game
+   could be played by managing ONE distance. The Boltbone holds at 7u and backs
+   off when you approach, so standing anywhere costs you — and that is in
+   direct tension with what the melee crowd wants, which is for you to keep
+   your spacing. Rooms that mix them are asking you to choose which of the two
+   problems you are prepared to have.
+
+   It still cannot fire without the aggro token, so the one-windup rule holds
+   across ranged and melee alike: the aim line is a telegraph like any other.
+   ---------------------------------------------------------------------- */
+export const BOLTBONE = {
+  name: 'Boltbone',
+  rig: 'boltbone',
+  hp: 42,
+  radius: 0.32,
+  height: 1.62,
+
+  moveSpeed: 3.2,
+  turnRate: 4.4,
+  // The inversion. Every other foe treats this as the distance to close TO;
+  // the Foe body's "too close" branch already reverses out, so an archer is
+  // the same brain with a bigger number.
+  preferredRange: 7.0,
+  circleSpeed: 2.2,
+
+  // Brittle to the point of comedy if you ever reach it. That is the deal:
+  // it is a problem you solve by arriving, so arriving has to be rewarded.
+  poise: 12,
+  poiseRegen: 8,
+  poiseRegenDelay: 1.2,
+  staggerDuration: 0.9,
+  staggerDamageMul: 1.6,
+  staggerResist: 1.6,
+  staggerResistMul: 0.5,
+
+  punishRange: 2.4,
+  punishHesitate: 0.12,
+
+  hesitateMin: 0.5,
+  hesitateMax: 1.1,
+  recoverIdle: 0.3,
+
+  attacks: {
+    loose: {
+      id: 'loose', label: 'LOOSE',
+      // A long tell, because a bolt you cannot see coming is not difficulty.
+      windup: 0.88, active: 0.06, recover: 0.78,
+      damage: 0, poise: 0,
+      shape: 'arc', reach: 11.5, arc: 0.13,   // the aim LINE
+      step: 0,
+      projectile: { speed: 15.5, radius: 0.30, damage: 17, life: 1.6, color: 0xffcf8a },
+      weight: 1, minRange: 2.4, maxRange: 11,
+    },
+    // What it does when you have already arrived. Bad, on purpose.
+    shove: {
+      id: 'shove', label: 'SHOVE',
+      windup: 0.34, active: 0.09, recover: 0.58,
+      damage: 7, poise: 0,
+      shape: 'arc', reach: 1.9, arc: 1.7,
+      step: 0.4, knock: 4.0,
+      weight: 1, minRange: 0, maxRange: 2.4,
+    },
+  },
+};
+
+/* -------------------------------------------------------------------------
+   THE KILNWARDEN. It tended the kiln; now it calls the kiln down.
+
+   Its attack does not point at YOU, it points at a PLACE. A circle is painted
+   on the floor where you were standing (led a little), it burns for over a
+   second, and then it goes off. Rolling through it does nothing, because there
+   is nothing to roll through — the answer is simply not to be there.
+
+   That is the third distinct dodging problem in the game: the Slagbound asks
+   you to time a swing, the Boltbone asks you to break a line, and this asks
+   you to leave a space. Three enemies, three different meanings of "move".
+   ---------------------------------------------------------------------- */
+export const KILNWARDEN = {
+  name: 'Kilnwarden',
+  rig: 'kilnwarden',
+  hp: 74,
+  radius: 0.38,
+  height: 1.86,
+
+  moveSpeed: 2.4,
+  turnRate: 3.0,
+  preferredRange: 5.6,
+  circleSpeed: 1.5,
+
+  poise: 22,
+  poiseRegen: 9,
+  poiseRegenDelay: 1.4,
+  staggerDuration: 1.0,
+  staggerDamageMul: 1.6,
+  staggerResist: 2.4,
+  staggerResistMul: 0.45,
+
+  punishRange: 3.0,
+  punishHesitate: 0.2,
+
+  hesitateMin: 0.7,
+  hesitateMax: 1.5,
+  recoverIdle: 0.4,
+
+  attacks: {
+    kindle: {
+      id: 'kindle', label: 'KINDLE',
+      // The longest tell in the game, because the thing it threatens is a
+      // piece of ground and you need time to decide to give it up.
+      windup: 1.20, active: 0.14, recover: 0.95,
+      damage: 27, poise: 0,
+      shape: 'circle', radius: 2.25, offset: 0,
+      // Anchored to a WORLD point, not to the caster. This is the flag the
+      // whole ground-zone behaviour hangs off.
+      zone: true,
+      lead: 0.40,             // how far ahead of your velocity it aims
+      step: 0,
+      weight: 1, minRange: 2.6, maxRange: 10.5,
+    },
+    scour: {
+      id: 'scour', label: 'SCOUR',
+      windup: 0.52, active: 0.10, recover: 0.62,
+      damage: 15, poise: 0,
+      shape: 'arc', reach: 2.6, arc: 2.1,
+      step: 0.5, knock: 5.0,
+      weight: 1, minRange: 0, maxRange: 2.6,
+    },
+  },
+};
+
+export const FOES = {
+  slagbound: SLAGBOUND, cinderbone: CINDERBONE,
+  boltbone: BOLTBONE, kilnwarden: KILNWARDEN,
+};
 
 /* -------------------------------------------------------------------------
    THE AGGRO TOKEN — how a crowd is made fair without being made harmless.
@@ -465,15 +781,40 @@ export const ENCOUNTERS = {
     // fight is which way to break rather than which one to hit.
     spawn: [[0, -5.2], [-4.6, -2.4], [4.6, -2.4], [-3.4, 2.6], [3.4, 2.6]],
   },
+  yard: {
+    id: 'yard', name: 'The Long Yard', short: 'BOLTS',
+    blurb: 'The hauling yard, and the sightlines they built it for. Three ' +
+           'pickers close, and two on the far side who would rather you did ' +
+           'not stand anywhere at all.',
+    foe: 'cinderbone', theme: 'yard',
+    hpMul: 1.0,
+    // The archers are placed DEEP and apart, so no single break gets you both.
+    spawn: [[-2.6, -3.0], [2.6, -3.0], [0, 3.4],
+            [-7.4, -7.4, 'boltbone'], [7.4, -7.4, 'boltbone']],
+  },
+  kiln: {
+    id: 'kiln', name: 'The Kiln Mouth', short: 'KILN',
+    blurb: 'The heat is back on down here. A foreman still standing, two ' +
+           'pickers, and a pair of wardens who will burn the ground you are ' +
+           'on rather than come and find you.',
+    foe: 'cinderbone', theme: 'kiln',
+    hpMul: 1.0,
+    spawn: [[0, -4.4, 'slagbound'],
+            [-5.8, -4.0, 'kilnwarden'], [5.8, -4.0, 'kilnwarden'],
+            [-3.2, 1.8], [3.2, 1.8]],
+  },
 };
 export const DEFAULT_ENCOUNTER = 'duel';
 
-/* THE RUN, such as it is: two rooms. The first is whatever the rack was set
-   to, the second is always the sorting floor. Clear a room and the tree line
-   opens; walk into the gap and you carry your health and stamina through.
-   This is not the run structure — it is the smallest thing that makes two
-   fights feel like somewhere you are GOING rather than a fight select. */
-export const ROOM2 = 'ossuary';
+/* THE RUN, such as it is: four rooms. The first is whatever the rack was set
+   to; the rest are fixed, and each one introduces exactly one new idea —
+   a crowd, then range, then ground denial. Clear a room and the haul road
+   opens; walk out and you carry your health and stamina with you.
+
+   This is still not the run structure. It is the smallest thing that makes a
+   sequence of fights feel like somewhere you are GOING, and the ordering is
+   the whole design: nothing asks two new questions at once. */
+export const ROOM_ORDER = ['ossuary', 'yard', 'kiln'];
 
 export const EXIT = {
   bearing: 0,             // rad; which way the road runs, 0 = away from spawn
@@ -526,6 +867,16 @@ export const TELEGRAPH = {
   // same information, a colour you never have to react to.
   playerColor: 0x86b7dd,
   playerHot: 0xd8ecff,    // the last 8% of the windup, as the blow resolves
+};
+
+/* Projectiles. Shared by the Boltbone's bolts, the Kilnwarden's embers and
+   every cast the tome makes — the player and the archers are doing the same
+   thing to each other, and it should look and behave like the same thing. */
+export const SHOT = {
+  gravityDrop: 0.0,     // flat. An arcing bolt is unreadable from this camera
+  trailEvery: 0.03,     // seconds between trail motes
+  fadeOnMiss: 0.18,     // how long a spent shot lingers before it is recycled
+  hitRadiusPad: 0.06,   // slop, so a graze that LOOKS like a hit is one
 };
 
 export const LOCK = {

@@ -218,7 +218,14 @@ export class Foe extends Actor {
     if (this.hesitate <= 0) {
       const pick = this._chooseAttack(gap);
       if (pick) {
-        this.startAttack(pick, pick.label);
+        // A ground zone is aimed ONCE, here, at where the target is going
+        // rather than where it is. After this the caster is irrelevant to it —
+        // the fire lands on the floor whatever either of them does next.
+        const lead = pick.zone ? (pick.lead || 0) : 0;
+        const aim = pick.zone
+          ? { x: target.x + target.vx * lead, z: target.z + target.vz * lead }
+          : null;
+        this.startAttack(pick, pick.label, aim);
       } else {
         this.hesitate = 0.18;   // nothing viable — keep closing, re-check soon
       }

@@ -44,6 +44,16 @@ export class Actor {
     this.kx = 0; this.kz = 0;   // knockback impulse, decayed by the game
     this.invuln = 0;            // seconds of remaining i-frames
     this.lastDamageAt = 0;
+
+    this.atkAim = null;         // world anchor for a ground-zone attack
+    this.shotFired = false;     // one projectile per swing, not one per frame
+
+    // BLEED. Stacks, the clock since the last one, and the tick timer. On the
+    // Actor rather than on the enemy, because the knives should eventually be
+    // able to make anything bleed.
+    this.bleed = 0;
+    this.bleedFresh = 0;
+    this.bleedTick = 0;
   }
 
   /* ---- attack phase helpers ------------------------------------------- */
@@ -73,13 +83,19 @@ export class Actor {
     return this.attackDuration - this.atkT;
   }
 
-  startAttack(def, label) {
+  /* `aim` is where a ZONE attack was aimed, in world space. A normal attack
+     ignores it and stays welded to the body; a zone attack is anchored to the
+     ground the moment it is cast and does not follow the caster afterwards,
+     which is the whole reason it cannot be dodged by being fast. */
+  startAttack(def, label, aim) {
     this.atk = def;
     this.atkT = 0;
     this.atkHits.clear();
     this.atkLabel = label || def.id;
     this.state = STATE.ATTACK;
     this.stateT = 0;
+    this.atkAim = (def && def.zone && aim) ? { x: aim.x, z: aim.z } : null;
+    this.shotFired = false;
   }
 
   /* Advances the attack clock and returns true when it has fully finished. */

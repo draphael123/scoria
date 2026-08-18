@@ -6,7 +6,8 @@ import { buildTextures } from './textures.js';
 import { Forest } from './props.js';
 import { Fx } from './fx.js';
 import { Post } from './post.js';
-import { buildKnight, buildSlagbound, buildCinderbone, buildEffigy, animateRig, PAL } from './rigs.js';
+import { buildKnight, buildSlagbound, buildCinderbone, buildBoltbone, buildKilnwarden,
+         buildEffigy, animateRig, PAL } from './rigs.js';
 
 const C = {
   ember: PAL.ember,
@@ -101,6 +102,8 @@ export class View {
 
     this.exit = this._buildExit();
     this.scene.add(this.exit);
+
+    this._buildShotPool();
 
     this.debugGroup = new THREE.Group();
     this.debugGroup.visible = false;
@@ -209,16 +212,83 @@ export class View {
     this.renderer.toneMappingExposure = ossuary ? 1.05 : 1.15;
   }
 
+
+  /* ---- projectiles ------------------------------------------------------
+     Pooled, because a Boltbone pair plus a tome can put a dozen in the air and
+     allocating a mesh per shot would stutter exactly when the screen is
+     busiest. Each is a small emissive core with a stretched tail, oriented
+     along its own velocity so you can read WHERE IT IS GOING from a still
+     frame — which, on a fixed camera, you often have to.
+     ------------------------------------------------------------------ */
+  _buildShotPool() {
+    this.shotMeshes = [];
+    this._shotPool = [];
+    this.shotGroup = new THREE.Group();
+    this.scene.add(this.shotGroup);
+  }
+
+  _takeShotMesh() {
+    let m = this._shotPool.pop();
+    if (!m) {
+      const g = new THREE.Group();
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffc98a }));
+      g.add(core);
+      const tail = new THREE.Mesh(
+        new THREE.ConeGeometry(1, 3.2, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff8a3c, transparent: true,
+          opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+      // Cone points along -z after this, i.e. BACKWARD along the flight path.
+      tail.rotation.x = -Math.PI / 2;
+      tail.position.z = -1.5;
+      g.add(tail);
+      const light = new THREE.PointLight(0xffa040, 4.5, 5.5, 2);
+      g.add(light);
+      g.userData = { core, tail, light };
+      this.shotGroup.add(g);
+      m = g;
+    }
+    m.visible = true;
+    return m;
+  }
+
+  syncShots(shots) {
+    // Hand every live mesh back, then re-take one per shot. Simpler than
+    // tracking identity across a list the sim rebuilds freely, and the pool
+    // means it costs nothing.
+    for (const m of this.shotMeshes) { m.visible = false; this._shotPool.push(m); }
+    this.shotMeshes.length = 0;
+
+    for (const s of shots) {
+      const m = this._takeShotMesh();
+      m.position.set(s.x, 1.05, s.z);
+      m.rotation.y = Math.atan2(s.vx, s.vz);
+      const r = s.radius;
+      m.userData.core.scale.setScalar(r);
+      m.userData.tail.scale.set(r * 0.9, 1, r * 0.9);
+      m.userData.core.material.color.setHex(s.color);
+      m.userData.tail.material.color.setHex(s.color);
+      m.userData.light.color.setHex(s.color);
+      m.userData.light.intensity = 4.5 * (r / 0.32);
+      this.shotMeshes.push(m);
+    }
+  }
+
   /* -------------------------------------------------------------------- */
   ensureRig(actor, isPlayer) {
     let rig = this.rigs.get(actor);
     if (!rig) {
       // Which body to build comes off the foe's own definition, so a new
       // enemy is a config entry plus a builder and nothing else.
+      const FOE_RIG = {
+        cinderbone: buildCinderbone,
+        boltbone: buildBoltbone,
+        kilnwarden: buildKilnwarden,
+      };
       rig = isPlayer ? buildKnight(actor, actor.build, actor.weapon)
           : actor.isEffigy ? buildEffigy(actor)
-          : (actor.def && actor.def.rig === 'cinderbone') ? buildCinderbone(actor)
-          : buildSlagbound(actor);
+          : (FOE_RIG[actor.def && actor.def.rig] || buildSlagbound)(actor);
       this.rigs.set(actor, rig);
       this.scene.add(rig.group);
       const tg = buildTelegraph();
@@ -316,6 +386,11 @@ export class View {
         const banked = actor.posturing ? AGGRO.postureDim : 1;
         const base = rig.eyes ? 2.2 : 2.6;
         rig.core.material.emissiveIntensity = base * w * banked;
+        // Every lit part of a body banks together, or the token's tell is
+        // half-on and reads as a rendering bug rather than as a state.
+        if (rig.grate) rig.grate.material.emissiveIntensity = 2.4 * w * banked;
+        if (rig.flame) rig.flame.material.emissiveIntensity = 2.4 * w * banked;
+        if (rig.muzzle) rig.muzzle.material.emissiveIntensity = 1.4 * w * banked;
       }
       if (rig.flash > 0) {
         rig.mat.emissive.setHex(0xffffff);
@@ -345,8 +420,16 @@ export class View {
     }
 
     tg.group.visible = true;
-    tg.group.position.set(actor.x, 0, actor.z);
-    tg.group.rotation.y = actor.facing;
+    if (a.zone && actor.atkAim) {
+      // Anchored to the FLOOR, not to the caster. This is the whole difference
+      // between "dodge the swing" and "get off that patch of ground", and it
+      // has to be visible in the telegraph or the rule is invisible.
+      tg.group.position.set(actor.atkAim.x, 0, actor.atkAim.z);
+      tg.group.rotation.y = 0;
+    } else {
+      tg.group.position.set(actor.x, 0, actor.z);
+      tg.group.rotation.y = actor.facing;
+    }
 
     // Your own telegraph is drawn quieter, and in a different HUE, than the
     // enemy's. Both sides used to paint the floor the same ember orange, which
@@ -359,6 +442,18 @@ export class View {
     const cool = mine ? TELEGRAPH.playerColor : C.ember;
     const warm = mine ? TELEGRAPH.playerHot : C.hot;
     tg.outline.material.color.setHex(cool);
+
+    // An AIM LINE is not a hitbox — the shot is — so it draws as a steady thin
+    // beam that does not sweep. Scaling it like a hitbox told the player the
+    // danger was creeping toward them along the ground, which is a lie.
+    if (a.projectile) {
+      tg.fill.scale.set(1, 1, 1);
+      const t = actor.windupProgress;
+      tg.fill.material.color.setHex(t > 0.86 ? warm : cool);
+      tg.fill.material.opacity = (0.16 + 0.34 * t) * k;
+      tg.outline.material.opacity = (0.10 + 0.22 * t) * k;
+      return;
+    }
 
     if (actor.phase === PHASE.WINDUP) {
       const t = actor.windupProgress;

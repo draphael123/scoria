@@ -1,7 +1,11 @@
 import { Actor, STATE, PHASE } from './actor.js';
-import { PLAYER, WEAPONS } from './config.js';
+import { PLAYER, WEAPONS, BLEED } from './config.js';
 import { derive, defaultBuild } from './character.js';
 import { clamp, damp, turnToward, angleDelta } from './util.js';
+
+/* Which entry on the weapon a given off-hand verb fires. `guard` is absent
+   because a guard is a stance rather than an action. */
+const OFFHAND_ACTION = { shove: 'shove', dash: 'dash', vent: 'vent' };
 
 export class Player extends Actor {
   constructor(opts = {}) {
@@ -26,8 +30,10 @@ export class Player extends Actor {
     this.hp = this.derived.hp;
     this.damageMul = this.derived.damageMul;
 
-    this.stamina = this.derived.stamina;
-    this.maxStamina = this.derived.stamina;
+    // For a heat weapon `stamina` holds HEADROOM rather than energy, and the
+    // pool is a flat 100 — endurance buys stamina, and heat is not stamina.
+    this.maxStamina = this.weapon.resource === 'heat' ? PLAYER.heatMax : this.derived.stamina;
+    this.stamina = this.maxStamina;   // full headroom == stone cold
     this.staminaDelay = 0;
     this.staminaLock = 0;
 
@@ -50,6 +56,26 @@ export class Player extends Actor {
      for. */
   get offhand() { return this.weapon.offhand || 'guard'; }
   get canGuard() { return this.offhand === 'guard'; }
+
+  /* ---- the resource ------------------------------------------------------
+     Three weapons spend STAMINA: a pool you drain and then wait on. The tome
+     builds HEAT: a pool you fill and have to dump. They run through the same
+     spend/afford path on purpose — `stamina` is the number and the weapon
+     decides which way it points — because branching the economy would mean
+     branching every caller of canSpend(), and every one of those is a place
+     the two weapons could silently drift apart.
+
+     What the player sees is inverted by the HUD, and what it FEELS like is
+     inverted by the failure state: running dry strands you, overheating roots
+     you for nearly twice as long. */
+  get resource() { return this.weapon.resource || 'stamina'; }
+  get isHeat() { return this.resource === 'heat'; }
+  /* 0..1, always "how full is the bar" from the player's point of view. */
+  get resourceFrac() {
+    return this.isHeat ? clamp(this.heat / PLAYER.heatMax, 0, 1)
+                       : clamp(this.stamina / this.maxStamina, 0, 1);
+  }
+  get heat() { return PLAYER.heatMax - this.stamina; }
 
   get guard() {
     return this.state === STATE.GUARD ? this.weapon.guard : null;
@@ -77,10 +103,17 @@ export class Player extends Actor {
   }
   get armorDamageMul() { return this.weapon.armorDamageMul ?? 1; }
 
+  /* A heat weapon stores `stamina` as HEADROOM — how much heat it can still
+     take — so the arithmetic below is identical for both economies and only
+     the numbers that feed it differ. A negative cost (VENT) therefore refunds
+     headroom, which is exactly what venting is. */
   spendStamina(n) {
-    this.stamina = Math.max(0, this.stamina - n);
-    this.staminaDelay = PLAYER.staminaRegenDelay;
-    if (this.stamina <= 0) this.staminaLock = PLAYER.staminaEmptyLock;
+    this.stamina = clamp(this.stamina - n, 0, this.maxStamina);
+    this.staminaDelay = this.isHeat ? PLAYER.heatDecayDelay : PLAYER.staminaRegenDelay;
+    if (this.stamina <= 0) {
+      this.staminaLock = this.isHeat ? PLAYER.overheatLock : PLAYER.staminaEmptyLock;
+      this.lastAction = this.isHeat ? 'OVERHEAT' : 'spent';
+    }
   }
   canSpend(n) { return this.staminaLock <= 0 && this.stamina >= n; }
 
@@ -105,7 +138,10 @@ export class Player extends Actor {
 
     const regenBlocked = this.state === STATE.GUARD || this.staminaDelay > 0;
     if (!regenBlocked) {
-      this.stamina = Math.min(this.maxStamina, this.stamina + this.derived.staminaRegen * dt);
+      // Heat bleeds off at a flat rate that endurance does NOT improve — the
+      // tome is not a weapon you can build your way out of managing.
+      const rate = this.isHeat ? PLAYER.heatDecay : this.derived.staminaRegen;
+      this.stamina = Math.min(this.maxStamina, this.stamina + rate * dt);
     }
 
     // --- desired movement vector in world space -------------------------
@@ -147,6 +183,14 @@ export class Player extends Actor {
     // ================= ATTACK ===========================================
     if (this.state === STATE.ATTACK) {
       const finished = this.tickAttack(dt);
+      // An attack may carry its own invulnerable window. Only SLIP does, and
+      // it is the reason the knives can be played at all: the weapon has no
+      // armour and no shield, so its one defensive tool has to also be an
+      // attack or it would have none.
+      if (this.atk && this.atk.iframes) {
+        const [a0, a1] = this.atk.iframes;
+        this.iframeActive = this.atkT >= a0 && this.atkT <= a1;
+      }
       const rate = this.turnBudget(PLAYER.turnRate);
       if (rate > 0) {
         if (locked) this.faceToward(this.lockTarget.x, this.lockTarget.z, rate, dt);
@@ -181,7 +225,10 @@ export class Player extends Actor {
         return;
       }
 
-      if (finished) { this.state = STATE.IDLE; this.atk = null; this.comboIndex = 0; }
+      if (finished) {
+        this.state = STATE.IDLE; this.atk = null; this.comboIndex = 0;
+        this.iframeActive = false;
+      }
       return;
     }
 
@@ -195,18 +242,25 @@ export class Player extends Actor {
       return;
     }
 
-    // Off hand as an ACTION — the greataxe's HEAVE. Buys a metre of floor by
-    // shoving everything in front of you, and it is armoured, so it can be
-    // thrown out while a body is already committed to you.
-    if (this.offhand === 'shove' && input.take('offhand')) {
-      const a = this.weapon.shove;
-      if (a && this.canSpend(a.stamina)) {
+    // The off hand as an ACTION. Every weapon that is not a guard weapon puts
+    // its verb here, and they are deliberately not variations on each other:
+    //   HEAVE  displaces a crowd            (greataxe)
+    //   SLIP   an invulnerable strike-dash  (knives)
+    //   VENT   dumps the resource AS damage (tome)
+    const act = OFFHAND_ACTION[this.offhand];
+    if (act && input.take('offhand')) {
+      const a = this.weapon[act];
+      if (a && this.canSpend(Math.max(0, a.stamina))) {
+        // VENT costs negative — it hands the bar back — and its damage scales
+        // with how much heat it just got rid of, so a full bar is a real hit
+        // and a nearly-cold one is a nudge.
+        if (this.offhand === 'vent') this.ventPower = PLAYER.heatMax - this.stamina;
         this.spendStamina(a.stamina);
         this.startAttack(a, a.id);
         this.lastAction = a.id;
         return;
       }
-      this.lastAction = 'no stam';
+      this.lastAction = this.isHeat ? 'too hot' : 'no stam';
     }
 
     if (input.take('light')) {

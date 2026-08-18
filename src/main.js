@@ -289,6 +289,7 @@ function frame(now) {
     view.syncTelegraph(e);
     view.syncDebugHitbox(e);
   }
+  view.syncShots(started ? game.shots : []);
   view.setReticle(started ? game.player.lockTarget : null);
   view.setTheme(game.encounter.theme || 'clearing');
   view.setExit(started && game.exitOpen && !game.outcome, game.exitPos, dtReal);
@@ -379,16 +380,22 @@ window.SCORIA = {
      whose Slice 1 additions are almost entirely positional. */
   smoke(n = 5) {
     const rows = [];
-    for (const encounter of ['duel', 'trio', 'ossuary']) {
-      for (const weapon of ['sword', 'greataxe']) {
+    for (const encounter of ['duel', 'trio', 'ossuary', 'yard', 'kiln']) {
+      for (const weapon of ['sword', 'greataxe', 'daggers', 'tome']) {
         for (const policy of ['trade', 'heavy']) {
-          const acc = { FIGHT_HAPPENED: 0, IFRAMES_WORKED: 0, STAGGER_REACHABLE: 0,
-                        ONE_TELEGRAPH: 0, HYPERARMOUR_FIRED: 0, runs: 0, maxWindup: 0 };
+          // Only the asserts a given weapon actually declares are counted —
+          // see the note in sim(). `n/a` is a valid and meaningful answer.
+          const KEYS = ['PLAYER_CONNECTED', 'IFRAMES_WORKED', 'TRADED',
+                        'STAGGER_REACHABLE', 'BLEED_WORKED', 'HYPERARMOUR_FIRED',
+                        'SHOTS_LANDED', 'ONE_TELEGRAPH'];
+          const acc = { runs: 0, maxWindup: 0 };
           for (let i = 0; i < n; i++) {
             const r = game.sim({ seed: 4000 + i * 13, weapon, encounter, policy, maxTime: 90 });
             acc.runs++;
-            for (const k of ['FIGHT_HAPPENED', 'IFRAMES_WORKED', 'STAGGER_REACHABLE',
-                             'ONE_TELEGRAPH', 'HYPERARMOUR_FIRED']) if (r[k]) acc[k]++;
+            for (const k of KEYS) {
+              if (r[k] === undefined) continue;
+              acc[k] = (acc[k] || 0) + (r[k] ? 1 : 0);
+            }
             acc.maxWindup = Math.max(acc.maxWindup, r.maxConcurrentWindup);
           }
           rows.push({ encounter, weapon, policy, ...acc });

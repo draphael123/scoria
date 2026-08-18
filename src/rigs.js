@@ -254,6 +254,93 @@ function heaterGeometry() {
   return geo;
 }
 
+
+/* A pair of knives. Short, and the SECOND one is the read: every other weapon
+   in the game is a single silhouette leaving one hand, so two short blades
+   leaving two hands is instantly a different fighter even before either moves.
+   The off hand's knife is parented to the off arm, so it travels with the
+   SLIP dash rather than sitting inert. */
+function buildKnives(pivot, mats, offArm) {
+  const { steelD, leather } = mats;
+  const edge = new THREE.MeshStandardMaterial({ color: 0xd6dae0, roughness: 0.24, metalness: 0.9 });
+
+  const make = (len) => {
+    const g = new THREE.Group();
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.2, 6), leather);
+    grip.rotation.x = Math.PI / 2;
+    grip.position.z = 0.08;
+    g.add(grip);
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), steelD);
+    guard.position.z = 0.19;
+    g.add(guard);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.026, len), edge);
+    blade.position.z = 0.22 + len * 0.5;
+    blade.castShadow = true;
+    g.add(blade);
+    const point = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 4), edge);
+    point.rotation.x = Math.PI / 2;
+    point.position.z = 0.22 + len + 0.06;
+    g.add(point);
+    return { group: g, blade };
+  };
+
+  const main = make(0.62);
+  pivot.add(main.group);
+  if (offArm) {
+    const off = make(0.52);
+    off.group.position.y = -0.02;
+    off.group.rotation.z = 0.2;
+    offArm.add(off.group);
+  }
+  return { blade: main.blade, tipScale: 1.35 };
+}
+
+/* The Bellows Codex: a chained book on the off hand and a stoking iron in the
+   main. It is the only "weapon" that is not primarily a blade, so the read has
+   to come from the BOOK — a flat bright rectangle held out in front, which
+   nothing else in the game has. */
+function buildTome(pivot, mats, offArm) {
+  const { steelD, leather, cloth } = mats;
+  const brass = new THREE.MeshStandardMaterial({ color: 0x9a7434, roughness: 0.4, metalness: 0.8 });
+  const ember = new THREE.MeshStandardMaterial({
+    color: 0x1a0a04, emissive: 0xff8a2c, emissiveIntensity: 2.2, roughness: 1 });
+
+  // Main hand: a short stoking iron, hooked. This is what the swing animation
+  // drives, and what the aim line comes off.
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.95, 6), steelD);
+  rod.rotation.x = Math.PI / 2;
+  rod.position.z = 0.46;
+  pivot.add(rod);
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.032, 4, 8, Math.PI * 1.2), steelD);
+  hook.rotation.set(0, Math.PI / 2, 0.4);
+  hook.position.z = 0.92;
+  pivot.add(hook);
+  const coal = new THREE.Mesh(new THREE.SphereGeometry(0.09, 9, 7), ember);
+  coal.position.z = 1.02;
+  pivot.add(coal);
+
+  if (offArm) {
+    const book = new THREE.Group();
+    book.position.set(0, -0.30, 0.26);
+    book.rotation.set(-0.5, 0, 0);
+    offArm.add(book);
+    const covers = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, 0.60), leather);
+    covers.castShadow = true;
+    book.add(covers);
+    const pages = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.05, 0.54),
+      new THREE.MeshStandardMaterial({ color: 0xd8cfb4, roughness: 0.95 }));
+    pages.position.y = 0.03;
+    book.add(pages);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.46), ember);
+    glow.position.y = 0.07;
+    book.add(glow);
+    const clasp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.08), brass);
+    clasp.position.y = 0.02;
+    book.add(clasp);
+  }
+  return { blade: coal, tipScale: 1.0 };
+}
+
 export function buildKnight(actor, build, weapon) {
   const g = new THREE.Group();
   const r = actor.radius, h = actor.height;
@@ -537,15 +624,20 @@ export function buildKnight(actor, build, weapon) {
   pivot.add(buildArm(D, h, steel, steelD));
   const swordArm = pivot.children[0];
 
-  const mats = { steel, steelD, steelB, leather, cloth, dark };
-  const built = twoHand ? buildGreataxe(pivot, mats) : buildSword(pivot, mats);
-  const blade = built.blade;
-
-  // Off arm, which carries the shield and counter-swings when walking.
+  // Off arm, which carries the shield and counter-swings when walking. Built
+  // BEFORE the weapon, because two of the four kits put something in it.
   const offArm = new THREE.Group();
   offArm.position.set(-D.shoulderX * 1.02, h * 0.272, 0);
   chest.add(offArm);
   offArm.add(buildArm(D, h, steel, steelD));
+
+  const mats = { steel, steelD, steelB, leather, cloth, dark };
+  const built =
+      w.id === 'greataxe' ? buildGreataxe(pivot, mats)
+    : w.id === 'daggers'  ? buildKnives(pivot, mats, offArm)
+    : w.id === 'tome'     ? buildTome(pivot, mats, offArm)
+    :                       buildSword(pivot, mats);
+  const blade = built.blade;
 
   const shield = new THREE.Group();
   const face = new THREE.Mesh(heaterGeometry(),
@@ -564,7 +656,7 @@ export function buildKnight(actor, build, weapon) {
   shield.visible = false;
   // A two-hander has no off hand to put a shield in. It is not hidden, it is
   // not built — the guard stance poses both arms on the haft instead.
-  if (!twoHand) offArm.add(shield);
+  if (w.offhand === 'guard') offArm.add(shield);
 
   const nose = makeNose(r, 0xdfe6ea);
   g.add(nose);
@@ -982,6 +1074,284 @@ export function buildCinderbone(actor) {
   };
 }
 
+/* ------------------------------------------------------------------------
+   THE BOLTBONE. A picker with a slag-iron crossbow.
+
+   It has to be told from a Cinderbone at a glance and from across the room,
+   because the two share a body plan and the answer to each is opposite: close
+   on the archer, keep off the picker. Size and colour will not do it at 7u.
+   So the read is the SHAPE IT HOLDS — a wide horizontal bar across the chest,
+   the only horizontal in a cast full of vertical, hunched things — plus a
+   quiver standing up off the shoulder.
+   --------------------------------------------------------------------- */
+export function buildBoltbone(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  const bone = new THREE.MeshStandardMaterial({ color: 0xb4ac9a, roughness: 0.93 });
+  const boneD = new THREE.MeshStandardMaterial({ color: 0x867e6e, roughness: 0.96 });
+  const soot = new THREE.MeshStandardMaterial({ color: 0x241f1b, roughness: 1 });
+  const iron = new THREE.MeshStandardMaterial({ color: 0x4a413a, roughness: 0.8, metalness: 0.45 });
+  const socket = new THREE.MeshStandardMaterial({
+    color: 0x120904, emissive: 0xffb347, emissiveIntensity: 2.0, roughness: 1 });
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.46;
+  g.add(hips);
+  const pelvis = new THREE.Mesh(new THREE.TorusGeometry(r * 0.5, r * 0.13, 5, 10), boneD);
+  pelvis.rotation.x = Math.PI / 2;
+  pelvis.scale.z = 0.7;
+  hips.add(pelvis);
+
+  const legGeo = new THREE.CapsuleGeometry(r * 0.115, h * 0.30, 3, 6);
+  const legL = limb(legGeo, bone, 0);
+  const legR = limb(legGeo, bone, 0);
+  legL.position.x = -r * 0.34;
+  legR.position.x = r * 0.34;
+  for (const leg of [legL, legR]) {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.28, r * 0.12, r * 0.5), boneD);
+    foot.position.set(0, -h * 0.42, r * 0.12);
+    leg.add(foot);
+  }
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.46;
+  g.add(chest);
+
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.09, r * 0.11, h * 0.28, 6), boneD);
+  spine.position.y = h * 0.14;
+  chest.add(spine);
+
+  const ribs = new THREE.Group();
+  chest.add(ribs);
+  for (let i = 0; i < 4; i++) {
+    const hoop = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.54 * (1 - Math.abs(i - 1.2) * 0.14), r * 0.05, 4, 9,
+        Math.PI * 1.25), bone);
+    hoop.rotation.set(Math.PI / 2, 0, -Math.PI * 0.63);
+    hoop.position.y = h * (0.055 + i * 0.055);
+    hoop.scale.z = 0.66;
+    ribs.add(hoop);
+  }
+
+  // The QUIVER — a vertical bundle standing off the shoulder, and the second
+  // read after the crossbow itself.
+  const quiver = new THREE.Group();
+  quiver.position.set(-r * 0.62, h * 0.22, -r * 0.34);
+  quiver.rotation.z = -0.36;
+  chest.add(quiver);
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.2, r * 0.24, h * 0.36, 7), soot);
+  quiver.add(tube);
+  for (let i = 0; i < 4; i++) {
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.5, 4), iron);
+    bolt.position.set((i - 1.5) * 0.05, h * 0.24, (i % 2) * 0.04);
+    quiver.add(bolt);
+  }
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.30;
+  chest.add(neck);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.40, 12, 10), bone);
+  skull.scale.set(1, 1.02, 1.16);
+  skull.position.y = r * 0.30;
+  skull.castShadow = true;
+  neck.add(skull);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 0.46, r * 0.14, r * 0.40), boneD);
+  jaw.position.set(0, r * 0.08, r * 0.22);
+  jaw.rotation.x = 0.2;
+  neck.add(jaw);
+  const eyes = [];
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.10, 8, 6), socket);
+    eye.position.set(sx * r * 0.16, r * 0.30, r * 0.34);
+    eye.scale.z = 0.6;
+    neck.add(eye);
+    eyes.push(eye);
+  }
+  // A slouched hood of sacking, so the head silhouette differs from the
+  // Cinderbone's bare skull even before the crossbow is visible.
+  const hood = new THREE.Mesh(new THREE.SphereGeometry(r * 0.48, 10, 8,
+    0, Math.PI * 2, 0, Math.PI * 0.55), soot);
+  hood.scale.set(1.1, 1.0, 1.25);
+  hood.position.set(0, r * 0.44, -r * 0.06);
+  neck.add(hood);
+
+  // THE CROSSBOW. Held across the body, and it is the horizontal that makes
+  // this silhouette unmistakable in a cast of vertical hunched things.
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.58, h * 0.24, 0);
+  chest.add(pivot);
+  const armGeo = new THREE.CapsuleGeometry(r * 0.10, h * 0.18, 3, 6);
+  pivot.add(limb(armGeo, bone, 0));
+
+  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.15), soot);
+  stock.position.z = 0.5;
+  stock.castShadow = true;
+  pivot.add(stock);
+  const bow = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.09, 0.13), iron);
+  bow.position.z = 0.92;
+  bow.castShadow = true;
+  pivot.add(bow);
+  for (const sx of [-1, 1]) {
+    const limbTip = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.07, 0.1), iron);
+    limbTip.position.set(sx * 0.72, 0, 0.86);
+    limbTip.rotation.y = sx * 0.34;
+    pivot.add(limbTip);
+  }
+  const nock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.42),
+    new THREE.MeshStandardMaterial({ color: 0x1a0a04, emissive: 0xff7a2a,
+      emissiveIntensity: 1.4, roughness: 1 }));
+  nock.position.z = 1.12;
+  pivot.add(nock);
+
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.58, h * 0.24, 0);
+  chest.add(offArm);
+  offArm.add(limb(armGeo, bone, 0));
+
+  g.add(makeNose(r, 0xffd9a0));
+
+  return {
+    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    body: spine, head: skull, blade: bow, shield: null,
+    mat: bone, core: eyes[0], eyes, muzzle: nock,
+    tipScale: 1.1,
+    emissiveIdle: 0.06,
+    // It braces rather than swings — the arms barely travel, which is itself
+    // a tell that this one is not going to close on you.
+    swingArc: { rest: -0.55, wind: -0.95, end: -0.25 },
+    baseLean: 0.06, stride: 0, flash: 0, spin: 0, isPlayer: false,
+  };
+}
+
+/* ------------------------------------------------------------------------
+   THE KILNWARDEN. It tended the kiln; now it calls the kiln down.
+
+   The only enemy that stands upright, and deliberately so: everything else in
+   the game is hunched, so a straight vertical body reads as authority from
+   across the clearing. It carries no weapon at all — the read is the ROBE,
+   which gives it a solid unbroken skirt where every other skeleton is a set
+   of gaps, and the brazier-head it wears in place of a face.
+   --------------------------------------------------------------------- */
+export function buildKilnwarden(actor) {
+  const g = new THREE.Group();
+  const r = actor.radius, h = actor.height;
+
+  const bone = new THREE.MeshStandardMaterial({ color: 0xa8a091, roughness: 0.94 });
+  const robe = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.99 });
+  const robeD = new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 1 });
+  const iron = new THREE.MeshStandardMaterial({ color: 0x453b34, roughness: 0.8, metalness: 0.45 });
+  const molten = new THREE.MeshStandardMaterial({
+    color: 0x1a0a04, emissive: PAL.crack, emissiveIntensity: 2.4, roughness: 1 });
+
+  const hips = new THREE.Group();
+  hips.position.y = h * 0.42;
+  g.add(hips);
+
+  // The robe: one solid cone to the floor. It has no legs to animate and that
+  // is the point — it does not walk so much as ARRIVE, which sets it apart
+  // from four things that visibly stride.
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.72, r * 1.5, h * 0.52, 14), robe);
+  skirt.position.y = -h * 0.16;
+  skirt.castShadow = true;
+  hips.add(skirt);
+  const hem = new THREE.Mesh(new THREE.TorusGeometry(r * 1.45, r * 0.11, 5, 16), robeD);
+  hem.rotation.x = Math.PI / 2;
+  hem.position.y = -h * 0.415;
+  hips.add(hem);
+  // Legs exist only so the shared animation code has something to write to.
+  const legL = new THREE.Group();
+  const legR = new THREE.Group();
+  hips.add(legL, legR);
+
+  const chest = new THREE.Group();
+  chest.position.y = h * 0.42;
+  g.add(chest);
+
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.60, r * 0.78, h * 0.30, 12), robe);
+  torso.position.y = h * 0.15;
+  torso.castShadow = true;
+  chest.add(torso);
+
+  // A furnace grate set into the chest, banked or blazing with the token.
+  const grate = new THREE.Mesh(new THREE.BoxGeometry(r * 0.62, r * 0.72, r * 0.18), molten);
+  grate.position.set(0, h * 0.16, r * 0.56);
+  chest.add(grate);
+  for (let i = 0; i < 3; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(r * 0.70, r * 0.08, r * 0.1), iron);
+    bar.position.set(0, h * 0.16 + (i - 1) * r * 0.24, r * 0.63);
+    chest.add(bar);
+  }
+
+  const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.86, r * 0.62, h * 0.09, 12), robeD);
+  shoulders.position.y = h * 0.30;
+  shoulders.castShadow = true;
+  chest.add(shoulders);
+
+  const neck = new THREE.Group();
+  neck.position.y = h * 0.33;
+  chest.add(neck);
+
+  // In place of a head: an iron brazier basket, with the skull down inside it.
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(r * 0.30, 11, 9), bone);
+  skull.position.y = r * 0.30;
+  skull.castShadow = true;
+  neck.add(skull);
+  const basket = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.46, r * 0.34, r * 0.60, 9, 1, true), iron);
+  basket.position.y = r * 0.36;
+  basket.castShadow = true;
+  neck.add(basket);
+  const coals = new THREE.Mesh(new THREE.SphereGeometry(r * 0.26, 9, 7), molten);
+  coals.position.y = r * 0.50;
+  coals.scale.y = 0.6;
+  neck.add(coals);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const stave = new THREE.Mesh(new THREE.BoxGeometry(0.05, r * 0.72, 0.05), iron);
+    stave.position.set(Math.sin(a) * r * 0.42, r * 0.36, Math.cos(a) * r * 0.42);
+    neck.add(stave);
+  }
+
+  // Both arms are empty and open — a caster's tell. The "weapon" pivot holds
+  // a hand that the animation raises, and nothing else.
+  const pivot = new THREE.Group();
+  pivot.position.set(r * 0.80, h * 0.26, 0);
+  chest.add(pivot);
+  const armGeo = new THREE.CapsuleGeometry(r * 0.13, h * 0.20, 3, 6);
+  pivot.add(limb(armGeo, robe, 0));
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(r * 0.17, 8, 6), bone);
+  hand.position.y = -h * 0.26;
+  pivot.add(hand);
+  const flame = new THREE.Mesh(new THREE.SphereGeometry(r * 0.20, 9, 7), molten);
+  flame.position.y = -h * 0.32;
+  flame.scale.y = 1.5;
+  pivot.add(flame);
+
+  const offArm = new THREE.Group();
+  offArm.position.set(-r * 0.80, h * 0.26, 0);
+  chest.add(offArm);
+  offArm.add(limb(armGeo, robe, 0));
+  const hand2 = new THREE.Mesh(new THREE.SphereGeometry(r * 0.17, 8, 6), bone);
+  hand2.position.y = -h * 0.26;
+  offArm.add(hand2);
+
+  g.add(makeNose(r, PAL.ember));
+
+  return {
+    group: g, hips, chest, neck, legL, legR, pivot, offArm,
+    body: torso, head: skull, blade: flame, shield: null,
+    mat: robe, core: coals, grate, flame,
+    tipScale: 1.0,
+    emissiveIdle: 0.0,
+    // It raises a hand rather than swinging. The arc is small and slow, which
+    // is what makes a caster look like a caster.
+    swingArc: { rest: -0.30, wind: -2.75, end: -1.10 },
+    baseLean: 0.0, stride: 0, flash: 0, spin: 0, isPlayer: false, upright: true,
+  };
+}
+
 /* A wicker training effigy on a post. Deliberately nothing like the
    Slagbound in outline — the tutorial should never teach you to read a shape
    that will not be there in the real fight. */
@@ -1083,7 +1453,37 @@ export function animateRig(rig, actor, dt, clock) {
 
   const rollDur = actor.rollDuration || 0.6;
 
-  if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'shove') {
+  if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'dash') {
+    // SLIP. Low, forward and knives-first. It is a roll that cuts, so it is
+    // posed off the ROLL rather than off a swing — the player should read it
+    // as a dodge they aimed, not as a lunge attack.
+    const a = actor.atk, p = actor.phase;
+    const t = clamp(actor.atkT / Math.max(0.001, a.windup + a.active + a.recover), 0, 1);
+    const arc = Math.sin(Math.PI * Math.min(1, t * 1.35));
+    lean = -0.85 * arc;
+    crouch = 0.42 * arc;
+    legAmp = 0.9 * arc;
+    legPhase = 0;
+    swing = A.rest + 1.5 * arc;
+    twist = -0.5 * arc;
+  } else if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'vent') {
+    // VENT. Both arms thrown wide and the body opened up — the one moment the
+    // Stoker is not hiding behind the book.
+    const a = actor.atk, p = actor.phase;
+    if (p === PHASE.WINDUP) {
+      const t = actor.windupProgress;
+      swing = lerp(A.rest, A.rest - 0.9, t);
+      crouch = lerp(0, 0.26, t);
+      lean = lerp(0, -0.3, t);
+    } else {
+      const t = clamp((actor.atkT - a.windup) / Math.max(0.001, a.active + a.recover), 0, 1);
+      swing = lerp(A.rest - 0.9, 0.4, Math.min(1, t * 3));
+      crouch = lerp(0.26, 0, t);
+      lean = lerp(-0.3, 0.16, Math.min(1, t * 3));
+    }
+    legAmp = 0.36;
+    legPhase = Math.PI * 0.5;
+  } else if (actor.state === STATE.ATTACK && actor.atk && actor.atk.pose === 'shove') {
     // HEAVE. Not a swing — a two-handed push. Coil back, drive forward from
     // the hips, and hold the follow-through. Posing this with the swing curve
     // read as a clumsy overhead and made the button feel like a bad attack

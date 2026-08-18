@@ -1,9 +1,9 @@
 import { Player } from './player.js';
 import { Foe } from './enemy.js';
-import { resolveActive } from './combat.js';
+import { resolveActive, applyDamage, tickBleed } from './combat.js';
 import { STATE, PHASE } from './actor.js';
-import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES,
-         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM2, EXIT } from './config.js';
+import { SIM, ARENA, LOCK, PLAYER, SLAGBOUND, IMPACT, AGGRO, FOES, SHOT,
+         ENCOUNTERS, DEFAULT_ENCOUNTER, ROOM_ORDER, EXIT } from './config.js';
 import { makeRng, clamp, angleDelta, TAU } from './util.js';
 
 /* Hitstop — the cheapest and largest feel multiplier in action combat.
@@ -27,10 +27,15 @@ export class Game {
 
   get encounter() { return ENCOUNTERS[this.encounterId] || ENCOUNTERS[DEFAULT_ENCOUNTER]; }
 
-  /* Which room of the two you are in, and what follows it. The first room is
-     whatever the rack was set to; the second is always the sorting floor. */
-  get roomIndex() { return this.encounterId === ROOM2 ? 1 : 0; }
-  get isLastRoom() { return this.roomIndex >= 1; }
+  /* Where in the run you are. Room 0 is whatever the rack was set to; after
+     that the chain is fixed, and each room introduces exactly one new idea. */
+  get roomIndex() {
+    const i = ROOM_ORDER.indexOf(this.encounterId);
+    return i < 0 ? 0 : i + 1;
+  }
+  get roomCount() { return ROOM_ORDER.length + 1; }
+  get nextRoom() { return ROOM_ORDER[this.roomIndex] || null; }
+  get isLastRoom() { return this.nextRoom === null; }
   get exitPos() {
     const d = ARENA.radius - 1.15;
     return { x: Math.sin(EXIT.bearing) * d, z: Math.cos(EXIT.bearing) * d };
@@ -40,14 +45,18 @@ export class Game {
      stamina with you. That carry-over is the whole reason two rooms feel like
      a run rather than like two fights: the first one COSTS you something. */
   advanceRoom() {
-    if (!this.exitOpen || this.isLastRoom) return false;
+    const next = this.nextRoom;
+    if (!this.exitOpen || !next) return false;
     const p = this.player;
-    const carried = { hp: p.hp, stamina: p.stamina, build: this.build };
-    this.encounterId = ROOM2;
-    this.reset(this.seed + 101);
+    const carried = { hp: p.hp, stamina: p.stamina };
+    const cleared = (this.roomsCleared || 0) + 1;
+    this.encounterId = next;
+    this.reset(this.seed + 101 * cleared);
     this.player.hp = Math.max(1, carried.hp);
-    this.player.stamina = carried.stamina;
-    this.roomsCleared = (this.roomsCleared || 0) + 1;
+    // Heat is not carried — you arrive cold. Stamina is, because arriving with
+    // an empty bar is a death sentence you cannot see coming.
+    if (this.player.resource !== 'heat') this.player.stamina = carried.stamina;
+    this.roomsCleared = cleared;
     return true;
   }
 
@@ -70,10 +79,13 @@ export class Game {
     });
 
     const enc = this.encounter;
-    const def = FOES[enc.foe] || SLAGBOUND;
+    const fallback = FOES[enc.foe] || SLAGBOUND;
     const n = enc.spawn.length;
-    this.enemies = enc.spawn.map(([x, z], i) => new Foe({
-      def,
+    // A spawn entry may name its own foe. Mixed rooms are the point from the
+    // Long Yard onward — an archer is only interesting next to something that
+    // wants you standing still.
+    this.enemies = enc.spawn.map(([x, z, foeKey], i) => new Foe({
+      def: (foeKey && FOES[foeKey]) || fallback,
       x, z,
       facing: Math.atan2(this.player.x - x, this.player.z - z),
       rng: this.rng,
@@ -93,10 +105,12 @@ export class Game {
     this.token = null;
     this.aggroCd = 0;
 
+    this.shots = [];
     this.outcome = null;   // 'win' | 'lose' | null
     this.outcomeT = 0;
     this.stats = { swings: 0, hitsDealt: 0, hitsTaken: 0, guarded: 0, rolls: 0,
-                   staggers: 0, iframeDodges: 0, armored: 0, maxConcurrentWindup: 0 };
+                   staggers: 0, iframeDodges: 0, armored: 0, bleedTicks: 0,
+                   shotsFired: 0, maxConcurrentWindup: 0 };
   }
 
   get actors() { return [this.player, ...this.enemies]; }
@@ -236,6 +250,11 @@ export class Game {
   /* ---- one fixed logic step -------------------------------------------- */
   stepFixed(dt, input, basis) {
     if (this.outcome) { this.outcomeT += dt; return; }
+    // Everything that happens this step is tallied, not just the melee at the
+    // end of it. Capturing this AFTER the projectile and bleed passes meant
+    // every shot and every bleed tick fell outside the window — which read as
+    // "the tome never lands a hit" when the tome was landing all of them.
+    const evStart = this.events.length;
     this.time += dt;
     this._validateLock();
     this._updateAggro(dt);
@@ -244,6 +263,13 @@ export class Game {
 
     this.player.update(dt, ctx);
     for (const e of this.enemies) e.update(dt, ctx);
+
+    // A projectile leaves the body the instant the active frames begin, and
+    // exactly once — `shotFired` is reset by startAttack, not by the clock.
+    if (this.player.atk && this.player.phase === PHASE.ACTIVE) this._fireShot(this.player);
+    for (const e of this.enemies) {
+      if (!e.dead && e.atk && e.phase === PHASE.ACTIVE) this._fireShot(e);
+    }
 
     // Smoke-test instrumentation: the token's whole promise is that this can
     // never exceed 1. sim() asserts on it.
@@ -254,13 +280,14 @@ export class Game {
     if (winding > this.stats.maxConcurrentWindup) this.stats.maxConcurrentWindup = winding;
 
     this._integrate(dt);
+    this._stepShots(dt);
+    for (const a of this.actors) tickBleed(a, dt, this.events);
 
     // Hit resolution happens after movement so a lunge that closes the gap
     // in the same step still connects.
-    const before = this.events.length;
     resolveActive(this.player, this.livingEnemies, this.events);
     for (const e of this.livingEnemies) resolveActive(e, [this.player], this.events);
-    if (this.events.length > before) this._tally(before);
+    if (this.events.length > evStart) this._tally(evStart);
 
     if (this.player.dead && !this.outcome) { this.outcome = 'lose'; this.outcomeT = 0; }
     else if (!this.livingEnemies.length) {
@@ -287,6 +314,10 @@ export class Game {
   _tally(from) {
     for (let i = from; i < this.events.length; i++) {
       const ev = this.events[i];
+      if (ev.result === 'bleedtick' || ev.result === 'bleed') {
+        if (ev.target !== this.player) this.stats.bleedTicks++;
+        continue;
+      }
       if (ev.attacker === this.player) {
         if (ev.result !== 'iframe') this.stats.hitsDealt++;
         if (ev.result === 'stagger') this.stats.staggers++;
@@ -347,6 +378,66 @@ export class Game {
     }
   }
 
+
+  /* ---- projectiles -------------------------------------------------------
+     One list, shared by the Boltbone's bolts, the Kilnwarden's embers and
+     every cast the tome makes. The player and the archers are doing the same
+     thing to each other, so it is the same code doing it — which also means a
+     shot can never behave differently depending on who fired it.
+
+     Flat trajectories on purpose: an arcing projectile is genuinely unreadable
+     from a fixed camera 39 degrees above the ground, because the arc and the
+     distance project onto the same screen axis.
+     ------------------------------------------------------------------- */
+  _fireShot(attacker) {
+    const a = attacker.atk;
+    if (!a || !a.projectile || attacker.shotFired) return;
+    attacker.shotFired = true;
+    const p = a.projectile;
+    const dir = attacker.facing;
+    const muzzle = (attacker.radius || 0.4) + 0.35;
+    this.shots.push({
+      x: attacker.x + Math.sin(dir) * muzzle,
+      z: attacker.z + Math.cos(dir) * muzzle,
+      vx: Math.sin(dir) * p.speed,
+      vz: Math.cos(dir) * p.speed,
+      radius: p.radius, damage: p.damage, life: p.life,
+      color: p.color || 0xffb060,
+      owner: attacker, fromPlayer: !!attacker.isPlayer,
+      atk: a, dead: false,
+    });
+  }
+
+  _stepShots(dt) {
+    const arena = ARENA.radius + 1.5;
+    for (let i = this.shots.length - 1; i >= 0; i--) {
+      const s = this.shots[i];
+      s.x += s.vx * dt;
+      s.z += s.vz * dt;
+      s.life -= dt;
+
+      // A shot only ever threatens the OTHER side. Friendly fire between five
+      // skeletons would be funny exactly once and would then quietly dismantle
+      // the aggro token, because a body killed by its own archer never took a
+      // turn.
+      const targets = s.fromPlayer ? this.livingEnemies : [this.player];
+      let hit = null;
+      for (const t of targets) {
+        if (t.dead) continue;
+        const d = Math.hypot(t.x - s.x, t.z - s.z);
+        if (d <= s.radius + t.radius + SHOT.hitRadiusPad) { hit = t; break; }
+      }
+
+      if (hit) {
+        applyDamage(s.owner, hit, { ...s.atk, damage: s.damage, shape: 'shot' }, this.events);
+        this.shots.splice(i, 1);
+        continue;
+      }
+      if (s.life <= 0 || Math.hypot(s.x, s.z) > arena) this.shots.splice(i, 1);
+    }
+  }
+
+
   /* ---- the public tick -------------------------------------------------- */
   /* dt is REAL elapsed seconds. Logic runs on a fixed step so the frame data
      means the same thing at 30fps and 144fps, and so sim() is deterministic. */
@@ -382,6 +473,9 @@ export class Game {
     let stop = 0, punch = 0;
     for (const ev of events) {
       if (ev.result === 'iframe') continue;
+      // Bleed ticks are a drip, not a blow. Freezing the world for each one
+      // would turn the knives into a stutter.
+      if (ev.result === 'bleedtick') continue;
       if (ev.result === 'stagger') {
         stop = Math.max(stop, HITSTOP.stagger);
         punch = Math.max(punch, IMPACT.punchStagger);
@@ -389,6 +483,9 @@ export class Game {
         if (this.allowSlowMo) this.slowMo = IMPACT.staggerSlowMoTime;
       } else if (ev.result === 'guarded') {
         stop = Math.max(stop, HITSTOP.guarded);
+        punch = Math.max(punch, IMPACT.punchLight);
+      } else if (ev.result === 'bleed') {
+        stop = Math.max(stop, HITSTOP.clean);
         punch = Math.max(punch, IMPACT.punchLight);
       } else if (ev.result === 'armored') {
         // Held a beat longer than a normal hit taken: shrugging a blow off is
@@ -461,10 +558,15 @@ export class Game {
         const a = p.angleTo(e);
         input.axis.x = Math.sin(a); input.axis.y = -Math.cos(a);
       } else if (policy !== 'passive' && p.state !== STATE.ATTACK) {
-        // 'heavy' exists to prove the armoured windup survives contact.
+        // 'heavy' exists to prove the armoured windup survives contact. The
+        // cost field is the same whichever economy the weapon uses, which is
+        // exactly why the two were kept on one path.
         const want = policy === 'heavy' ? 'heavy' : 'light';
         const cost = want === 'heavy' ? p.weapon.heavy.stamina : p.weapon.light[0].stamina;
         if (p.canSpend(cost)) input.inject(want);
+        // A heat weapon that is nearly full should dump rather than root
+        // itself. Crude, but the bot exists to exercise the path, not to play.
+        else if (p.isHeat && p.weapon.vent) input.inject('offhand');
       }
 
       input.sample(dt);
@@ -483,14 +585,38 @@ export class Game {
       enemiesLeft: this.livingEnemies.length,
       ...s,
       // The asserts that actually matter — see the comment above.
-      FIGHT_HAPPENED: s.hitsDealt > 0 && (s.hitsTaken + s.guarded + s.iframeDodges) > 0,
+      //
+      // These are per-WEAPON, because an assert that is wrong for a weapon is
+      // worse than no assert: it reports a working design as broken and then
+      // gets ignored. Two were wrong the moment the knives and the tome
+      // landed, and the fix was here rather than in the game.
+      //
+      //   PLAYER_CONNECTED  always. If you never land a hit, something is
+      //                     broken whatever you are holding.
+      //   TRADED            only for weapons that must be in reach to work. A
+      //                     tome that is never touched is the tome WORKING —
+      //                     it kills at 9.5u — so demanding it take damage
+      //                     would fail the weapon for succeeding.
+      //   STAGGER_REACHABLE only for weapons that carry real poise. The knives
+      //                     deal 5 poise a hit against a 48 bar on purpose;
+      //                     they are not supposed to stagger anything, they
+      //                     are supposed to bleed it.
+      //   BLEED_WORKED      the knives' equivalent, and their whole damage
+      //                     model, so it is asserted in stagger's place.
+      PLAYER_CONNECTED: s.hitsDealt > 0,
       IFRAMES_WORKED: s.iframeDodges > 0,
-      STAGGER_REACHABLE: s.staggers > 0,
       // Structural, not statistical: the token makes >1 impossible, so this is
       // a real invariant and any failure is a bug rather than a tuning miss.
       ONE_TELEGRAPH: s.maxConcurrentWindup <= 1,
     };
+
+    const melee = (p.weapon.reach || 0) < 5;
+    const poiseWeapon = (p.weapon.light[0].poise || 0) >= 8;
+    if (melee) out.TRADED = (s.hitsTaken + s.guarded + s.iframeDodges) > 0;
+    if (poiseWeapon) out.STAGGER_REACHABLE = s.staggers > 0;
+    if (p.weapon.light.some((a) => a.bleed)) out.BLEED_WORKED = s.bleedTicks > 0;
     if (p.weapon.armorDamageMul > 1) out.HYPERARMOUR_FIRED = s.armored > 0;
+    if (p.weapon.light.some((a) => a.projectile)) out.SHOTS_LANDED = s.hitsDealt > 0;
 
     this.encounterId = prevEnc;
     this.build = prevBuild;

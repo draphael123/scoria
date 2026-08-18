@@ -22,6 +22,9 @@ export class Hud {
     this.flash = $('flash');
     this.stGhost = $('stGhost');
     this.lowhp = $('lowhp');
+    this.roomTag = $('roomTag');
+    this.roomNum = $('roomNum');
+    this.roomName = $('roomName');
     this._hpChip = 1;
     this._foeChip = 1;
     this._flash = 0;
@@ -53,8 +56,15 @@ export class Hud {
     // Low-health danger vignette. A number on a bar is easy to miss mid-fight.
     this.lowhp.classList.toggle('on', hp > 0 && hp < 0.28 && !p.dead);
 
+    // The same bar serves both economies, but it must never LOOK the same:
+    // stamina is a reserve that drains toward danger on the left, heat is a
+    // pressure that FILLS toward danger on the right. Drawing heat as a
+    // draining bar would train exactly the wrong reflex.
     const st = clamp(p.stamina / p.maxStamina, 0, 1);
-    this.stFill.style.width = (st * 100) + '%';
+    const shown = p.isHeat ? 1 - st : st;
+    this.stFill.style.width = (shown * 100) + '%';
+    this.stBar.classList.toggle('heat', !!p.isHeat);
+    this.stBar.classList.toggle('hot', p.isHeat && shown > 0.72);
     this.stBar.classList.toggle('locked', p.staminaLock > 0);
     this.stBar.classList.toggle('guarding', p.state === STATE.GUARD);
 
@@ -65,7 +75,9 @@ export class Hud {
     const canRoll = st >= rollCost && p.staminaLock <= 0;
     this.stBar.classList.toggle('canroll', canRoll);
     if (canRoll) {
-      this.stGhost.style.left = ((st - rollCost) * 100) + '%';
+      // On a heat bar the ghost must sit on the side the fill GROWS toward,
+      // or it marks the cost in the wrong direction.
+      this.stGhost.style.left = ((p.isHeat ? shown : st - rollCost) * 100) + '%';
       this.stGhost.style.width = (rollCost * 100) + '%';
     }
 
@@ -84,8 +96,9 @@ export class Hud {
       this.foe.classList.remove('effigy');
       // Whatever it actually is — the sorting floor is not full of Slagbounds.
       const foeName = e.def ? e.def.name : 'The Slagbound';
-      this.foeName.textContent = standing > 1
-        ? `${foeName} · ${standing} standing` : foeName;
+      const bleeding = e.bleed > 0 ? ` · ${e.bleed} bleed` : '';
+      this.foeName.textContent = (standing > 1
+        ? `${foeName} · ${standing} standing` : foeName) + bleeding;
       const eh = clamp(e.hp / e.maxHp, 0, 1);
       this.foeFill.style.width = (eh * 100) + '%';
       this._foeChip += (eh - this._foeChip) * Math.min(1, dt * 3.2);
@@ -97,6 +110,13 @@ export class Hud {
     }
 
     this.lockPip.classList.toggle('on', !!(p.lockTarget && !p.lockTarget.dead));
+
+    // Where you are in the run. Four rooms is short enough that a number beats
+    // a map, and long enough that you want to know.
+    if (this.roomTag) {
+      this.roomNum.textContent = `${game.roomIndex + 1} / ${game.roomCount}`;
+      this.roomName.textContent = game.encounter.name;
+    }
 
     if (this._flash > 0) {
       this._flash = Math.max(0, this._flash - dt * 2.2);
@@ -178,6 +198,9 @@ export class Debug {
       ['combo', p.atk ? `${p.comboIndex + 1}/${p.weapon.light.length}` : '—'],
       ['i-frames', p.invulnerable ? 'ACTIVE' : (p.state === STATE.ROLL ? 'roll, no i-frames' : 'no')],
       ['weapon', `${p.weapon.id}  (${p.weapon.klass})`],
+      ['resource', p.isHeat ? `heat ${p.heat.toFixed(0)}/${p.maxStamina}` : 'stamina'],
+      ['room', `${game.roomIndex + 1}/${game.roomCount}  ${game.encounter.name}`],
+      ['shots', String(game.shots.length)],
       ['armour', p.armored ? 'HYPERARMOUR' : '—'],
       ['off hand', `${p.weapon.offhandLabel || 'GUARD'}  (${p.offhand})`],
       ['stamina', p.stamina.toFixed(0) + '/' + p.maxStamina + (p.staminaLock > 0 ? '  LOCKED' : '')],

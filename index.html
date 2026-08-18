@@ -217,6 +217,20 @@
   .settings-body > .set-group:first-child{margin-top:0;padding-top:0;border-top:0}
   body.no-keys #keys{display:none}
 
+  /* The resource bar under two economies. Stamina is a reserve that drains
+     toward danger; heat is a pressure that fills toward it, so it is coloured
+     as a rising threat rather than as a dwindling supply. */
+  #stBar.heat #stFill{background:linear-gradient(90deg,#7a3b18,#d4552a 65%,#ffb347)}
+  #stBar.heat.hot #stFill{background:linear-gradient(90deg,#d4552a,#ff8a3c 50%,#fff0c8);
+       box-shadow:0 0 14px rgba(255,138,60,.75)}
+  #stBar.heat.locked{animation:overheat .5s ease-in-out infinite alternate}
+  @keyframes overheat{from{filter:none}to{filter:brightness(1.9) saturate(1.4)}}
+
+  #roomTag{position:absolute;left:50%;top:calc(92px + var(--safe-t));
+       transform:translateX(-50%);text-align:center;font-size:10px;
+       letter-spacing:.34em;color:var(--faint);text-transform:uppercase;white-space:nowrap}
+  #roomTag b{color:var(--ember);font-weight:400;margin-right:12px}
+
   /* ========================= CHARACTER CREATOR ========================== */
   /* THE RACK. It spans the full width and sits above the attributes because
      the weapon decides the class and the attributes only shade it. Cards are
@@ -418,6 +432,8 @@
   <div><b>F1</b>frame data</div>
   <div><b>R</b>restart</div>
 </div>
+
+<div class="hud" id="roomTag"><b id="roomNum"></b><span id="roomName"></span></div>
 
 <div class="banner" id="banner"><span id="bannerText"></span><small id="bannerHint"></small></div>
 

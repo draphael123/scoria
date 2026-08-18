@@ -1,6 +1,6 @@
 import { angleDelta, clamp } from './util.js';
 import { STATE, PHASE } from './actor.js';
-import { PLAYER, SLAGBOUND, IMPACT } from './config.js';
+import { PLAYER, SLAGBOUND, IMPACT, BLEED } from './config.js';
 
 export const GUARD_ARC = 2.44;   // ~140 degrees of frontal coverage
 
@@ -25,6 +25,19 @@ export function circleHits(attacker, target, radius, offset) {
 export function attackCovers(attacker, target) {
   const a = attacker.atk;
   if (!a) return false;
+
+  // A projectile attack does no damage where the attacker is standing — the
+  // shot does it, somewhere else, later. The wedge it draws on the floor is an
+  // AIM LINE and nothing more.
+  if (a.projectile) return false;
+
+  // A ground zone is anchored to the world, not to the caster. Once it is cast
+  // the caster may walk away and it still goes off exactly where it was put.
+  if (a.zone && attacker.atkAim) {
+    return Math.hypot(target.x - attacker.atkAim.x, target.z - attacker.atkAim.z)
+           <= a.radius + target.radius;
+  }
+
   if (a.shape === 'circle') return circleHits(attacker, target, a.radius, a.offset);
   return arcHits(attacker, target, a.reach ?? attacker.cfg.reach ?? 2.4, a.arc ?? 1.9);
 }
@@ -53,7 +66,13 @@ export function applyDamage(attacker, target, atk, out) {
     return ev;
   }
 
-  let damage = atk.damage * (attacker.damageMul || 1);
+  // VENT deals no fixed damage. It deals whatever heat it just got rid of,
+  // scaled — so the tome's panic button is weakest exactly when you least
+  // needed to press it, and hardest when you were about to root yourself.
+  const base = atk.ventScale
+    ? (attacker.ventPower || 0) * atk.ventScale
+    : atk.damage;
+  let damage = base * (attacker.damageMul || 1);
 
   // Stagger amplifies incoming damage — this is the punish window.
   // Off the target's own definition — a Cinderbone is not a Slagbound.
@@ -135,7 +154,51 @@ export function applyDamage(attacker, target, atk, out) {
     target.invuln = Math.max(target.invuln, PLAYER.hurtInvuln);
   }
 
+  // BLEED. Applied on any clean landing, and it is the knives' whole damage
+  // model: stacks that decay unless you keep feeding them, and detonate at the
+  // threshold. Deliberately NOT poise — poise is one big opening you earn once,
+  // bleed is pressure you have to maintain.
+  if (atk.bleed && ev.result !== 'iframe') {
+    target.bleed = Math.min(BLEED.maxStacks, (target.bleed || 0) + atk.bleed);
+    target.bleedFresh = 0;
+    if (target.bleed >= BLEED.pop) {
+      target.bleed = 0;
+      target.hp -= BLEED.popDamage;
+      ev.bleedPop = true;
+      out.push({ type: 'hit', attacker, target, atk, result: 'bleed',
+                 damage: BLEED.popDamage, x: target.x, z: target.z });
+    }
+  }
+
   out.push(ev);
   if (target.hp <= 0) target.kill();
   return ev;
+}
+
+/* Bleed ticking, run once per fixed step for every living body. Kept out of
+   the actor update loops so it applies to the player and the enemies through
+   exactly the same path. */
+export function tickBleed(actor, dt, out) {
+  if (!actor.bleed || actor.dead) return;
+  actor.bleedFresh += dt;
+  actor.bleedTick += dt;
+  if (actor.bleedTick >= BLEED.tickEvery) {
+    actor.bleedTick -= BLEED.tickEvery;
+    const dmg = BLEED.tickDamage * actor.bleed;
+    actor.hp -= dmg;
+    out.push({ type: 'hit', attacker: null, target: actor, atk: { id: 'bleed', heavy: false },
+               result: 'bleedtick', damage: dmg, x: actor.x, z: actor.z });
+    if (actor.hp <= 0) actor.kill();
+  }
+  // Stop feeding it and it falls off. This is what stops the knives from
+  // being a weapon you can apply once and then walk away from.
+  if (actor.bleedFresh > BLEED.decayAfter) {
+    actor.bleedDecay = (actor.bleedDecay || 0) + dt;
+    if (actor.bleedDecay >= BLEED.decayEvery) {
+      actor.bleedDecay = 0;
+      actor.bleed = Math.max(0, actor.bleed - 1);
+    }
+  } else {
+    actor.bleedDecay = 0;
+  }
 }
