@@ -2969,6 +2969,12 @@ export function animateRig(rig, actor, dt, clock) {
      the same line had to arc the body over its own lowest point, which is what
      "the roll goes through the ground" was; a dodge that stays upright has no
      lowest point to find.) */
+  /* The tumble's resting height, remembered once. Read off the rig rather
+     than recomputed, so a body that chooses a different pivot — the Tallowman
+     sits at 0.42 because his mass is lower — is respected without this code
+     needing to know about him. */
+  if (rig.tumbleRestY === undefined) rig.tumbleRestY = rig.tumble.position.y;
+
   const rollT = actor.state === STATE.ROLL ? clamp(actor.stateT / rollDur, 0, 1) : 0;
   const hop = actor.state === STATE.ROLL
     ? Math.sin(Math.PI * Math.min(1, rollT * 1.6)) * 0.09 : 0;
@@ -2988,7 +2994,7 @@ export function animateRig(rig, actor, dt, clock) {
     const fall = d < 0.35 ? (d / 0.35) * 0.35 : 0.35 + (1 - Math.pow(1 - (d - 0.35) / 0.65, 3)) * 0.65;
     rig.tumble.rotation.x = fall * Math.PI * 0.46;
     rig.tumble.rotation.z = fall * 0.30;
-    rig.tumble.position.y = -fall * h * 0.34;
+    rig.tumble.position.y = rig.tumbleRestY - fall * h * 0.34;
     rig.chest.rotation.x = rig.baseLean + fall * 0.7;
     rig.neck.rotation.x = fall * 0.5;
     rig.legL.rotation.x = fall * 1.5;
@@ -2998,6 +3004,18 @@ export function animateRig(rig, actor, dt, clock) {
     g.position.y = 0;
   } else {
     rig.deathT = 0;
-    rig.tumble.position.y = 0;
+    /* Back to REST, which is not zero.
+
+       The tumble group is the body's centre of mass and it sits at h * 0.46
+       (h * 0.42 on the Tallowman) so that a dodge revolves about the hips
+       rather than about the feet. This line used to reset it to 0 — it was
+       written when the pivot WAS at the feet, and raising the pivot never came
+       back to it.
+
+       The result: every living actor in the game was pushed 0.8m into the
+       floor, every frame, from the first frame. On the knight that put the
+       legs entirely underground, which is what "the legs of the player are
+       not visible" was. It was doing the same to all eleven bodies. */
+    rig.tumble.position.y = rig.tumbleRestY;
   }
 }

@@ -36,6 +36,17 @@ export class Effigy extends Actor {
     this.staggerT = 0;
     this.staggerResist = 0;
     this.intent = 'still';
+    /* EVERYTHING IN THE GAME'S ENEMY LIST CARRIES A `def`.
+
+       The aggro pass reads support flags off it, the run reads gold off it,
+       and the boss pass reads phases off it. The effigy is in that list
+       because that is where the hit loop looks for things to swing at, and
+       without this the whole sim throws every frame from the moment it spawns
+       — which is exactly what "the game freezes in the first dungeon" is, for
+       the SECOND time. It was fixed once and the edit did not survive a later
+       rewrite of this file, which is the argument for the guards below as
+       well as for this line. */
+    this.def = EFFIGY_CFG;
     this.isEffigy = true;
     this.swingQueued = false;
     this.swingEvery = 0;      // seconds between automatic swings; 0 = never

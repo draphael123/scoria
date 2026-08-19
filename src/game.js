@@ -771,7 +771,9 @@ export class Game {
        from here rather than from the foe, because the foe should not have to
        know that anything is watching it. */
     for (const e of this.enemies) {
-      if (e.dead || !e.def.phase2) continue;
+      // Guarded, like every other `def` read in this file: anything at all
+      // can be put in the enemy list, and a training post is not a foe.
+      if (e.dead || !e.def || !e.def.phase2) continue;
       const now = e.phaseNum;
       if (e._seenPhase === undefined) e._seenPhase = now;
       if (now !== e._seenPhase) {
@@ -1139,7 +1141,7 @@ export class Game {
      becomes unwinnable rather than difficult. */
   _stepMagi(dt) {
     for (const e of this.enemies) {
-      if (e.dead || !e.def.blink) continue;
+      if (e.dead || !e.def || !e.def.blink) continue;
       e.blinkCd = Math.max(0, (e.blinkCd || 0) - dt);
       const b = e.def.blink;
       const gap = e.distanceTo(this.player);
@@ -1167,7 +1169,7 @@ export class Game {
 
     // THE CALL. Fired on the active frame of any attack carrying a summon.
     for (const e of this.enemies) {
-      if (e.dead || !e.atk || !e.atk.summon) continue;
+      if (e.dead || !e.def || !e.atk || !e.atk.summon) continue;
       if (e.phase !== PHASE.ACTIVE || e.summonFired) continue;
       e.summonFired = true;
       const sm = e.atk.summon;

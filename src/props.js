@@ -753,14 +753,19 @@ export class Forest {
       map: tex.stone, color: 0xb4a692, roughness: 0.95 });
     const dark = new THREE.MeshStandardMaterial({
       map: tex.stone, color: 0xbdac93, roughness: 0.98 });
-    /* The flagstones carry NO map, and that is not laziness.
+    /* THE FLAGSTONES, and this is the third attempt at them.
 
-       tex.stone is a very dark texture — outdoors it is read against
-       moonlight and it works. Multiplied by a mid grey and lit by torches it
-       came out at pure black, and fifty of them tiled the floor of the room
-       with what looked like holes. The vertical stone can carry it because it
-       is close to the torches; the floor cannot. */
-    const flag = new THREE.MeshStandardMaterial({ color: 0x8d8272, roughness: 1 });
+       No map: tex.stone is dark enough that multiplied by a mid grey and lit
+       by torches it came out at pure black, and fifty of them tiled the floor
+       with what looked like holes. So the first fix was a flat pale colour —
+       which overshot in the other direction and paved the room in bright tan
+       jigsaw pieces brighter than the walls.
+
+       They are a shade DARKER than the ground now rather than lighter, which
+       is what a stone laid on earth actually looks like from above, and there
+       are three tones so the floor is not one flat sheet. */
+    const flagTones = [0x4e463c, 0x584f43, 0x453e35].map((col) =>
+      new THREE.MeshStandardMaterial({ color: col, roughness: 1 }));
     const iron = new THREE.MeshStandardMaterial({
       color: 0x2a2420, roughness: 0.88, metalness: 0.0, envMapIntensity: 0.1 });
     const bone = new THREE.MeshStandardMaterial({ color: 0x9a9484, roughness: 0.95 });
@@ -939,14 +944,31 @@ export class Forest {
 
     /* THE FLOOR. Flagstones scored into the ground, and a drain at the centre
        that everything down here slopes toward. */
-    for (let i = 0; i < 52; i++) {
-      const a = rng() * Math.PI * 2;
-      const rad = rng() * (R - 1.0);
-      const fl = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5 + rng() * 1.3, 0.05, 1.5 + rng() * 1.3), flag);
-      fl.position.set(Math.sin(a) * rad, 0.026, Math.cos(a) * rad);
-      fl.rotation.y = Math.round(rng() * 4) * Math.PI / 2;
-      g.add(fl);
+    /* LAID, not scattered. Fifty-two stones dropped at random angles and
+       radii overlapped each other into one continuous jigsaw with no mortar
+       line anywhere in it — which is the single thing that makes paving read
+       as paving. A grid with a gap between every stone and a little jitter
+       per stone is both cheaper to look at and correct. */
+    const STONE = 2.3, GAP = 0.17;
+    const half = Math.ceil(R / STONE);
+    for (let ix = -half; ix <= half; ix++) {
+      for (let iz = -half; iz <= half; iz++) {
+        // Courses are offset every other row, like real paving.
+        const ox = (iz % 2 ? STONE * 0.5 : 0);
+        const x = ix * STONE + ox, z = iz * STONE;
+        if (Math.hypot(x, z) > R - 1.4) continue;
+        // A few are missing, and the gaps are where the floor shows through.
+        if (rng() < 0.14) continue;
+        const w = STONE - GAP - rng() * 0.16;
+        const d = STONE - GAP - rng() * 0.16;
+        const fl = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d),
+                                  flagTones[(rng() * flagTones.length) | 0]);
+        fl.position.set(x + (rng() - 0.5) * 0.06, 0.026 + rng() * 0.006,
+                        z + (rng() - 0.5) * 0.06);
+        fl.rotation.y = (rng() - 0.5) * 0.02;
+        fl.receiveShadow = true;
+        g.add(fl);
+      }
     }
     const drain = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.95, 16), iron);
     drain.rotation.x = -Math.PI / 2;
