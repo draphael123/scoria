@@ -8,6 +8,15 @@
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+/* How much to pull each RECORDED track down to sit where its synthesised
+   version sat. See _useBuffer for why this exists at all. */
+/* Derived, not guessed. Every one of these files is mastered to roughly the
+   same loudness as every other (0.165, 0.165 and 0.222 RMS) because that is
+   what mastering IS — which means dropped in raw they land flat, and the
+   hierarchy is gone. These are the exact factors that put each file back on
+   the synth's measured curve: 0.0104 / 0.0266 / 0.0627. */
+const TRACK_TRIM = { menu: 0.126, town: 0.322, combat: 0.566 };
+
 export class Audio {
   constructor(settings = {}) {
     this.ctx = null;
@@ -372,7 +381,24 @@ export class Audio {
     const src = c.createBufferSource();
     src.buffer = buffer;
     src.loop = true;
-    src.connect(tr.out);
+
+    /* TRIM, per track, and it is not optional.
+
+       The synth score was written to a deliberate hierarchy — the menu the
+       quietest thing in the game, the town in the middle, combat loudest —
+       because the one sound in here that is load-bearing is the enemy windup
+       tone, and everything else has to leave room for it. Recorded music
+       arrives mastered to somebody else's level: dropped in raw, all three
+       measured flat at about the same loudness, which made the menu six times
+       what it was designed to be and put the town on top of the tell.
+
+       Measured rather than guessed: these numbers put the recorded tracks back
+       on the synth's own curve. */
+    const gain = c.createGain();
+    gain.gain.value = TRACK_TRIM[name] ?? 0.6;
+    src.connect(gain);
+    gain.connect(tr.out);
+    tr.trim = gain;
     src.start(c.currentTime);
     tr.src = src;
     tr.recorded = true;

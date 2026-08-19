@@ -243,6 +243,12 @@
   .panel-title::after{transform:scaleX(-1)}
   .settings-body{width:min(520px,92vw);margin-top:22px;text-align:left;
                  max-height:56vh;overflow-y:auto;padding-right:4px}
+  /* The credits row stacks instead of sitting side by side: it is prose, not
+     a setting, and prose squeezed into a settings column is unreadable. */
+  .srow.credits{flex-direction:column;align-items:flex-start;gap:6px;
+       border-bottom:0;padding-top:20px;margin-top:6px;
+       border-top:1px solid rgba(230,220,203,.07)}
+  .srow.credits .shint{max-width:none;line-height:1.7;text-align:left}
   .srow{display:flex;align-items:center;justify-content:space-between;gap:18px;
         padding:13px 0;border-bottom:1px solid rgba(230,220,203,.07)}
   .slabel{font-size:14px;color:var(--ink)}

@@ -223,6 +223,19 @@ export class Menu {
       'slowly rotates your knight while you edit');
       this._toggle(body, 'Frame-data overlay', 'frameData', 'the tuning instrument — also bound to F1');
 
+      /* CREDITS. The music is CC0, so this is not required — it is here
+         because it costs a line and the people who wrote it are the reason
+         the game has any. If a track is ever swapped for a CC-BY one this is
+         also the place the attribution has to go, and having it already exist
+         is the difference between remembering and not. */
+      const cred = el('div', 'srow credits');
+      cred.appendChild(el('div', 'slabel', 'Music'));
+      const who = el('div', 'shint',
+        'Crystal Cave · Town Theme · Battle Theme A — by cynicmusic ' +
+        '(Peter Sadlon), released CC0 via OpenGameArt. Everything else you can ' +
+        'hear is synthesised at runtime.');
+      cred.appendChild(who);
+      body.appendChild(cred);
     };
     this._rebuildSettings(body);
 
